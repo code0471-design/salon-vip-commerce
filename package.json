@@ -1,0 +1,8 @@
+{
+  "name": "salon-vip-commerce",
+  "private": true,
+  "description": "살롱 VIP 커머스 — 고객 앱과 어드민",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
