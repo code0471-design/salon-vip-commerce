@@ -195,7 +195,7 @@ function renderDashboard() {
             <div style="background:#f9fafb;border-radius:12px;padding:14px">
               <div style="width:10px;height:10px;border-radius:50%;background:${item.color};margin-bottom:8px"></div>
               <div style="font-size:12px;color:#6b7280">${item.label}</div>
-              <div style="font-size:17px;font-weight:800;color:#1a1a2e">${item.val.toLocaleString()}원</div>
+              <div style="font-size:17px;font-weight:500;color:#1a1a2e">${item.val.toLocaleString()}원</div>
               <div style="font-size:12px;color:${item.color};font-weight:600">${item.pct}</div>
             </div>`).join('')}
           </div>` : '<div style="text-align:center;padding:20px;color:#9ca3af;font-size:14px">데이터 로딩 중...</div>'}
@@ -220,7 +220,7 @@ function renderDashboard() {
                 <i class="fas ${item.icon}" style="color:${item.color};font-size:15px"></i>
               </div>
               <div>
-                <div style="font-size:18px;font-weight:800;color:#1a1a2e">${item.val}</div>
+                <div style="font-size:18px;font-weight:500;color:#1a1a2e">${item.val}</div>
                 <div style="font-size:11px;color:#6b7280">${item.label}</div>
               </div>
             </div>`).join('')}
