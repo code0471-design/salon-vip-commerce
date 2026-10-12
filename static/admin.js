@@ -191,12 +191,12 @@ function renderDashboard() {
       <div class="stat-card gold">
         <div class="stat-icon gold"><i class="fas fa-store"></i></div>
         <div class="stat-value">${(salonComm/10000).toFixed(1)}만</div>
-        <div class="stat-label">살롱 커미션 합계</div>
+        <div class="stat-label">원장 지급 (30%)</div>
       </div>
       <div class="stat-card green">
         <div class="stat-icon green"><i class="fas fa-cut"></i></div>
         <div class="stat-value">${(designerComm/10000).toFixed(1)}만</div>
-        <div class="stat-label">디자이너 커미션</div>
+        <div class="stat-label">디자이너 정산</div>
       </div>
     </div>
 
@@ -209,16 +209,15 @@ function renderDashboard() {
         <div style="padding:24px">
           <div class="rev-split" style="margin-bottom:16px">
             <div class="rev-split-seg" style="width:40%;background:linear-gradient(135deg,#1a1a2e,#0f3460)">Platform 40%</div>
-            <div class="rev-split-seg" style="width:15%;background:linear-gradient(135deg,#d4af37,#b8941f)">Owner 15%</div>
-            <div class="rev-split-seg" style="width:15%;background:linear-gradient(135deg,#e94560,#c72044)">Designer 15%</div>
+            <div class="rev-split-seg" style="width:30%;background:linear-gradient(135deg,#d4af37,#b8941f)">Store 30%</div>
             <div class="rev-split-seg" style="width:30%;background:#e5e7eb;color:#6b7280">Other 30%</div>
           </div>
           ${gmv > 0 ? `
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
             ${[
               {label:'플랫폼 수익',val:platform,color:'#1a1a2e',pct:'40%'},
-              {label:'살롱 오너',val:salonComm,color:'#d4af37',pct:Math.round(salonComm/gmv*100)+'%'},
-              {label:'디자이너',val:designerComm,color:'#e94560',pct:Math.round(designerComm/gmv*100)+'%'},
+              {label:'매장 원장 지급',val:salonComm,color:'#d4af37',pct:'30%'},
+              {label:'디자이너 정산',val:designerComm,color:'#e94560',pct:'0%'},
               {label:'기타 비용',val:gmv-platform-salonComm-designerComm,color:'#9ca3af',pct:Math.round((gmv-platform-salonComm-designerComm)/gmv*100)+'%'},
             ].map(item => `
             <div style="background:#f9fafb;border-radius:12px;padding:14px">
@@ -287,7 +286,7 @@ function renderDashboard() {
             <tr>
               <th>살롱명</th>
               <th>총 매출</th>
-              <th>살롱 수수료</th>
+              <th>원장 지급 30%</th>
               <th>비중</th>
               <th>관리</th>
             </tr>
@@ -929,7 +928,7 @@ function renderRevenue() {
       <div class="stat-card gold">
         <div class="stat-icon gold"><i class="fas fa-handshake"></i></div>
         <div class="stat-value">${((salonComm+designerComm)/10000).toFixed(1)}만원</div>
-        <div class="stat-label">파트너 수수료 합계</div>
+        <div class="stat-label">원장 지급 합계 (30%)</div>
       </div>
     </div>
 
@@ -941,8 +940,8 @@ function renderRevenue() {
         <div style="padding:24px">
           ${[
             {label:'플랫폼 수익',val:platform,pct:40,color:'#1a1a2e'},
-            {label:'살롱 오너 수수료',val:salonComm,pct:gmv>0?Math.round(salonComm/gmv*100):0,color:'#d4af37'},
-            {label:'디자이너 수수료',val:designerComm,pct:gmv>0?Math.round(designerComm/gmv*100):0,color:'#e94560'},
+            {label:'매장 원장 지급',val:salonComm,pct:30,color:'#d4af37'},
+            {label:'디자이너 정산',val:designerComm,pct:0,color:'#e94560'},
             {label:'기타(서비스 비용)',val:gmv-platform-salonComm-designerComm,pct:gmv>0?Math.round((gmv-platform-salonComm-designerComm)/gmv*100):0,color:'#9ca3af'},
           ].map(item => `
           <div style="margin-bottom:16px">

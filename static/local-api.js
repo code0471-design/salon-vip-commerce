@@ -69,14 +69,11 @@
 
   function publicDesigner(designer) {
     const salon = findSalon(designer.salon_id);
-    const totalEarned = db.orders
-      .filter((o) => o.designer_id === designer.id && o.payment_status === 'PAID')
-      .reduce((sum, o) => sum + (o.designer_commission_amount || 0), 0);
     return {
       ...designer,
       salon_name: salon ? salon.salon_name : '',
       mapped_user_count: db.users.filter((u) => u.mapped_designer_id === designer.id).length,
-      total_earned: totalEarned,
+      total_earned: 0,
     };
   }
 
@@ -97,9 +94,10 @@
 
   function orderStats() {
     const paid = db.orders.filter((o) => o.payment_status === 'PAID');
-    const sum = (key) => paid.reduce((acc, o) => acc + (o[key] || 0), 0);
     const bySalon = new Map();
+    let gmv = 0;
     for (const order of paid) {
+      const amount = order.total_amount || 0;
       const salon = findSalon(order.salon_id);
       const row = bySalon.get(order.salon_id) || {
         id: order.salon_id,
@@ -109,18 +107,21 @@
         commission: 0,
       };
       row.orders += 1;
-      row.revenue += order.total_amount || 0;
-      row.commission += order.salon_commission_amount || 0;
+      row.revenue += amount;
       bySalon.set(order.salon_id, row);
+      gmv += amount;
     }
+    const salonBreakdown = [...bySalon.values()]
+      .map((row) => ({ ...row, commission: Math.round(row.revenue * 0.3) }))
+      .sort((a, b) => b.revenue - a.revenue);
     return {
       total_orders: db.orders.length,
       paid_orders: paid.length,
-      total_gmv: sum('total_amount'),
-      platform_revenue: sum('platform_amount'),
-      total_salon_commission: sum('salon_commission_amount'),
-      total_designer_commission: sum('designer_commission_amount'),
-      salonBreakdown: [...bySalon.values()].sort((a, b) => b.revenue - a.revenue),
+      total_gmv: gmv,
+      platform_revenue: Math.round(gmv * 0.4),
+      total_salon_commission: salonBreakdown.reduce((sum, row) => sum + row.commission, 0),
+      total_designer_commission: 0,
+      salonBreakdown,
     };
   }
 
