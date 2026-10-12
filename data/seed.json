@@ -13,7 +13,8 @@
       "is_best": 1,
       "rating": 4.89,
       "review_count": 2636,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 10,
@@ -28,7 +29,8 @@
       "is_best": 1,
       "rating": 4.93,
       "review_count": 1820,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 1,
@@ -43,7 +45,8 @@
       "is_best": 1,
       "rating": 4.87,
       "review_count": 1534,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 3,
@@ -58,7 +61,8 @@
       "is_best": 1,
       "rating": 4.88,
       "review_count": 1263,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 11,
@@ -73,7 +77,8 @@
       "is_best": 1,
       "rating": 4.9,
       "review_count": 1102,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 13,
@@ -88,7 +93,8 @@
       "is_best": 1,
       "rating": 4.91,
       "review_count": 876,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 12,
@@ -103,7 +109,8 @@
       "is_best": 1,
       "rating": 4.86,
       "review_count": 728,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 14,
@@ -118,7 +125,8 @@
       "is_best": 1,
       "rating": 4.94,
       "review_count": 634,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 4,
@@ -133,7 +141,8 @@
       "is_best": 1,
       "rating": 4.85,
       "review_count": 561,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 5,
@@ -148,7 +157,8 @@
       "is_best": 1,
       "rating": 4.81,
       "review_count": 309,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 18,
@@ -163,7 +173,8 @@
       "is_best": 1,
       "rating": 4.88,
       "review_count": 267,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 7,
@@ -178,7 +189,8 @@
       "is_best": 0,
       "rating": 4.88,
       "review_count": 943,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 6,
@@ -193,7 +205,8 @@
       "is_best": 0,
       "rating": 4.86,
       "review_count": 766,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 17,
@@ -208,7 +221,8 @@
       "is_best": 0,
       "rating": 4.83,
       "review_count": 512,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 8,
@@ -223,7 +237,8 @@
       "is_best": 0,
       "rating": 4.82,
       "review_count": 512,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 15,
@@ -238,7 +253,8 @@
       "is_best": 0,
       "rating": 4.87,
       "review_count": 445,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 16,
@@ -253,7 +269,8 @@
       "is_best": 0,
       "rating": 4.78,
       "review_count": 389,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     },
     {
       "id": 9,
@@ -268,7 +285,8 @@
       "is_best": 0,
       "rating": 4.84,
       "review_count": 389,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "brand_id": 1
     }
   ],
   "salons": [
@@ -364,7 +382,8 @@
       "phone": "01045110471",
       "current_salon_id": 1,
       "mapped_designer_id": 1,
-      "created_at": "2026-09-29 08:07:38"
+      "created_at": "2026-09-29 08:07:38",
+      "points": 0
     },
     {
       "id": 11,
@@ -373,7 +392,8 @@
       "phone": null,
       "current_salon_id": 1,
       "mapped_designer_id": 1,
-      "created_at": "2026-09-28 00:41:29"
+      "created_at": "2026-09-28 00:41:29",
+      "points": 0
     },
     {
       "id": 10,
@@ -382,7 +402,8 @@
       "phone": null,
       "current_salon_id": 1,
       "mapped_designer_id": 1,
-      "created_at": "2026-09-28 00:38:28"
+      "created_at": "2026-09-28 00:38:28",
+      "points": 0
     },
     {
       "id": 9,
@@ -391,7 +412,8 @@
       "phone": null,
       "current_salon_id": 1,
       "mapped_designer_id": 1,
-      "created_at": "2026-09-28 00:36:11"
+      "created_at": "2026-09-28 00:36:11",
+      "points": 0
     },
     {
       "id": 8,
@@ -400,7 +422,8 @@
       "phone": null,
       "current_salon_id": 1,
       "mapped_designer_id": 1,
-      "created_at": "2026-09-28 00:36:10"
+      "created_at": "2026-09-28 00:36:10",
+      "points": 0
     },
     {
       "id": 7,
@@ -409,7 +432,8 @@
       "phone": null,
       "current_salon_id": 1,
       "mapped_designer_id": 1,
-      "created_at": "2026-09-27 11:20:01"
+      "created_at": "2026-09-27 11:20:01",
+      "points": 0
     },
     {
       "id": 6,
@@ -418,7 +442,8 @@
       "phone": null,
       "current_salon_id": 1,
       "mapped_designer_id": 1,
-      "created_at": "2026-09-22 01:54:14"
+      "created_at": "2026-09-22 01:54:14",
+      "points": 0
     },
     {
       "id": 1,
@@ -427,7 +452,8 @@
       "phone": "010-1111-2222",
       "current_salon_id": 1,
       "mapped_designer_id": 1,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "points": 0
     },
     {
       "id": 2,
@@ -436,7 +462,8 @@
       "phone": "010-3333-4444",
       "current_salon_id": 1,
       "mapped_designer_id": 2,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "points": 0
     },
     {
       "id": 3,
@@ -445,7 +472,8 @@
       "phone": "010-5555-6666",
       "current_salon_id": 2,
       "mapped_designer_id": 4,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "points": 0
     },
     {
       "id": 4,
@@ -454,7 +482,8 @@
       "phone": "010-7777-8888",
       "current_salon_id": 1,
       "mapped_designer_id": 3,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "points": 0
     },
     {
       "id": 5,
@@ -463,7 +492,8 @@
       "phone": "010-9999-0000",
       "current_salon_id": 3,
       "mapped_designer_id": 6,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "points": 0
     }
   ],
   "orders": [
@@ -478,7 +508,8 @@
       "designer_commission_amount": 7695,
       "payment_status": "PAID",
       "order_items": "[{\"product_id\":1,\"name\":\"SUBLIMIC 아쿠아 인텐시브 샴푸 500ml\",\"qty\":1,\"price\":51300}]",
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "shipping_status": "DELIVERED"
     },
     {
       "id": 2,
@@ -491,7 +522,8 @@
       "designer_commission_amount": 17415,
       "payment_status": "PAID",
       "order_items": "[{\"product_id\":1,\"name\":\"SUBLIMIC 아쿠아 인텐시브 샴푸 500ml\",\"qty\":1,\"price\":51300},{\"product_id\":10,\"name\":\"SUBLIMIC 아쿠아 인텐시브 트리트먼트 200ml\",\"qty\":1,\"price\":64800}]",
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "shipping_status": "DELIVERED"
     },
     {
       "id": 3,
@@ -504,7 +536,8 @@
       "designer_commission_amount": 0,
       "payment_status": "PAID",
       "order_items": "[{\"product_id\":10,\"name\":\"SUBLIMIC 아쿠아 인텐시브 트리트먼트 200ml\",\"qty\":1,\"price\":64800}]",
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "shipping_status": "DELIVERED"
     },
     {
       "id": 4,
@@ -517,7 +550,8 @@
       "designer_commission_amount": 7830,
       "payment_status": "PAID",
       "order_items": "[{\"product_id\":13,\"name\":\"SUBLIMIC 아쿠아 인텐시브 헤어 오일 100ml\",\"qty\":1,\"price\":52200}]",
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "shipping_status": "DELIVERED"
     },
     {
       "id": 5,
@@ -530,7 +564,84 @@
       "designer_commission_amount": 8910,
       "payment_status": "PAID",
       "order_items": "[{\"product_id\":4,\"name\":\"SUBLIMIC 아데노바이탈 샴푸 500ml\",\"qty\":1,\"price\":59400}]",
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "shipping_status": "DELIVERED"
     }
-  ]
+  ],
+  "brands": [
+    {
+      "id": 1,
+      "name": "SUBLIMIC",
+      "commission_rate": 0.1,
+      "status": "ACTIVE",
+      "created_at": "2026-08-01 00:00:00"
+    },
+    {
+      "id": 2,
+      "name": "로레알 프로페셔널",
+      "commission_rate": 0.12,
+      "status": "ACTIVE",
+      "created_at": "2026-08-01 00:00:00"
+    }
+  ],
+  "coupons": [
+    {
+      "id": 1,
+      "name": "VIP 첫구매 5천원",
+      "code": "VIP5000",
+      "discount_type": "AMOUNT",
+      "discount_value": 5000,
+      "apply_scope": "ALL",
+      "brand_id": null,
+      "starts_at": "2026-08-01",
+      "ends_at": "2026-12-31",
+      "status": "ACTIVE"
+    },
+    {
+      "id": 2,
+      "name": "SUBLIMIC 10%",
+      "code": "SUB10",
+      "discount_type": "RATE",
+      "discount_value": 10,
+      "apply_scope": "BRAND",
+      "brand_id": 1,
+      "starts_at": "2026-08-01",
+      "ends_at": "2026-10-31",
+      "status": "ACTIVE"
+    }
+  ],
+  "point_grants": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "user_name": "홍길동",
+      "amount": 3000,
+      "reason": "첫 구매 적립",
+      "status": "COMPLETED",
+      "created_at": "2026-08-10 12:00:00"
+    }
+  ],
+  "banners": [
+    {
+      "id": 1,
+      "banner_type": "MAIN",
+      "title": "SUBLIMIC 가을 케어",
+      "image_url": "",
+      "starts_at": "2026-08-01",
+      "ends_at": "2026-11-30",
+      "sort_order": 1,
+      "status": "ACTIVE"
+    },
+    {
+      "id": 2,
+      "banner_type": "MID",
+      "title": "살롱 전용 10% 쿠폰",
+      "image_url": "",
+      "starts_at": "2026-08-01",
+      "ends_at": "2026-10-31",
+      "sort_order": 1,
+      "status": "ACTIVE"
+    }
+  ],
+  "settlement_overrides": []
 }

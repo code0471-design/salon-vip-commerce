@@ -8,13 +8,28 @@ const PUBLIC = path.join(ROOT, 'public');
 const DB_PATH = path.join(ROOT, 'data', 'db.json');
 const SEED_PATH = path.join(ROOT, 'data', 'seed.json');
 
+function ensureExtras(data, seed) {
+  data.brands = data.brands && data.brands.length ? data.brands : (seed.brands || []);
+  data.coupons = data.coupons || seed.coupons || [];
+  data.point_grants = data.point_grants || seed.point_grants || [];
+  data.banners = data.banners || seed.banners || [];
+  data.settlement_overrides = data.settlement_overrides || [];
+  data.products.forEach((product) => {
+    if (!product.brand_id) product.brand_id = 1;
+  });
+  data.orders.forEach((order) => {
+    if (!order.shipping_status) order.shipping_status = 'READY';
+  });
+  return data;
+}
+
 function loadDb() {
+  const seed = JSON.parse(fs.readFileSync(SEED_PATH, 'utf8'));
   if (!fs.existsSync(DB_PATH)) {
-    const seed = JSON.parse(fs.readFileSync(SEED_PATH, 'utf8'));
     fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
     fs.writeFileSync(DB_PATH, JSON.stringify(seed, null, 2));
   }
-  return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+  return ensureExtras(JSON.parse(fs.readFileSync(DB_PATH, 'utf8')), seed);
 }
 
 let db = loadDb();
@@ -78,6 +93,8 @@ function publicOrder(order) {
     user_name: user ? user.name : '',
     salon_name: salon ? salon.salon_name : '',
     designer_name: designer ? designer.designer_name : null,
+    designer_status: designer ? designer.status : null,
+    shipping_status: order.shipping_status || 'READY',
   };
 }
 
@@ -110,11 +127,14 @@ function userOrders(userId) {
     .map(publicOrder);
 }
 
-function splitAmount(total, hasDesigner) {
-  const platform = Math.round(total * 0.4);
-  const designer = hasDesigner ? Math.round(total * 0.15) : 0;
-  const salon = hasDesigner ? Math.round(total * 0.15) : Math.round(total * 0.3);
-  return { platform, designer, salon };
+const STORE_PAYOUT_RATE = 0.3;
+
+function splitAmount(total) {
+  return {
+    platform: Math.round(total * 0.4),
+    designer: 0,
+    salon: Math.round(total * STORE_PAYOUT_RATE),
+  };
 }
 
 function orderStats() {
@@ -185,6 +205,7 @@ const routes = [
       stock_quantity: Number(body.stock_quantity ?? 50),
       is_active: 1,
       is_best: 0,
+      brand_id: body.brand_id ? Number(body.brand_id) : 1,
       rating: 0,
       review_count: 0,
       created_at: nowStamp(),
@@ -200,7 +221,7 @@ const routes = [
     ['name', 'category', 'image_url', 'description'].forEach((key) => {
       if (body[key] !== undefined) product[key] = body[key];
     });
-    ['original_price', 'vip_discount_price', 'stock_quantity', 'is_active', 'is_best'].forEach((key) => {
+    ['original_price', 'vip_discount_price', 'stock_quantity', 'is_active', 'is_best', 'brand_id'].forEach((key) => {
       if (body[key] !== undefined && body[key] !== null && body[key] !== '') product[key] = Number(body[key]);
     });
     save();
@@ -329,6 +350,7 @@ const routes = [
     const salonId = req.query.get('salon_id');
     let users = db.users;
     if (salonId) users = users.filter((u) => u.current_salon_id === Number(salonId));
+    users = users.slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
     return { data: users.map(publicUser) };
   }],
   ['POST', /^\/api\/users$/, (req) => {
@@ -386,6 +408,165 @@ const routes = [
     return { data: result.user, extra: { message: '메인 살롱이 변경되었습니다' } };
   }],
 
+  ['GET', /^\/api\/brands$/, () => ({ data: db.brands })],
+  ['POST', /^\/api\/brands$/, (req) => {
+    const body = req.body || {};
+    if (!body.name) return { status: 400, error: '브랜드명을 입력하세요' };
+    const brand = {
+      id: nextId(db.brands),
+      name: body.name,
+      commission_rate: Number(body.commission_rate ?? 0.1),
+      status: 'ACTIVE',
+      created_at: nowStamp(),
+    };
+    db.brands.push(brand);
+    save();
+    return { data: brand };
+  }],
+  ['PUT', /^\/api\/brands\/(\d+)$/, (req, id) => {
+    const brand = db.brands.find((item) => item.id === Number(id));
+    if (!brand) return { status: 404, error: '브랜드를 찾을 수 없습니다' };
+    const body = req.body || {};
+    if (body.name !== undefined) brand.name = body.name;
+    if (body.commission_rate !== undefined) brand.commission_rate = Number(body.commission_rate);
+    if (body.status !== undefined) brand.status = body.status;
+    save();
+    return { data: brand };
+  }],
+  ['GET', /^\/api\/coupons$/, () => ({ data: db.coupons })],
+  ['POST', /^\/api\/coupons$/, (req) => {
+    const body = req.body || {};
+    if (!body.name) return { status: 400, error: '쿠폰명을 입력하세요' };
+    const coupon = {
+      id: nextId(db.coupons),
+      name: body.name,
+      code: body.code || `CP${nextId(db.coupons)}`,
+      discount_type: body.discount_type === 'RATE' ? 'RATE' : 'AMOUNT',
+      discount_value: Number(body.discount_value || 0),
+      apply_scope: body.brand_id ? 'BRAND' : 'ALL',
+      brand_id: body.brand_id ? Number(body.brand_id) : null,
+      starts_at: body.starts_at || nowStamp().slice(0, 10),
+      ends_at: body.ends_at || '',
+      status: 'ACTIVE',
+    };
+    db.coupons.push(coupon);
+    save();
+    return { data: coupon };
+  }],
+  ['DELETE', /^\/api\/coupons\/(\d+)$/, (req, id) => {
+    const coupon = db.coupons.find((item) => item.id === Number(id));
+    if (!coupon) return { status: 404, error: '쿠폰을 찾을 수 없습니다' };
+    coupon.status = 'STOPPED';
+    save();
+    return { data: coupon };
+  }],
+  ['GET', /^\/api\/points$/, () => ({
+    data: db.point_grants.slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
+  })],
+  ['POST', /^\/api\/points$/, (req) => {
+    const body = req.body || {};
+    const user = db.users.find((item) => item.id === Number(body.user_id));
+    if (!user) return { status: 400, error: '고객을 선택하세요' };
+    const amount = Math.abs(Number(body.amount || 0));
+    if (!amount) return { status: 400, error: '포인트를 입력하세요' };
+    const signed = body.direction === 'DEDUCT' ? -amount : amount;
+    const grant = {
+      id: nextId(db.point_grants),
+      user_id: user.id,
+      user_name: user.name,
+      amount: signed,
+      reason: body.reason || (signed > 0 ? '수동 지급' : '수동 차감'),
+      status: 'COMPLETED',
+      created_at: nowStamp(),
+    };
+    db.point_grants.push(grant);
+    user.points = (user.points || 0) + signed;
+    save();
+    return { data: grant };
+  }],
+  ['GET', /^\/api\/banners$/, (req) => {
+    const type = req.query.get('type');
+    let banners = db.banners;
+    if (type) banners = banners.filter((item) => item.banner_type === type);
+    return { data: banners.slice().sort((a, b) => a.sort_order - b.sort_order) };
+  }],
+  ['POST', /^\/api\/banners$/, (req) => {
+    const body = req.body || {};
+    if (!body.title) return { status: 400, error: '배너 제목을 입력하세요' };
+    const banner = {
+      id: nextId(db.banners),
+      banner_type: body.banner_type === 'MID' ? 'MID' : 'MAIN',
+      title: body.title,
+      image_url: body.image_url || '',
+      starts_at: body.starts_at || nowStamp().slice(0, 10),
+      ends_at: body.ends_at || '',
+      sort_order: db.banners.length + 1,
+      status: 'ACTIVE',
+    };
+    db.banners.push(banner);
+    save();
+    return { data: banner };
+  }],
+  ['DELETE', /^\/api\/banners\/(\d+)$/, (req, id) => {
+    const banner = db.banners.find((item) => item.id === Number(id));
+    if (!banner) return { status: 404, error: '배너를 찾을 수 없습니다' };
+    banner.status = 'STOPPED';
+    save();
+    return { data: banner };
+  }],
+  ['GET', /^\/api\/settlements$/, (req) => {
+    const month = req.query.get('month');
+    const months = [...new Set(db.orders.map((order) => String(order.created_at).slice(0, 7)))].sort().reverse();
+    const selected = month || months[0] || nowStamp().slice(0, 7);
+    const nowMonth = nowStamp().slice(0, 7);
+    const rows = db.salons.map((salon) => {
+      const orders = db.orders.filter((order) => order.salon_id === salon.id && order.payment_status === 'PAID' && String(order.created_at).slice(0, 7) === selected);
+      const sales = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+      const id = `S${salon.id}-${selected}`;
+      const override = db.settlement_overrides.find((item) => item.id === id);
+      const status = override ? override.status : (selected >= nowMonth ? 'PENDING' : 'CONFIRMED');
+      return {
+        id,
+        salon_id: salon.id,
+        salon_name: salon.salon_name,
+        owner_name: salon.owner_name,
+        orders: orders.length,
+        sales,
+        payout: Math.round(sales * STORE_PAYOUT_RATE),
+        payout_rate: STORE_PAYOUT_RATE,
+        designer_payout: 0,
+        status,
+        lines: orders.map(publicOrder).map((order) => ({
+          order_id: order.id,
+          created_at: order.created_at,
+          user_name: order.user_name,
+          designer_name: order.designer_name,
+          designer_status: order.designer_status,
+          sales: order.total_amount,
+          designer_payout: 0,
+        })),
+      };
+    }).filter((row) => row.orders > 0);
+    return { data: { month: selected, months, rows } };
+  }],
+  ['POST', /^\/api\/settlements\/status$/, (req) => {
+    const body = req.body || {};
+    if (!body.id || !body.status) return { status: 400, error: '정산 상태가 없습니다' };
+    const current = db.settlement_overrides.find((item) => item.id === body.id);
+    if (current) current.status = body.status;
+    else db.settlement_overrides.push({ id: body.id, status: body.status });
+    save();
+    return { data: { id: body.id, status: body.status } };
+  }],
+  ['PUT', /^\/api\/orders\/(\d+)\/shipping$/, (req, id) => {
+    const order = db.orders.find((item) => item.id === Number(id));
+    if (!order) return { status: 404, error: '주문을 찾을 수 없습니다' };
+    const next = req.body && req.body.shipping_status;
+    if (!['READY', 'SHIPPING', 'DELIVERED'].includes(next)) return { status: 400, error: '배송 상태를 확인하세요' };
+    order.shipping_status = next;
+    save();
+    return { data: publicOrder(order) };
+  }],
   ['GET', /^\/api\/orders\/stats$/, () => ({ data: orderStats() })],
   ['GET', /^\/api\/orders$/, (req) => {
     let orders = db.orders.slice();
@@ -431,6 +612,7 @@ const routes = [
       salon_commission_amount: split.salon,
       designer_commission_amount: split.designer,
       payment_status: 'PAID',
+      shipping_status: 'READY',
       order_items: JSON.stringify(items),
       created_at: nowStamp(),
     };
