@@ -644,8 +644,7 @@ function openCart() {
     return;
   }
   const total = state.cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const designerAmt = state.user.designer_name ? Math.round(total * 0.15) : 0;
-  const salonAmt = state.user.designer_name ? Math.round(total * 0.15) : Math.round(total * 0.30);
+  const salonAmt = Math.round(total * 0.3);
 
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -677,8 +676,7 @@ function openCart() {
         <div style="font-size:11px;font-weight:700;color:#16a34a;margin-bottom:8px">💰 수익 배분</div>
         <div class="rev-grid">
           <div class="rev-item"><div style="font-size:10px;color:var(--muted)">플랫폼</div><div style="font-size:13px;font-weight:700">${Math.round(total*0.4).toLocaleString()}원</div><div style="font-size:10px;color:var(--muted)">40%</div></div>
-          <div class="rev-item"><div style="font-size:10px;color:var(--muted)">매장</div><div style="font-size:13px;font-weight:700">${salonAmt.toLocaleString()}원</div><div style="font-size:10px;color:var(--muted)">${state.user.designer_name ? '15%' : '30%'}</div></div>
-          <div class="rev-item"><div style="font-size:10px;color:var(--muted)">디자이너</div><div style="font-size:13px;font-weight:700;color:${designerAmt > 0 ? 'var(--text)' : 'var(--muted)'}">${designerAmt.toLocaleString()}원</div><div style="font-size:10px;color:var(--muted)">${state.user.designer_name ? '15%' : '0%'}</div></div>
+          <div class="rev-item"><div style="font-size:10px;color:var(--muted)">매장</div><div style="font-size:13px;font-weight:700">${salonAmt.toLocaleString()}원</div><div style="font-size:10px;color:var(--muted)">30%</div></div>
         </div>
       </div>
       <button class="btn-primary" style="margin-top:4px" onclick="placeOrder()">
@@ -791,14 +789,9 @@ function openOrderDetail(id) {
             <div style="font-size:10px;color:var(--muted)">40%</div>
           </div>
           <div class="rev-item">
-            <div style="font-size:10px;color:var(--muted)">매장 오너</div>
-            <div style="font-size:13px;font-weight:700">${(o.salon_commission_amount||0).toLocaleString()}원</div>
-            <div style="font-size:10px;color:var(--muted)">${Math.round((o.salon_commission_amount||0)/(o.total_amount||1)*100)}%</div>
-          </div>
-          <div class="rev-item">
-            <div style="font-size:10px;color:var(--muted)">디자이너</div>
-            <div style="font-size:13px;font-weight:700;color:${(o.designer_commission_amount||0) > 0 ? 'var(--text)' : 'var(--muted)'}">${(o.designer_commission_amount||0).toLocaleString()}원</div>
-            <div style="font-size:10px;color:var(--muted)">${Math.round((o.designer_commission_amount||0)/(o.total_amount||1)*100)}%</div>
+            <div style="font-size:10px;color:var(--muted)">매장 원장</div>
+            <div style="font-size:13px;font-weight:700">${Math.round((o.total_amount || 0) * 0.3).toLocaleString()}원</div>
+            <div style="font-size:10px;color:var(--muted)">30%</div>
           </div>
         </div>
       </div>

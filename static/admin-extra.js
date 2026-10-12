@@ -642,7 +642,6 @@ function renderStoreSettlements() {
         <div class="summary-title">정산</div>
         <div class="metric-row">
           <div class="metric-tile pay"><i class="fas fa-store"></i><strong>${money(summary.sales)}</strong><span>판매 매출</span></div>
-          <div class="metric-tile pay"><i class="fas fa-cut"></i><strong>0원</strong><span>디자이너 정산</span></div>
           <div class="metric-tile pay"><i class="fas fa-truck"></i><strong>${feeText(summary.shipping_fee)}</strong><span>배송비</span></div>
           <div class="metric-tile pay"><i class="fas fa-wallet"></i><strong>${money(summary.payout)}</strong><span>정산액 30%</span></div>
         </div>
@@ -665,7 +664,7 @@ function renderStoreSettlements() {
           <tr>
             <th><input type="checkbox" ${rows.length && rows.every((row) => selected.has(row.id)) ? 'checked' : ''} onclick="toggleSettlementPage()"></th>
             ${history ? '' : '<th>매장</th>'}
-            <th>정산 기간</th><th>총 매출액</th><th>실 결제액</th><th>배송비</th><th>디자이너 정산</th><th>정산액</th><th>상태</th><th>관리</th>
+            <th>정산 기간</th><th>총 매출액</th><th>실 결제액</th><th>배송비</th><th>정산액</th><th>상태</th><th>관리</th>
           </tr>
         </thead>
         <tbody>
@@ -677,7 +676,6 @@ function renderStoreSettlements() {
               <td>${money(row.sales)}</td>
               <td>${money(row.paid_amount)}</td>
               <td>${feeText(row.shipping_fee)}</td>
-              <td>0원</td>
               <td>${money(row.payout)}</td>
               <td>
                 <span class="status-pill ${row.status === 'PAID' ? 'paid' : row.status === 'CONFIRMED' ? 'confirmed' : 'pending'}">${SETTLE_LABEL[row.status]}</span>
@@ -689,17 +687,17 @@ function renderStoreSettlements() {
                 <button class="text-link" onclick="openSettlementOrders('${row.id}')">목록보기</button>
                 ${history ? '' : `<button class="text-link muted" onclick="changeSettlementSalon('${row.salon_id}')">월별보기</button>`}
               </td>
-            </tr>`).join('') || `<tr><td colspan="10" style="text-align:center;color:#94a3b8;padding:24px">${history ? '해당 매장의 정산 내역이 없습니다.' : '선택한 기간의 정산 내역이 없습니다.'}</td></tr>`}
+            </tr>`).join('') || `<tr><td colspan="9" style="text-align:center;color:#94a3b8;padding:24px">${history ? '해당 매장의 정산 내역이 없습니다.' : '선택한 기간의 정산 내역이 없습니다.'}</td></tr>`}
         </tbody>
       </table>
     </div>
     ${detail ? `
       <div class="sheet-card" style="margin-top:12px;overflow:auto">
-        <div style="padding:14px 16px;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:700">${detail.salon_name} ${detail.period} 주문 · 디자이너가 퇴사해도 이름은 남고, 디자이너 지급은 0원입니다</div>
+        <div style="padding:14px 16px;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:700">${detail.salon_name} ${detail.period} 주문</div>
         <table class="data-table">
-          <thead><tr><th>주문</th><th>고객</th><th>디자이너</th><th>매출</th><th>디자이너 지급</th></tr></thead>
+          <thead><tr><th>주문</th><th>고객</th><th>디자이너</th><th>매출</th></tr></thead>
           <tbody>
-            ${(detail.lines || []).map((line) => `<tr><td>#${line.order_id}<div style="color:#94a3b8;font-size:12px">${line.created_at}</div></td><td>${line.user_name}</td><td>${line.designer_name || '담당 없음'}${line.designer_status === 'RESIGNED' ? ' <span class="badge badge-resigned">퇴사</span>' : ''}</td><td>${money(line.sales)}</td><td>0원</td></tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:24px">이 기간 주문이 없습니다</td></tr>'}
+            ${(detail.lines || []).map((line) => `<tr><td>#${line.order_id}<div style="color:#94a3b8;font-size:12px">${line.created_at}</div></td><td>${line.user_name}</td><td>${line.designer_name || '담당 없음'}${line.designer_status === 'RESIGNED' ? ' <span class="badge badge-resigned">퇴사</span>' : ''}</td><td>${money(line.sales)}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:24px">이 기간 주문이 없습니다</td></tr>'}
           </tbody>
         </table>
       </div>` : ''}`;
@@ -777,7 +775,7 @@ function renderOwnerApp() {
       <div class="panel"><div class="panel-body">
         <div style="font-size:13px;color:#6b7280">이번 달 원장 지급 30%</div>
         <div style="font-size:28px;font-weight:400;margin:6px 0 12px">${row ? money(row.payout) : '0원'}</div>
-        <div style="font-size:13px;color:#6b7280">판매 매출 ${row ? money(row.sales) : '0원'} · 디자이너 정산 0원</div>
+        <div style="font-size:13px;color:#6b7280">판매 매출 ${row ? money(row.sales) : '0원'}</div>
       </div></div>
       <div class="panel">
         <div class="panel-header"><span class="panel-title">디자이너</span>
@@ -824,16 +822,12 @@ function renderDesignerApp() {
   const lines = ((adminState.settlements || {}).rows || []).flatMap((row) => row.lines.map((line) => ({ ...line, salon_name: row.salon_name }))).filter((line) => designer && line.designer_name === designer.designer_name);
   return `
     <div class="phone-shell">
-      <div class="note-bar">${designer ? designer.designer_name : '디자이너'} 모바일 화면. 내 판매 내역은 보이지만, 정산금은 원장에게 지급되고 디자이너 정산은 없습니다.</div>
-      <div class="panel"><div class="panel-body">
-        <div style="font-size:13px;color:#6b7280">내 이번 달 정산</div>
-        <div style="font-size:28px;font-weight:400;margin-top:6px">0원</div>
-      </div></div>
+      <div class="note-bar">${designer ? designer.designer_name : '디자이너'} 모바일 화면. 담당 판매 내역을 봅니다.</div>
       <div class="panel"><div class="panel-body">
         ${lines.map((line) => `
           <div style="padding:10px 0;border-bottom:1px solid #f3f4f6">
             <div>${line.salon_name} · ${line.user_name}</div>
-            <div style="font-size:12px;color:#6b7280">${line.created_at} · 매출 ${money(line.sales)} · 내 정산 0원</div>
+            <div style="font-size:12px;color:#6b7280">${line.created_at} · 매출 ${money(line.sales)}</div>
           </div>`).join('') || '<div style="color:#9ca3af">이번 달 판매가 없습니다</div>'}
       </div></div>
     </div>`;

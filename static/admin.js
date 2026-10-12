@@ -179,12 +179,10 @@ function renderDashboard() {
   const gmv = s?.total_gmv || 0;
   const platform = s?.platform_revenue || 0;
   const salonComm = s?.total_salon_commission || 0;
-  const designerComm = s?.total_designer_commission || 0;
-  const paidOrders = s?.paid_orders || 0;
   const totalOrders = s?.total_orders || 0;
 
   return `
-    <div class="stats-grid">
+    <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
       <div class="stat-card blue">
         <div class="stat-icon blue"><i class="fas fa-won-sign"></i></div>
         <div class="stat-value">${(gmv/10000).toFixed(1)}만</div>
@@ -200,50 +198,13 @@ function renderDashboard() {
         <div class="stat-value">${(salonComm/10000).toFixed(1)}만</div>
         <div class="stat-label">원장 지급 (30%)</div>
       </div>
-      <div class="stat-card green">
-        <div class="stat-icon green"><i class="fas fa-cut"></i></div>
-        <div class="stat-value">${(designerComm/10000).toFixed(1)}만</div>
-        <div class="stat-label">디자이너 정산</div>
-      </div>
     </div>
 
-    <div class="two-col">
-      <!-- Revenue Split Visual -->
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title"><i class="fas fa-chart-pie"></i> 수익 배분 구조</span>
-        </div>
-        <div style="padding:24px">
-          <div class="rev-split" style="margin-bottom:16px">
-            <div class="rev-split-seg" style="width:40%;background:linear-gradient(135deg,#1a1a2e,#0f3460)">Platform 40%</div>
-            <div class="rev-split-seg" style="width:30%;background:linear-gradient(135deg,#d4af37,#b8941f)">Store 30%</div>
-            <div class="rev-split-seg" style="width:30%;background:#e5e7eb;color:#6b7280">Other 30%</div>
-          </div>
-          ${gmv > 0 ? `
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
-            ${[
-              {label:'플랫폼 수익',val:platform,color:'#1a1a2e',pct:'40%'},
-              {label:'매장 원장 지급',val:salonComm,color:'#d4af37',pct:'30%'},
-              {label:'디자이너 정산',val:designerComm,color:'#e94560',pct:'0%'},
-              {label:'기타 비용',val:gmv-platform-salonComm-designerComm,color:'#9ca3af',pct:Math.round((gmv-platform-salonComm-designerComm)/gmv*100)+'%'},
-            ].map(item => `
-            <div style="background:#f9fafb;border-radius:12px;padding:14px">
-              <div style="width:10px;height:10px;border-radius:50%;background:${item.color};margin-bottom:8px"></div>
-              <div style="font-size:12px;color:#6b7280">${item.label}</div>
-              <div style="font-size:17px;font-weight:400;color:#1a1a2e">${item.val.toLocaleString()}원</div>
-              <div style="font-size:12px;color:${item.color};font-weight:600">${item.pct}</div>
-            </div>`).join('')}
-          </div>` : '<div style="text-align:center;padding:20px;color:#9ca3af;font-size:14px">데이터 로딩 중...</div>'}
-        </div>
-      </div>
-
-      <!-- Quick Stats -->
-      <div style="display:flex;flex-direction:column;gap:20px">
-        <div class="panel">
+    <div class="panel">
           <div class="panel-header">
             <span class="panel-title"><i class="fas fa-chart-bar"></i> 플랫폼 현황</span>
           </div>
-          <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="padding:20px;display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
             ${[
               {label:'총 살롱',val:adminState.salons.length,icon:'fa-store',color:'#3b82f6'},
               {label:'디자이너',val:adminState.designers.length,icon:'fa-cut',color:'#8b5cf6'},
@@ -260,25 +221,6 @@ function renderDashboard() {
               </div>
             </div>`).join('')}
           </div>
-        </div>
-
-        <div class="panel">
-          <div class="panel-header">
-            <span class="panel-title"><i class="fas fa-exclamation-triangle"></i> 주의 필요</span>
-          </div>
-          <div style="padding:20px">
-            ${adminState.designers.filter(d => d.status === 'RESIGNED').length > 0 ? `
-            <div style="background:#fef3c7;border-radius:10px;padding:12px;display:flex;align-items:center;gap:10px;margin-bottom:10px">
-              <i class="fas fa-user-times" style="color:#d97706"></i>
-              <span style="font-size:13px;font-weight:600;color:#92400e">퇴사 디자이너 ${adminState.designers.filter(d => d.status === 'RESIGNED').length}명</span>
-            </div>` : ''}
-            <div style="background:#dcfce7;border-radius:10px;padding:12px;display:flex;align-items:center;gap:10px">
-              <i class="fas fa-check-circle" style="color:#16a34a"></i>
-              <span style="font-size:13px;font-weight:600;color:#166534">시스템 정상 운영중</span>
-            </div>
-          </div>
-        </div>
-      </div>
     </div>
 
     <!-- Salon Revenue Table -->
@@ -524,8 +466,6 @@ function renderDesigners() {
             <th>디자이너</th>
             <th>소속 살롱</th>
             <th>상태</th>
-            <th>커미션율</th>
-            <th>총 수령액</th>
             <th>관리</th>
           </tr>
         </thead>
@@ -543,8 +483,7 @@ function renderDesigners() {
           <div style="font-weight:700;color:#92400e;margin-bottom:6px">디자이너 퇴사 처리 규칙</div>
           <ul style="font-size:13px;color:#92400e;line-height:1.8;padding-left:16px">
             <li>퇴사 즉시 해당 디자이너에게 매핑된 모든 고객의 담당이 해제됩니다</li>
-            <li>퇴사 이후 발생하는 모든 주문의 디자이너 커미션(15%)은 <strong>살롱 오너에게 귀속</strong>됩니다</li>
-            <li>퇴사 전 주문 내역은 변경되지 않습니다</li>
+            <li>퇴사 전 주문에는 그 디자이너 이름이 남습니다</li>
           </ul>
         </div>
       </div>
@@ -568,8 +507,6 @@ function renderDesignerRows(designers) {
       </td>
       <td>${d.salon_name}</td>
       <td><span class="badge badge-${d.status === 'ACTIVE' ? 'active' : 'resigned'}">${d.status === 'ACTIVE' ? '활동중' : '퇴사'}</span></td>
-      <td>${(d.commission_rate * 100).toFixed(0)}%</td>
-      <td style="font-weight:600;color:#d4af37">${(d.total_earned || 0).toLocaleString()}원</td>
       <td>
         <div style="display:flex;gap:6px">
           ${d.status === 'ACTIVE' ?
@@ -582,7 +519,7 @@ function renderDesignerRows(designers) {
           }
         </div>
       </td>
-    </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:24px">디자이너 없음</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px">디자이너 없음</td></tr>';
 }
 
 async function filterDesigners(salonId) {
@@ -603,8 +540,7 @@ async function resignDesigner(id, name) {
       <p style="font-size:14px;color:#6b7280;margin-bottom:16px"><strong>${name}</strong> 디자이너를 퇴사 처리하시겠습니까?</p>
       <div style="background:#fef3c7;border-radius:10px;padding:12px;text-align:left;margin-bottom:20px">
         <p style="font-size:12px;color:#92400e;line-height:1.6">
-          ⚠️ 퇴사 처리 시 매핑된 고객이 해제되며,<br>
-          이후 발생하는 주문의 커미션은 살롱 오너에게 귀속됩니다.
+          ⚠️ 퇴사 처리 시 매핑된 고객의 담당이 해제됩니다.
         </p>
       </div>
       <div style="display:flex;gap:10px">
@@ -621,7 +557,7 @@ async function confirmResign(id) {
   const res = await api(`/api/designers/${id}/resign`, 'POST');
   if (res.success) {
     closeModal();
-    showToast('퇴사 처리 완료. 커미션이 살롱 오너에게 귀속됩니다.', 'success');
+    showToast('퇴사 처리했습니다', 'success');
     await loadPageData('designers');
   }
 }
@@ -644,10 +580,6 @@ async function openAddDesignerModal() {
       </select>
     </div>
     <div class="form-group"><label class="form-label">이름 *</label><input class="form-input" id="m-d-name" placeholder="홍길동 디자이너"></div>
-    <div class="form-group"><label class="form-label">커미션율</label>
-      <input class="form-input" id="m-d-rate" type="number" value="15" min="0" max="100">
-      <p style="font-size:11px;color:#9ca3af;margin-top:4px">기본 15% (정책에 따라 변경 가능)</p>
-    </div>
     <div style="display:flex;gap:10px;margin-top:24px">
       <button class="btn btn-outline" style="flex:1" onclick="closeModal()">취소</button>
       <button class="btn btn-accent" style="flex:1" onclick="submitAddDesigner()"><i class="fas fa-plus"></i> 추가</button>
@@ -659,7 +591,7 @@ async function submitAddDesigner() {
   const body = {
     salon_id: document.getElementById('m-d-salon').value,
     designer_name: document.getElementById('m-d-name').value,
-    commission_rate: (parseFloat(document.getElementById('m-d-rate').value) || 15) / 100
+    commission_rate: 0
   };
   if (!body.designer_name) { showToast('이름을 입력하세요', 'error'); return; }
   const res = await api('/api/designers', 'POST', body);
@@ -873,7 +805,7 @@ function renderOrders() {
     <div class="panel">
       <table class="data-table">
         <thead>
-          <tr><th>주문 #</th><th>고객</th><th>살롱</th><th>디자이너</th><th>금액</th><th>매장수수료</th><th>디자이너수수료</th><th>상태</th><th>일시</th></tr>
+          <tr><th>주문 #</th><th>고객</th><th>살롱</th><th>디자이너</th><th>금액</th><th>매장 정산</th><th>상태</th><th>일시</th></tr>
         </thead>
         <tbody id="orders-table-body">
           ${renderOrderRows(adminState.orders)}
@@ -891,11 +823,10 @@ function renderOrderRows(orders) {
       <td style="font-size:13px">${o.salon_name}</td>
       <td>${o.designer_name || '<span style="color:#9ca3af;font-size:12px">없음</span>'}</td>
       <td style="font-weight:700;color:#e94560">${o.total_amount.toLocaleString()}원</td>
-      <td style="color:#d4af37;font-weight:600">${o.salon_commission_amount.toLocaleString()}원</td>
-      <td style="color:${o.designer_commission_amount > 0 ? '#10b981' : '#dc2626'};font-weight:600">${o.designer_commission_amount.toLocaleString()}원</td>
+      <td style="color:#d4af37;font-weight:600">${Math.round((o.total_amount || 0) * 0.3).toLocaleString()}원</td>
       <td><span class="badge badge-${o.payment_status.toLowerCase()}">${{PAID:'결제완료',PENDING:'대기',CANCELLED:'취소',REFUNDED:'환불'}[o.payment_status]}</span></td>
       <td style="color:#9ca3af;font-size:12px">${new Date(o.created_at).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
-    </tr>`).join('') || '<tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:24px">주문 없음</td></tr>';
+    </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">주문 없음</td></tr>';
 }
 
 async function filterOrders(key, value) {
@@ -918,7 +849,6 @@ function renderRevenue() {
   const gmv = s?.total_gmv || 0;
   const platform = s?.platform_revenue || 0;
   const salonComm = s?.total_salon_commission || 0;
-  const designerComm = s?.total_designer_commission || 0;
 
   return `
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
@@ -934,7 +864,7 @@ function renderRevenue() {
       </div>
       <div class="stat-card gold">
         <div class="stat-icon gold"><i class="fas fa-handshake"></i></div>
-        <div class="stat-value">${((salonComm+designerComm)/10000).toFixed(1)}만원</div>
+        <div class="stat-value">${(salonComm/10000).toFixed(1)}만원</div>
         <div class="stat-label">원장 지급 합계 (30%)</div>
       </div>
     </div>
@@ -948,8 +878,7 @@ function renderRevenue() {
           ${[
             {label:'플랫폼 수익',val:platform,pct:40,color:'#1a1a2e'},
             {label:'매장 원장 지급',val:salonComm,pct:30,color:'#d4af37'},
-            {label:'디자이너 정산',val:designerComm,pct:0,color:'#e94560'},
-            {label:'기타(서비스 비용)',val:gmv-platform-salonComm-designerComm,pct:gmv>0?Math.round((gmv-platform-salonComm-designerComm)/gmv*100):0,color:'#9ca3af'},
+            {label:'기타(서비스 비용)',val:Math.max(0, gmv-platform-salonComm),pct:gmv>0?Math.round(Math.max(0, gmv-platform-salonComm)/gmv*100):0,color:'#9ca3af'},
           ].map(item => `
           <div style="margin-bottom:16px">
             <div style="display:flex;justify-content:space-between;margin-bottom:6px">
@@ -994,28 +923,17 @@ function renderRevenue() {
         <span class="panel-title"><i class="fas fa-book"></i> 수익 배분 정책</span>
       </div>
       <div style="padding:24px">
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
           ${[
             {label:'VIP 할인율',val:'30% OFF',desc:'정가 대비 VIP 할인',color:'#e94560'},
             {label:'플랫폼',val:'40%',desc:'거래금액의 40%',color:'#1a1a2e'},
-            {label:'살롱 오너',val:'15%',desc:'기본 커미션',color:'#d4af37'},
-            {label:'디자이너',val:'15%',desc:'활동중인 경우만',color:'#10b981'},
+            {label:'매장 원장',val:'30%',desc:'판매 매출 기준',color:'#d4af37'},
           ].map(item => `
           <div style="text-align:center;background:#f9fafb;border-radius:14px;padding:16px">
-            <div style="font-size:26px;font-weight:900;color:${item.color}">${item.val}</div>
+            <div style="font-size:26px;font-weight:400;color:${item.color}">${item.val}</div>
             <div style="font-size:14px;font-weight:700;color:#1a1a2e;margin-top:4px">${item.label}</div>
             <div style="font-size:11px;color:#9ca3af;margin-top:2px">${item.desc}</div>
           </div>`).join('')}
-        </div>
-        <div style="background:#fef3c7;border-radius:12px;padding:16px">
-          <div style="font-weight:700;color:#92400e;margin-bottom:8px;display:flex;align-items:center;gap:8px">
-            <i class="fas fa-exclamation-triangle"></i> 디자이너 퇴사 시 커미션 귀속 규칙
-          </div>
-          <p style="font-size:13px;color:#78350f;line-height:1.7">
-            디자이너 퇴사 처리 즉시: 디자이너 몫(15%)이 살롱 오너에게 귀속됩니다.<br>
-            오너 최대 수령: <strong>30%</strong> (기본 15% + 퇴사 디자이너 15%)<br>
-            디자이너 수령: <strong>0원</strong> (퇴사 후 모든 권리 상실)
-          </p>
         </div>
       </div>
     </div>
