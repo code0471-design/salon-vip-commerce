@@ -351,7 +351,7 @@
         if (user.mapped_designer_id === designer.id) user.mapped_designer_id = null;
       });
       save();
-      return { data: publicDesigner(designer), extra: { message: '퇴사 처리되었습니다. 이후 커미션은 살롱 오너에게 귀속됩니다.' } };
+      return { data: publicDesigner(designer), extra: { message: '퇴사 처리되었습니다.' } };
     }],
     ['POST', /^\/api\/designers\/(\d+)\/reinstate$/, (req, id) => {
       const designer = findDesigner(id);
