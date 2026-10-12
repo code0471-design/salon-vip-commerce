@@ -11,6 +11,12 @@ let adminState = {
   users: [],
   products: [],
   orders: [],
+  brands: [],
+  coupons: [],
+  points: [],
+  banners: [],
+  settlements: null,
+  settlementMonth: '',
   loading: false,
   sidebarOpen: false,
   filters: { salon_id: '', status: '' }
@@ -53,10 +59,17 @@ function renderSidebar() {
     { id: 'dashboard', icon: 'fa-tachometer-alt', label: '대시보드', section: 'OVERVIEW' },
     { id: 'salons', icon: 'fa-store', label: '살롱 관리', section: null },
     { id: 'designers', icon: 'fa-cut', label: '디자이너 관리', section: null },
-    { id: 'users', icon: 'fa-users', label: '고객 관리', section: 'COMMERCE' },
+    { id: 'owner', icon: 'fa-mobile-alt', label: '원장 어드민', section: null },
+    { id: 'designer-app', icon: 'fa-mobile-alt', label: '디자이너 어드민', section: null },
+    { id: 'brands', icon: 'fa-tags', label: '브랜드 관리', section: 'COMMERCE' },
     { id: 'products', icon: 'fa-box', label: '서비스/상품', section: null },
-    { id: 'orders', icon: 'fa-receipt', label: '주문 관리', section: null },
-    { id: 'revenue', icon: 'fa-chart-pie', label: '수익 분석', section: 'REPORTS' },
+    { id: 'users', icon: 'fa-users', label: '고객 관리', section: null },
+    { id: 'orders', icon: 'fa-truck', label: '주문/배송', section: null },
+    { id: 'coupons', icon: 'fa-ticket-alt', label: '쿠폰 관리', section: null },
+    { id: 'points', icon: 'fa-coins', label: '포인트 관리', section: null },
+    { id: 'banners', icon: 'fa-image', label: '메인 배너', section: 'DISPLAY' },
+    { id: 'mid-banners', icon: 'fa-panorama', label: '가로 배너', section: null },
+    { id: 'settlements', icon: 'fa-file-invoice-dollar', label: '매장 정산', section: 'REPORTS' },
   ];
 
   return `
@@ -87,7 +100,15 @@ function renderTopbar() {
     designers: '디자이너 관리',
     users: '고객 관리',
     products: '서비스/상품 관리',
-    orders: '주문 관리',
+    orders: '주문/배송',
+    brands: '브랜드 관리',
+    coupons: '쿠폰 관리',
+    points: '포인트 관리',
+    banners: '메인 배너',
+    'mid-banners': '가로 배너',
+    settlements: '매장 정산',
+    owner: '원장 어드민',
+    'designer-app': '디자이너 어드민',
     revenue: '수익 분석'
   };
   return `
@@ -129,7 +150,15 @@ function renderAdminPage() {
     case 'designers': return renderDesigners();
     case 'users': return renderUsers();
     case 'products': return renderProducts();
-    case 'orders': return renderOrders();
+    case 'orders': return renderShippingOrders();
+    case 'brands': return renderBrands();
+    case 'coupons': return renderCoupons();
+    case 'points': return renderPoints();
+    case 'banners': return renderBanners('MAIN');
+    case 'mid-banners': return renderBanners('MID');
+    case 'settlements': return renderStoreSettlements();
+    case 'owner': return renderOwnerApp();
+    case 'designer-app': return renderDesignerApp();
     case 'revenue': return renderRevenue();
     default: return renderDashboard();
   }
@@ -641,6 +670,7 @@ function renderUsers() {
   return `
     <div style="display:flex;justify-content:space-between;margin-bottom:20px">
       <h2 style="font-size:18px;font-weight:700">고객 목록 (${adminState.users.length}명)</h2>
+      <p style="font-size:12px;color:#6b7280;margin-top:4px">최근 가입 순</p>
       <select class="form-select" style="width:180px" onchange="filterUsers(this.value)">
         <option value="">전체 살롱</option>
         ${adminState.salons.map(s => `<option value="${s.id}">${s.salon_name}</option>`).join('')}
@@ -1040,6 +1070,39 @@ async function loadPageData(page) {
       await Promise.all([
         api('/api/orders').then(r => { if (r.success) adminState.orders = r.data; }),
         api('/api/salons').then(r => { if (r.success) adminState.salons = r.data; }),
+      ]);
+      break;
+    case 'brands':
+      await Promise.all([
+        api('/api/brands').then(r => { if (r.success) adminState.brands = r.data; }),
+        api('/api/products').then(r => { if (r.success) adminState.products = r.data; }),
+      ]);
+      break;
+    case 'coupons':
+      await Promise.all([
+        api('/api/coupons').then(r => { if (r.success) adminState.coupons = r.data; }),
+        api('/api/brands').then(r => { if (r.success) adminState.brands = r.data; }),
+      ]);
+      break;
+    case 'points':
+      await Promise.all([
+        api('/api/points').then(r => { if (r.success) adminState.points = r.data; }),
+        api('/api/users').then(r => { if (r.success) adminState.users = r.data; }),
+      ]);
+      break;
+    case 'banners':
+    case 'mid-banners':
+      await api('/api/banners').then(r => { if (r.success) adminState.banners = r.data; });
+      break;
+    case 'settlements':
+      await api('/api/settlements' + (adminState.settlementMonth ? '?month=' + adminState.settlementMonth : '')).then(r => { if (r.success) adminState.settlements = r.data; });
+      break;
+    case 'owner':
+    case 'designer-app':
+      await Promise.all([
+        api('/api/salons').then(r => { if (r.success) adminState.salons = r.data; }),
+        api('/api/designers').then(r => { if (r.success) adminState.designers = r.data; }),
+        api('/api/settlements').then(r => { if (r.success) adminState.settlements = r.data; }),
       ]);
       break;
     case 'revenue':
