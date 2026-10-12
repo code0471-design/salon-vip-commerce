@@ -17,6 +17,12 @@ let adminState = {
   banners: [],
   settlements: null,
   settlementMonth: '',
+  settlementSalon: 'ALL',
+  settlementQuery: '',
+  settlementSelected: [],
+  settlementDetail: '',
+  pointsSection: 'grant',
+  blockedProducts: [],
   loading: false,
   sidebarOpen: false,
   filters: { salon_id: '', status: '' }
@@ -69,7 +75,7 @@ function renderSidebar() {
     { id: 'points', icon: 'fa-coins', label: '포인트 관리', section: null },
     { id: 'banners', icon: 'fa-image', label: '메인 배너', section: 'DISPLAY' },
     { id: 'mid-banners', icon: 'fa-panorama', label: '가로 배너', section: null },
-    { id: 'settlements', icon: 'fa-file-invoice-dollar', label: '매장 정산', section: 'REPORTS' },
+    { id: 'settlements', icon: 'fa-file-invoice-dollar', label: '매출/정산', section: 'REPORTS' },
   ];
 
   return `
@@ -106,7 +112,7 @@ function renderTopbar() {
     points: '포인트 관리',
     banners: '메인 배너',
     'mid-banners': '가로 배너',
-    settlements: '매장 정산',
+    settlements: '매출/정산',
     owner: '원장 어드민',
     'designer-app': '디자이너 어드민',
     revenue: '수익 분석'
@@ -136,6 +142,7 @@ function toggleSidebar() {
 async function navigateTo(page) {
   adminState.page = page;
   adminState.sidebarOpen = false;
+  if (location.hash !== '#' + page) history.replaceState(null, '', '#' + page);
   renderAdmin();
   await loadPageData(page);
 }
@@ -1081,21 +1088,37 @@ async function loadPageData(page) {
       await Promise.all([
         api('/api/coupons').then(r => { if (r.success) adminState.coupons = r.data; }),
         api('/api/brands').then(r => { if (r.success) adminState.brands = r.data; }),
+        api('/api/users').then(r => { if (r.success) adminState.users = r.data; }),
+        api('/api/orders').then(r => { if (r.success) adminState.orders = r.data; }),
       ]);
       break;
     case 'points':
       await Promise.all([
         api('/api/points').then(r => { if (r.success) adminState.points = r.data; }),
         api('/api/users').then(r => { if (r.success) adminState.users = r.data; }),
+        api('/api/orders').then(r => { if (r.success) adminState.orders = r.data; }),
+        api('/api/points/blocked').then(r => { if (r.success) adminState.blockedProducts = r.data; }),
       ]);
       break;
     case 'banners':
     case 'mid-banners':
       await api('/api/banners').then(r => { if (r.success) adminState.banners = r.data; });
       break;
-    case 'settlements':
-      await api('/api/settlements' + (adminState.settlementMonth ? '?month=' + adminState.settlementMonth : '')).then(r => { if (r.success) adminState.settlements = r.data; });
+    case 'settlements': {
+      const params = new URLSearchParams();
+      if (adminState.settlementMonth) params.set('month', adminState.settlementMonth);
+      if (adminState.settlementSalon && adminState.settlementSalon !== 'ALL') params.set('salon_id', adminState.settlementSalon);
+      await Promise.all([
+        api('/api/settlements?' + params).then(r => {
+          if (r.success) {
+            adminState.settlements = r.data;
+            adminState.settlementMonth = r.data.month;
+          }
+        }),
+        api('/api/salons').then(r => { if (r.success) adminState.salons = r.data; }),
+      ]);
       break;
+    }
     case 'owner':
     case 'designer-app':
       await Promise.all([
@@ -1118,10 +1141,12 @@ async function loadPageData(page) {
 // INIT
 // ============================================================
 async function initAdmin() {
+  const startPage = (location.hash || '#dashboard').replace('#', '') || 'dashboard';
+  adminState.page = startPage;
   renderAdmin();
   await api('/api/init-db', 'POST');
   await api('/api/seed-db', 'POST');
-  await loadPageData('dashboard');
+  await loadPageData(startPage);
 }
 
 // Handle admin route
