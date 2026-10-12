@@ -14,6 +14,13 @@ function ensureExtras(data, seed) {
   data.point_grants = data.point_grants || seed.point_grants || [];
   data.banners = data.banners || seed.banners || [];
   data.settlement_overrides = data.settlement_overrides || [];
+  data.point_blocked_ids = data.point_blocked_ids || [];
+  data.coupons.forEach((coupon) => {
+    if (coupon.min_order_amount == null) coupon.min_order_amount = 0;
+    if (!coupon.issue_target) coupon.issue_target = 'ALL';
+    if (coupon.issued_count == null) coupon.issued_count = 0;
+    if (coupon.used_count == null) coupon.used_count = 0;
+  });
   data.products.forEach((product) => {
     if (!product.brand_id) product.brand_id = 1;
   });
@@ -178,6 +185,82 @@ function assignSalon(user, salonId, designerId) {
   user.mapped_designer_id = designer ? designer.id : null;
   save();
   return { user: publicUser(user) };
+}
+
+function recentSettlementMonths(count) {
+  const now = new Date();
+  const months = [];
+  for (let i = 0; i < count; i += 1) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`);
+  }
+  const fromOrders = db.orders.map((order) => String(order.created_at).slice(0, 7));
+  return [...new Set(months.concat(fromOrders))].filter(Boolean).sort().reverse();
+}
+
+function monthBounds(period) {
+  const [year, month] = period.split('-').map(Number);
+  const last = new Date(year, month, 0).getDate();
+  return { start: `${period}-01`, end: `${period}-${String(last).padStart(2, '0')}` };
+}
+
+function settlementStatusFor(id, period) {
+  const override = db.settlement_overrides.find((item) => item.id === id);
+  const nowMonth = nowStamp().slice(0, 7);
+  return override ? override.status : (period >= nowMonth ? 'PENDING' : 'CONFIRMED');
+}
+
+function salonPeriodRow(salon, period) {
+  const inMonth = db.orders.filter((order) => order.salon_id === salon.id && String(order.created_at).slice(0, 7) === period);
+  const paid = inMonth.filter((order) => order.payment_status === 'PAID');
+  const cancelled = inMonth.filter((order) => order.payment_status === 'CANCELLED' || order.payment_status === 'REFUNDED');
+  const sales = paid.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+  const pointsUsed = paid.reduce((sum, order) => sum + (order.points_used || 0), 0);
+  const couponDiscount = paid.reduce((sum, order) => sum + (order.coupon_discount || 0), 0);
+  const shippingFee = paid.reduce((sum, order) => sum + (order.shipping_fee || 0), 0);
+  const cancelledAmount = cancelled.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+  const id = `S${salon.id}-${period}`;
+  return {
+    id,
+    salon_id: salon.id,
+    salon_name: salon.salon_name,
+    owner_name: salon.owner_name,
+    period,
+    orders: paid.length,
+    sales,
+    paid_amount: Math.max(0, sales - pointsUsed - couponDiscount),
+    cancelled_amount: cancelledAmount,
+    points_used: pointsUsed,
+    coupon_discount: couponDiscount,
+    shipping_fee: shippingFee,
+    payout: Math.round(sales * STORE_PAYOUT_RATE),
+    designer_payout: 0,
+    status: settlementStatusFor(id, period),
+    lines: paid.map(publicOrder).map((order) => ({
+      order_id: order.id,
+      created_at: order.created_at,
+      user_name: order.user_name,
+      designer_name: order.designer_name,
+      designer_status: order.designer_status,
+      sales: order.total_amount,
+      designer_payout: 0,
+    })),
+  };
+}
+
+function summarizeSettlementRows(rows) {
+  const sum = (key) => rows.reduce((acc, row) => acc + (row[key] || 0), 0);
+  return {
+    order_count: sum('orders'),
+    sales: sum('sales'),
+    paid_amount: sum('paid_amount'),
+    cancelled_amount: sum('cancelled_amount'),
+    points_used: sum('points_used'),
+    coupon_discount: sum('coupon_discount'),
+    shipping_fee: sum('shipping_fee'),
+    payout: sum('payout'),
+    designer_payout: 0,
+  };
 }
 
 const routes = [
@@ -444,8 +527,14 @@ const routes = [
       code: body.code || `CP${nextId(db.coupons)}`,
       discount_type: body.discount_type === 'RATE' ? 'RATE' : 'AMOUNT',
       discount_value: Number(body.discount_value || 0),
-      apply_scope: body.brand_id ? 'BRAND' : 'ALL',
+      min_order_amount: Number(body.min_order_amount || 0),
+      apply_scope: body.apply_scope === 'BRAND' || body.brand_id ? 'BRAND' : 'ALL',
       brand_id: body.brand_id ? Number(body.brand_id) : null,
+      issue_target: body.issue_target === 'ORDER_COUNT' ? 'ORDER_COUNT' : 'ALL',
+      order_count_min: body.order_count_min === '' || body.order_count_min == null ? null : Number(body.order_count_min),
+      order_count_max: body.order_count_max === '' || body.order_count_max == null ? null : Number(body.order_count_max),
+      issued_count: Number(body.issued_count || 0),
+      used_count: 0,
       starts_at: body.starts_at || nowStamp().slice(0, 10),
       ends_at: body.ends_at || '',
       status: 'ACTIVE',
@@ -461,27 +550,74 @@ const routes = [
     save();
     return { data: coupon };
   }],
+  ['PUT', /^\/api\/coupons\/(\d+)$/, (req, id) => {
+    const coupon = db.coupons.find((item) => item.id === Number(id));
+    if (!coupon) return { status: 404, error: '쿠폰을 찾을 수 없습니다' };
+    const body = req.body || {};
+    if (body.name !== undefined) coupon.name = body.name;
+    if (body.discount_type !== undefined) coupon.discount_type = body.discount_type === 'RATE' ? 'RATE' : 'AMOUNT';
+    if (body.discount_value !== undefined) coupon.discount_value = Number(body.discount_value || 0);
+    if (body.min_order_amount !== undefined) coupon.min_order_amount = Number(body.min_order_amount || 0);
+    if (body.brand_id !== undefined) coupon.brand_id = body.brand_id ? Number(body.brand_id) : null;
+    coupon.apply_scope = coupon.brand_id ? 'BRAND' : 'ALL';
+    if (body.issue_target !== undefined) coupon.issue_target = body.issue_target === 'ORDER_COUNT' ? 'ORDER_COUNT' : 'ALL';
+    if (body.order_count_min !== undefined) coupon.order_count_min = body.order_count_min === '' || body.order_count_min == null ? null : Number(body.order_count_min);
+    if (body.order_count_max !== undefined) coupon.order_count_max = body.order_count_max === '' || body.order_count_max == null ? null : Number(body.order_count_max);
+    if (body.starts_at !== undefined) coupon.starts_at = body.starts_at;
+    if (body.ends_at !== undefined) coupon.ends_at = body.ends_at;
+    if (body.issued_count !== undefined) coupon.issued_count = Number(body.issued_count || 0);
+    save();
+    return { data: coupon };
+  }],
+  ['GET', /^\/api\/points\/blocked$/, () => ({
+    data: db.products.map((product) => ({
+      id: product.id,
+      name: product.name,
+      brand_id: product.brand_id,
+      blocked: (db.point_blocked_ids || []).includes(product.id),
+    })),
+  })],
+  ['POST', /^\/api\/points\/blocked$/, (req) => {
+    const body = req.body || {};
+    const id = Number(body.product_id);
+    db.point_blocked_ids = db.point_blocked_ids || [];
+    if (body.blocked) {
+      if (!db.point_blocked_ids.includes(id)) db.point_blocked_ids.push(id);
+    } else {
+      db.point_blocked_ids = db.point_blocked_ids.filter((item) => item !== id);
+    }
+    save();
+    return { data: db.point_blocked_ids };
+  }],
   ['GET', /^\/api\/points$/, () => ({
     data: db.point_grants.slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
   })],
   ['POST', /^\/api\/points$/, (req) => {
     const body = req.body || {};
-    const user = db.users.find((item) => item.id === Number(body.user_id));
-    if (!user) return { status: 400, error: '고객을 선택하세요' };
+    const ids = (body.user_ids && body.user_ids.length ? body.user_ids : [body.user_id]).map(Number).filter(Boolean);
+    const users = db.users.filter((item) => ids.includes(item.id));
+    if (!users.length) return { status: 400, error: '고객을 선택하세요' };
     const amount = Math.abs(Number(body.amount || 0));
     if (!amount) return { status: 400, error: '포인트를 입력하세요' };
     const signed = body.direction === 'DEDUCT' ? -amount : amount;
+    const scheduled = body.timing === 'SCHEDULED';
     const grant = {
       id: nextId(db.point_grants),
-      user_id: user.id,
-      user_name: user.name,
+      user_id: users.length === 1 ? users[0].id : null,
+      user_ids: users.map((item) => item.id),
+      user_name: users.length === 1 ? users[0].name : `${users[0].name} 외 ${users.length - 1}명`,
+      target_summary: body.target_summary || (users.length === 1 ? users[0].name : `조건 ${users.length}명`),
       amount: signed,
       reason: body.reason || (signed > 0 ? '수동 지급' : '수동 차감'),
-      status: 'COMPLETED',
-      created_at: nowStamp(),
+      expires_at: body.expires_at || '',
+      created_by: 'Admin',
+      status: scheduled ? 'SCHEDULED' : 'COMPLETED',
+      created_at: body.scheduled_at || nowStamp(),
     };
     db.point_grants.push(grant);
-    user.points = (user.points || 0) + signed;
+    if (!scheduled) {
+      users.forEach((user) => { user.points = Math.max(0, (user.points || 0) + signed); });
+    }
     save();
     return { data: grant };
   }],
@@ -516,48 +652,37 @@ const routes = [
     return { data: banner };
   }],
   ['GET', /^\/api\/settlements$/, (req) => {
-    const month = req.query.get('month');
-    const months = [...new Set(db.orders.map((order) => String(order.created_at).slice(0, 7)))].sort().reverse();
-    const selected = month || months[0] || nowStamp().slice(0, 7);
-    const nowMonth = nowStamp().slice(0, 7);
-    const rows = db.salons.map((salon) => {
-      const orders = db.orders.filter((order) => order.salon_id === salon.id && order.payment_status === 'PAID' && String(order.created_at).slice(0, 7) === selected);
-      const sales = orders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-      const id = `S${salon.id}-${selected}`;
-      const override = db.settlement_overrides.find((item) => item.id === id);
-      const status = override ? override.status : (selected >= nowMonth ? 'PENDING' : 'CONFIRMED');
-      return {
-        id,
-        salon_id: salon.id,
-        salon_name: salon.salon_name,
-        owner_name: salon.owner_name,
-        orders: orders.length,
-        sales,
-        payout: Math.round(sales * STORE_PAYOUT_RATE),
-        payout_rate: STORE_PAYOUT_RATE,
-        designer_payout: 0,
-        status,
-        lines: orders.map(publicOrder).map((order) => ({
-          order_id: order.id,
-          created_at: order.created_at,
-          user_name: order.user_name,
-          designer_name: order.designer_name,
-          designer_status: order.designer_status,
-          sales: order.total_amount,
-          designer_payout: 0,
-        })),
-      };
-    }).filter((row) => row.orders > 0);
-    return { data: { month: selected, months, rows } };
+    const months = recentSettlementMonths(18);
+    const selected = req.query.get('month') || nowStamp().slice(0, 7);
+    const salonId = req.query.get('salon_id');
+    const salons = db.salons.slice().sort((a, b) => a.salon_name.localeCompare(b.salon_name, 'ko'));
+    const focus = salonId && salonId !== 'ALL' ? salons.find((salon) => salon.id === Number(salonId)) : null;
+    const rows = focus
+      ? months.map((period) => salonPeriodRow(focus, period))
+      : salons.map((salon) => salonPeriodRow(salon, selected));
+    const summaryRows = focus ? rows.filter((row) => row.period === selected) : rows;
+    return {
+      data: {
+        month: selected,
+        months,
+        range: monthBounds(selected),
+        salon_id: focus ? focus.id : 'ALL',
+        summary: summarizeSettlementRows(summaryRows),
+        rows,
+      },
+    };
   }],
   ['POST', /^\/api\/settlements\/status$/, (req) => {
     const body = req.body || {};
-    if (!body.id || !body.status) return { status: 400, error: '정산 상태가 없습니다' };
-    const current = db.settlement_overrides.find((item) => item.id === body.id);
-    if (current) current.status = body.status;
-    else db.settlement_overrides.push({ id: body.id, status: body.status });
+    const ids = body.ids && body.ids.length ? body.ids : (body.id ? [body.id] : []);
+    if (!ids.length || !body.status) return { status: 400, error: '정산 상태가 없습니다' };
+    ids.forEach((id) => {
+      const current = db.settlement_overrides.find((item) => item.id === id);
+      if (current) current.status = body.status;
+      else db.settlement_overrides.push({ id, status: body.status });
+    });
     save();
-    return { data: { id: body.id, status: body.status } };
+    return { data: { ids, status: body.status } };
   }],
   ['PUT', /^\/api\/orders\/(\d+)\/shipping$/, (req, id) => {
     const order = db.orders.find((item) => item.id === Number(id));
