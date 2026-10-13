@@ -65,8 +65,6 @@ function renderSidebar() {
     { id: 'dashboard', icon: 'fa-tachometer-alt', label: '대시보드', section: 'OVERVIEW' },
     { id: 'salons', icon: 'fa-store', label: '살롱 관리', section: null },
     { id: 'designers', icon: 'fa-cut', label: '디자이너 관리', section: null },
-    { id: 'owner', icon: 'fa-mobile-alt', label: '원장 어드민', section: null },
-    { id: 'designer-app', icon: 'fa-mobile-alt', label: '디자이너 어드민', section: null },
     { id: 'brands', icon: 'fa-tags', label: '브랜드 관리', section: 'COMMERCE' },
     { id: 'products', icon: 'fa-box', label: '서비스/상품', section: null },
     { id: 'users', icon: 'fa-users', label: '고객 관리', section: null },
@@ -113,8 +111,6 @@ function renderTopbar() {
     banners: '메인 배너',
     'mid-banners': '가로 배너',
     settlements: '매출/정산',
-    owner: '원장 어드민',
-    'designer-app': '디자이너 어드민',
     revenue: '수익 분석'
   };
   return `
@@ -164,8 +160,6 @@ function renderAdminPage() {
     case 'banners': return renderBanners('MAIN');
     case 'mid-banners': return renderBanners('MID');
     case 'settlements': return renderStoreSettlements();
-    case 'owner': return renderOwnerApp();
-    case 'designer-app': return renderDesignerApp();
     case 'revenue': return renderRevenue();
     default: return renderDashboard();
   }
@@ -1037,14 +1031,6 @@ async function loadPageData(page) {
       ]);
       break;
     }
-    case 'owner':
-    case 'designer-app':
-      await Promise.all([
-        api('/api/salons').then(r => { if (r.success) adminState.salons = r.data; }),
-        api('/api/designers').then(r => { if (r.success) adminState.designers = r.data; }),
-        api('/api/settlements').then(r => { if (r.success) adminState.settlements = r.data; }),
-      ]);
-      break;
     case 'revenue':
       await Promise.all([
         api('/api/orders/stats').then(r => { if (r.success) adminState.stats = r.data; }),
@@ -1059,12 +1045,13 @@ async function loadPageData(page) {
 // INIT
 // ============================================================
 async function initAdmin() {
+  const pages = ['dashboard', 'salons', 'designers', 'brands', 'products', 'users', 'orders', 'coupons', 'points', 'banners', 'mid-banners', 'settlements', 'revenue'];
   const startPage = (location.hash || '#dashboard').replace('#', '') || 'dashboard';
-  adminState.page = startPage;
+  adminState.page = pages.includes(startPage) ? startPage : 'dashboard';
   renderAdmin();
   await api('/api/init-db', 'POST');
   await api('/api/seed-db', 'POST');
-  await loadPageData(startPage);
+  await loadPageData(adminState.page);
 }
 
 // Handle admin route
