@@ -294,48 +294,39 @@ function renderSalons() {
         <i class="fas fa-plus"></i> 살롱 추가
       </button>
     </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:20px">
-      ${adminState.salons.map(s => `
-      <div class="panel" style="margin-bottom:0">
-        <div style="padding:20px">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px">
-            <div style="display:flex;align-items:center;gap:12px">
-              <div style="width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,#1a1a2e,#0f3460);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                <i class="fas fa-scissors" style="color:#d4af37;font-size:20px"></i>
+    <div class="panel">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>살롱명</th>
+            <th>원장</th>
+            <th>연락처</th>
+            <th>계좌</th>
+            <th>디자이너</th>
+            <th>관리</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${adminState.salons.map(s => `
+          <tr>
+            <td>
+              <div style="font-weight:600">${s.salon_name}</div>
+              <div style="font-size:11px;color:#9ca3af">ID ${s.id}</div>
+            </td>
+            <td>${s.owner_name || ''}</td>
+            <td>${s.owner_phone || ''}</td>
+            <td>${s.bank_account || '-'}</td>
+            <td>활동 ${s.active_designers || 0} · 전체 ${s.designer_count || 0}</td>
+            <td>
+              <div style="display:flex;gap:6px">
+                <button class="btn btn-sm btn-outline" onclick="openQRModal(${s.id})"><i class="fas fa-qrcode"></i></button>
+                <button class="btn btn-sm btn-outline" onclick="viewSalonStats(${s.id})">통계</button>
+                <button class="btn btn-sm btn-primary" onclick="openEditSalonModal(${s.id})">편집</button>
               </div>
-              <div>
-                <div style="font-size:16px;font-weight:800;color:#1a1a2e">${s.salon_name}</div>
-                <div style="font-size:12px;color:#6b7280">${s.owner_name} · ${s.owner_phone}</div>
-              </div>
-            </div>
-            <button onclick="openQRModal(${s.id})" class="btn btn-sm btn-outline">
-              <i class="fas fa-qrcode"></i>
-            </button>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px">
-            <div style="text-align:center;background:#f9fafb;border-radius:10px;padding:10px">
-              <div style="font-size:18px;font-weight:800;color:#1a1a2e">${s.active_designers || 0}</div>
-              <div style="font-size:11px;color:#6b7280">활동중</div>
-            </div>
-            <div style="text-align:center;background:#f9fafb;border-radius:10px;padding:10px">
-              <div style="font-size:18px;font-weight:800;color:#1a1a2e">${s.designer_count || 0}</div>
-              <div style="font-size:11px;color:#6b7280">전체</div>
-            </div>
-            <div style="text-align:center;background:#f9fafb;border-radius:10px;padding:10px">
-              <div style="font-size:16px;font-weight:800;color:#e94560">#${s.id}</div>
-              <div style="font-size:11px;color:#6b7280">ID</div>
-            </div>
-          </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-sm btn-outline" style="flex:1" onclick="viewSalonStats(${s.id})">
-              <i class="fas fa-chart-bar"></i> 통계
-            </button>
-            <button class="btn btn-sm btn-primary" style="flex:1" onclick="openEditSalonModal(${s.id})">
-              <i class="fas fa-edit"></i> 편집
-            </button>
-          </div>
-        </div>
-      </div>`).join('')}
+            </td>
+          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:24px">살롱이 없습니다</td></tr>'}
+        </tbody>
+      </table>
     </div>
   `;
 }
