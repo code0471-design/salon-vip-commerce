@@ -9,7 +9,7 @@ let state = {
   salons: [],
   products: [],
   bestProducts: [],
-  categories: ['전체', '샴푸', '컨디셔너', '트리트먼트', '오일&세럼', '스타일링'],
+  categories: ['전체', '샴푸', '컨디셔너', '트리트먼트', '오일/세럼', '스프레이', '컬크림', '왁스/젤'],
   selectedCategory: '전체',
   cart: [],
   orders: [],
@@ -133,15 +133,19 @@ function renderHome() {
     '샴푸':      'fa-pump-soap',
     '컨디셔너':  'fa-bottle-water',
     '트리트먼트':'fa-star',
-    '오일&세럼': 'fa-droplet',
-    '스타일링':  'fa-wind',
+    '오일/세럼': 'fa-droplet',
+    '스프레이':  'fa-spray-can',
+    '컬크림':    'fa-fill-drip',
+    '왁스/젤':   'fa-cube',
   };
   const catColors = {
     '샴푸':      '#4f7cff',
     '컨디셔너':  '#7c4fff',
     '트리트먼트':'#ff6b6b',
-    '오일&세럼': '#f59e0b',
-    '스타일링':  '#10b981',
+    '오일/세럼': '#f59e0b',
+    '스프레이':  '#06b6d4',
+    '컬크림':    '#f97316',
+    '왁스/젤':   '#10b981',
   };
 
   return `
@@ -582,6 +586,7 @@ function openProductDetail(id) {
           <span style="font-size:13px;font-weight:700;color:var(--rose)">-${disc}%</span>
         </div>
         <p style="font-size:13px;color:var(--muted);line-height:1.65;margin-bottom:14px;border-top:1px solid var(--border);padding-top:12px">${p.description || ''}</p>
+        ${(p.detail_image_urls || []).map((src) => `<img src="${String(src).replace(/"/g, '&quot;')}" alt="" style="width:100%;border-radius:12px;margin-bottom:8px;display:block">`).join('')}
         <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:16px">
           <span>무료배송</span>
           <span>${p.stock_quantity >= 9999 ? '재고 있음' : '재고 ' + p.stock_quantity + '개'}</span>

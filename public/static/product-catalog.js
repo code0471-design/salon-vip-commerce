@@ -3,38 +3,37 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ProductCatalog = api;
 })(typeof window !== 'undefined' ? window : global, function () {
-  const CATEGORY_TREE = {
-    '염모제': ['염모제', '산화제', '매니큐어·코팅', '헤나·천연염모제', '탈색약'],
-    '펌제': ['일반펌', '매직·스트레이트', '다운펌·볼륨', '열펌·아이롱펌', '중화제'],
-    '헤어케어': ['샴푸', '트리트먼트', '컨디셔너', '클리닉', '두피·스칼프'],
-    '스타일링': ['에센스·오일', '오일&세럼', '왁스·젤·스프레이', '로션·크림'],
-    '기구': ['드라이기', '아이롱·매직기', '클리퍼·바리깡', '가위·레자기', '살롱기기'],
-    '소품': ['브러시·빗', '펌 소품(롯드·클립)', '염색 소품(볼·브러시)', '분무기·용기', '살롱 소품'],
-    '위생·의류': ['가운·유니폼', '앞치마·커트보', '위생용품'],
-    '기타': ['기타', '교재·도서', '마네킹·교육용'],
-  };
+  const CATEGORIES = ['샴푸', '컨디셔너', '트리트먼트', '오일/세럼', '스프레이', '컬크림', '왁스/젤'];
 
-  const LEGACY_CATEGORY = {
-    '샴푸': ['헤어케어', '샴푸'],
-    '트리트먼트': ['헤어케어', '트리트먼트'],
-    '컨디셔너': ['헤어케어', '컨디셔너'],
-    '오일&세럼': ['스타일링', '오일&세럼'],
-    '스타일링': ['스타일링', ''],
+  const CATEGORY_ALIAS = {
+    '오일&세럼': '오일/세럼',
+    '오일·세럼': '오일/세럼',
+    '에센스·오일': '오일/세럼',
+    '왁스·젤·스프레이': '왁스/젤',
+    '로션·크림': '컬크림',
   };
 
   const UNLIMITED_STOCK = 9999;
 
-  function locateCategory(product) {
-    if (product.category_main) return { main: product.category_main, sub: product.category_sub || '' };
-    const legacy = LEGACY_CATEGORY[product.category];
-    if (legacy) return { main: legacy[0], sub: legacy[1] };
-    const entries = Object.keys(CATEGORY_TREE);
-    for (let i = 0; i < entries.length; i += 1) {
-      const main = entries[i];
-      if (CATEGORY_TREE[main].indexOf(product.category) >= 0) return { main: main, sub: product.category };
-      if (main === product.category) return { main: main, sub: '' };
-    }
-    return { main: '', sub: '' };
+  function canonicalCategory(value) {
+    const raw = String(value || '').trim();
+    if (CATEGORIES.indexOf(raw) >= 0) return raw;
+    if (CATEGORY_ALIAS[raw]) return CATEGORY_ALIAS[raw];
+    return raw;
+  }
+
+  function normalizeCategory(product) {
+    const raw = canonicalCategory(product && (product.category_sub || product.category));
+    if (CATEGORIES.indexOf(raw) >= 0) return raw;
+    const name = String((product && product.name) || '');
+    if (name.indexOf('왁스') >= 0 || name.indexOf('젤') >= 0) return '왁스/젤';
+    if (name.indexOf('크림') >= 0) return '컬크림';
+    if (name.indexOf('스프레이') >= 0 || name.indexOf('무스') >= 0) return '스프레이';
+    if (name.indexOf('오일') >= 0 || name.indexOf('세럼') >= 0) return '오일/세럼';
+    if (name.indexOf('트리트') >= 0) return '트리트먼트';
+    if (name.indexOf('컨디셔너') >= 0) return '컨디셔너';
+    if (name.indexOf('샴푸') >= 0) return '샴푸';
+    return raw;
   }
 
   function computeSellingPrice(normalPrice, source, rate, amount) {
@@ -69,11 +68,10 @@
     if (product.point_use_disabled == null) product.point_use_disabled = 0;
     if (!product.sale_start_at) product.sale_start_at = '';
     if (!product.sale_end_at) product.sale_end_at = '';
-    if (!product.category_main) {
-      const located = locateCategory(product);
-      product.category_main = located.main;
-      product.category_sub = located.sub;
-    }
+    if (!Array.isArray(product.detail_image_urls)) product.detail_image_urls = [];
+    product.category = normalizeCategory(product);
+    product.category_main = '';
+    product.category_sub = '';
     if (!product.discount_type) {
       const discount = inferDiscount(product.original_price, product.vip_discount_price);
       product.discount_type = discount.type;
@@ -88,11 +86,10 @@
     const normal = Number(body && body.original_price);
     const selling = Number(body && body.vip_discount_price);
     const supply = Number(body && body.supply_price);
-    const main = String((body && body.category_main) || '').trim();
-    const sub = String((body && body.category_sub) || '').trim();
+    const category = canonicalCategory(body && body.category);
     if (!name) return { error: '상품명을 입력하세요' };
     if (!brandId) return { error: '브랜드를 선택하세요' };
-    if (!main || !sub) return { error: '카테고리를 선택하세요' };
+    if (!category || CATEGORIES.indexOf(category) < 0) return { error: '카테고리를 선택하세요' };
     if (!supply) return { error: '공급가를 입력하세요' };
     if (!normal) return { error: '정가를 입력하세요' };
     if (!body || body.vip_discount_price === '' || body.vip_discount_price == null || Number.isNaN(selling)) {
@@ -122,9 +119,9 @@
       fields: {
         name: name,
         brand_id: brandId,
-        category_main: main,
-        category_sub: sub,
-        category: sub,
+        category_main: '',
+        category_sub: '',
+        category: category,
         supply_price: supply,
         original_price: normal,
         discount_type: body.discount_type || 'NONE',
@@ -139,6 +136,7 @@
         sale_start_at: body.sale_period === 'CUSTOM' ? (body.sale_start_at || '') : '',
         sale_end_at: body.sale_period === 'CUSTOM' ? (body.sale_end_at || '') : '',
         image_url: body.image_url || '',
+        detail_image_urls: (Array.isArray(body.detail_image_urls) ? body.detail_image_urls : []).filter(Boolean).slice(0, 8),
         description: body.description || '',
         options: options,
       },
@@ -155,9 +153,10 @@
   }
 
   return {
-    CATEGORY_TREE: CATEGORY_TREE,
+    CATEGORIES: CATEGORIES,
     UNLIMITED_STOCK: UNLIMITED_STOCK,
-    locateCategory: locateCategory,
+    canonicalCategory: canonicalCategory,
+    normalizeCategory: normalizeCategory,
     computeSellingPrice: computeSellingPrice,
     inferDiscount: inferDiscount,
     fillProductDefaults: fillProductDefaults,
