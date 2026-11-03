@@ -650,8 +650,7 @@ function productBrandLabel(id) {
 }
 
 function productCategoryLabel(product) {
-  if (product.category_main && product.category_sub) return product.category_main + ' · ' + product.category_sub;
-  return product.category || '-';
+  return ProductCatalog.normalizeCategory(product) || product.category || '-';
 }
 
 function stockLabel(stock) {
@@ -711,16 +710,15 @@ function emptyProductOption() {
 
 function blankProductDraft(brandId) {
   return {
-    id: null, name: '', brandId: brandId || '', categoryMain: '', categorySub: '',
+    id: null, name: '', brandId: brandId || '', category: '',
     supplyPrice: '', normalPrice: '', discountRate: '', discountAmount: '', discountSource: 'NONE',
     stock: '', minOrder: '1', purchaseUnit: '1', maxPurchase: '', earnRate: '0', pointUseDisabled: false,
-    salePeriod: 'ALL', saleStart: '', saleEnd: '', imageUrl: '', description: '',
+    salePeriod: 'ALL', saleStart: '', saleEnd: '', imageUrl: '', detailImages: [], description: '',
     options: [emptyProductOption()],
   };
 }
 
 function draftFromProduct(product) {
-  const located = ProductCatalog.locateCategory(product);
   const discount = product.discount_type
     ? { type: product.discount_type, value: product.discount_value || 0 }
     : ProductCatalog.inferDiscount(product.original_price, product.vip_discount_price);
@@ -738,8 +736,7 @@ function draftFromProduct(product) {
     id: product.id,
     name: product.name || '',
     brandId: product.brand_id || '',
-    categoryMain: product.category_main || located.main,
-    categorySub: product.category_sub || located.sub,
+    category: ProductCatalog.normalizeCategory(product),
     supplyPrice: product.supply_price ? String(product.supply_price) : '',
     normalPrice: String(product.original_price || ''),
     discountRate: discount.type === 'RATE' ? String(discount.value) : '',
@@ -755,6 +752,7 @@ function draftFromProduct(product) {
     saleStart: product.sale_start_at || '',
     saleEnd: product.sale_end_at || '',
     imageUrl: product.image_url || '',
+    detailImages: Array.isArray(product.detail_image_urls) ? product.detail_image_urls.slice() : [],
     description: product.description || '',
     options: options.length ? options : [emptyProductOption()],
   };
@@ -766,6 +764,7 @@ function readProductDraft() {
   if (read('pf-name') == null) return;
   productDraft.name = read('pf-name');
   productDraft.brandId = read('pf-brand');
+  productDraft.category = read('pf-category');
   productDraft.supplyPrice = read('pf-supply');
   productDraft.normalPrice = read('pf-normal');
   productDraft.discountRate = read('pf-discount-rate');
@@ -779,7 +778,6 @@ function readProductDraft() {
   productDraft.salePeriod = read('pf-sale-period');
   productDraft.saleStart = read('pf-sale-start');
   productDraft.saleEnd = read('pf-sale-end');
-  productDraft.imageUrl = read('pf-image');
   productDraft.description = read('pf-desc');
   productDraft.options.forEach((option, index) => {
     const name = read('pf-opt-name-' + index);
@@ -806,34 +804,56 @@ function currentSellingPrice() {
   );
 }
 
+function productImageRow(kind) {
+  const images = kind === 'thumb'
+    ? (productDraft.imageUrl ? [productDraft.imageUrl] : [])
+    : (productDraft.detailImages || []);
+  const tiles = images.map((src, index) => `
+    <div class="image-tile">
+      <img src="${escAttr(src)}" alt="">
+      <button type="button" class="image-remove" onclick="removeProductImage('${kind}', ${index})">×</button>
+    </div>`).join('');
+  const canAdd = kind === 'thumb' ? images.length === 0 : images.length < 8;
+  const add = canAdd ? `
+    <label class="image-add">
+      <i class="fas fa-plus"></i>
+      <span>이미지 추가</span>
+      <input type="file" accept="image/*" ${kind === 'detail' ? 'multiple' : ''} onchange="addProductImages('${kind}', this)">
+    </label>` : '';
+  return `<div class="image-row">${tiles}${add}</div>`;
+}
+
 function productFormHtml() {
-  const tree = ProductCatalog.CATEGORY_TREE;
-  const mains = Object.keys(tree);
-  const subs = productDraft.categoryMain ? (tree[productDraft.categoryMain] || []) : [];
   const selling = currentSellingPrice();
   const supply = Number(productDraft.supplyPrice) || 0;
   const margin = selling - supply;
   const marginRate = selling > 0 ? Math.round(((selling - supply) / selling) * 1000) / 10 : null;
-  const selectedLabel = productDraft.categoryMain && productDraft.categorySub
-    ? productDraft.categoryMain + ' · ' + productDraft.categorySub
-    : productDraft.categoryMain ? productDraft.categoryMain + ' · 2차 선택' : '카테고리를 선택하세요';
   const brands = adminState.brands || [];
+  const categories = ProductCatalog.CATEGORIES.slice();
+  if (productDraft.category && categories.indexOf(productDraft.category) < 0) categories.push(productDraft.category);
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <h3 style="font-size:18px;font-weight:800">${productDraft.id ? '상품 수정' : '상품 등록'}</h3>
       <span style="font-size:12px;color:#6b7280">할인율 또는 할인금액 중 하나만 입력하면 판매가가 계산됩니다.</span>
     </div>
-    <div class="product-form-grid">
-      <div>
-        <div class="form-group"><label class="form-label">상품명 *</label><input class="form-input" id="pf-name" value="${escAttr(productDraft.name)}" placeholder="상품명"></div>
-        <div class="form-group">
-          <label class="form-label">브랜드 *</label>
-          <select class="form-select" id="pf-brand">
-            <option value="">브랜드 선택</option>
-            ${brands.map((brand) => `<option value="${brand.id}" ${String(brand.id) === String(productDraft.brandId) ? 'selected' : ''}>${escAttr(brand.name)}</option>`).join('')}
-          </select>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+    <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:12px">
+      <div class="form-group"><label class="form-label">상품명 *</label><input class="form-input" id="pf-name" value="${escAttr(productDraft.name)}" placeholder="상품명"></div>
+      <div class="form-group">
+        <label class="form-label">브랜드 *</label>
+        <select class="form-select" id="pf-brand">
+          <option value="">브랜드 선택</option>
+          ${brands.map((brand) => `<option value="${brand.id}" ${String(brand.id) === String(productDraft.brandId) ? 'selected' : ''}>${escAttr(brand.name)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">카테고리 *</label>
+        <select class="form-select" id="pf-category">
+          <option value="">카테고리 선택</option>
+          ${categories.map((category) => `<option value="${escAttr(category)}" ${category === productDraft.category ? 'selected' : ''}>${escAttr(category)}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
           <div class="form-group">
             <label class="form-label">판매기간</label>
             <select class="form-select" id="pf-sale-period" onchange="toggleProductSalePeriod()">
@@ -842,25 +862,7 @@ function productFormHtml() {
             </select>
           </div>
           <div class="form-group"><label class="form-label">판매시작일</label><input class="form-input" id="pf-sale-start" type="date" value="${escAttr(productDraft.saleStart)}" ${productDraft.salePeriod === 'ALL' ? 'disabled' : ''}></div>
-          <div class="form-group"><label class="form-label">판매종료일</label><input class="form-input" id="pf-sale-end" type="date" value="${escAttr(productDraft.saleEnd)}" ${productDraft.salePeriod === 'ALL' ? 'disabled' : ''}></div>
-        </div>
-      </div>
-      <div>
-        <label class="form-label">카테고리 *</label>
-        <div class="category-picker">
-          <div class="category-picker-head ${productDraft.categoryMain && productDraft.categorySub ? 'ready' : ''}">${escAttr(selectedLabel)}</div>
-          <div class="category-cols">
-            <div class="category-col">
-              <div class="category-col-title">1차</div>
-              ${mains.map((main) => `<button type="button" class="category-item ${main === productDraft.categoryMain ? 'active' : ''}" onclick="pickProductCategory('${escAttr(main)}','')">${escAttr(main)}</button>`).join('')}
-            </div>
-            <div class="category-col">
-              <div class="category-col-title">2차</div>
-              ${productDraft.categoryMain ? subs.map((sub) => `<button type="button" class="category-item ${sub === productDraft.categorySub ? 'active' : ''}" onclick="pickProductCategory(null,'${escAttr(sub)}')">${escAttr(sub)}</button>`).join('') : '<div class="category-empty">왼쪽에서 1차를 선택하세요</div>'}
-            </div>
-          </div>
-        </div>
-      </div>
+      <div class="form-group"><label class="form-label">판매종료일</label><input class="form-input" id="pf-sale-end" type="date" value="${escAttr(productDraft.saleEnd)}" ${productDraft.salePeriod === 'ALL' ? 'disabled' : ''}></div>
     </div>
     <div class="form-section">
       <h4>가격 · 재고</h4>
@@ -916,7 +918,14 @@ function productFormHtml() {
     </div>
     <div class="form-section">
       <h4>이미지 · 설명</h4>
-      <div class="form-group"><label class="form-label">이미지 URL</label><input class="form-input" id="pf-image" value="${escAttr(productDraft.imageUrl)}" placeholder="https://"></div>
+      <div class="form-group">
+        <label class="form-label">썸네일 이미지</label>
+        ${productImageRow('thumb')}
+      </div>
+      <div class="form-group">
+        <label class="form-label">상세 이미지</label>
+        ${productImageRow('detail')}
+      </div>
       <div class="form-group"><label class="form-label">설명</label><textarea class="form-input" id="pf-desc" rows="2">${escAttr(productDraft.description)}</textarea></div>
     </div>
     <div style="display:flex;gap:10px;margin-top:18px">
@@ -949,13 +958,47 @@ function openEditProductModal(id) {
   paintProductForm();
 }
 
-function pickProductCategory(main, sub) {
+function compressProductImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 1200;
+        let width = img.width;
+        let height = img.height;
+        const scale = Math.min(1, max / Math.max(width, height));
+        width = Math.max(1, Math.round(width * scale));
+        height = Math.max(1, Math.round(height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.82));
+      };
+      img.onerror = () => resolve(reader.result);
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function addProductImages(kind, input) {
+  const files = Array.from(input.files || []).filter((file) => file.type.indexOf('image/') === 0);
+  if (!files.length) return;
   readProductDraft();
-  if (main) {
-    productDraft.categoryMain = main;
-    productDraft.categorySub = '';
-  }
-  if (sub) productDraft.categorySub = sub;
+  Promise.all(files.map(compressProductImage)).then((urls) => {
+    if (kind === 'thumb') productDraft.imageUrl = urls[0] || '';
+    else productDraft.detailImages = (productDraft.detailImages || []).concat(urls).slice(0, 8);
+    paintProductForm();
+  }).catch(() => showToast('이미지를 읽지 못했습니다', 'error'));
+}
+
+function removeProductImage(kind, index) {
+  readProductDraft();
+  if (kind === 'thumb') productDraft.imageUrl = '';
+  else productDraft.detailImages.splice(index, 1);
   paintProductForm();
 }
 
@@ -1036,8 +1079,7 @@ async function submitProductForm() {
   const body = {
     name: productDraft.name,
     brand_id: productDraft.brandId,
-    category_main: productDraft.categoryMain,
-    category_sub: productDraft.categorySub,
+    category: productDraft.category,
     supply_price: productDraft.supplyPrice,
     original_price: productDraft.normalPrice,
     discount_type: productDraft.discountSource,
@@ -1053,6 +1095,7 @@ async function submitProductForm() {
     sale_start_at: productDraft.saleStart,
     sale_end_at: productDraft.saleEnd,
     image_url: productDraft.imageUrl,
+    detail_image_urls: productDraft.detailImages || [],
     description: productDraft.description,
     options: productDraft.options.filter((option) => String(option.name || '').trim()).map((option) => ({
       id: option.id,
