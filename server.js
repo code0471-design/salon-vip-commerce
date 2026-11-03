@@ -1,6 +1,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const catalog = require('./public/static/product-catalog');
 
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
@@ -21,9 +22,7 @@ function ensureExtras(data, seed) {
     if (coupon.issued_count == null) coupon.issued_count = 0;
     if (coupon.used_count == null) coupon.used_count = 0;
   });
-  data.products.forEach((product) => {
-    if (!product.brand_id) product.brand_id = 1;
-  });
+  data.products.forEach((product) => catalog.fillProductDefaults(product));
   data.orders.forEach((order) => {
     if (!order.shipping_status) order.shipping_status = 'READY';
   });
@@ -274,40 +273,29 @@ const routes = [
     return { data: products };
   }],
   ['POST', /^\/api\/products$/, (req) => {
-    const body = req.body || {};
-    if (!body.name || !body.original_price || !body.vip_discount_price) {
-      return { status: 400, error: '필수 항목을 입력하세요' };
-    }
+    const parsed = catalog.readProductBody(req.body || {});
+    if (parsed.error) return { status: 400, error: parsed.error };
     const product = {
       id: nextId(db.products),
-      name: body.name,
-      category: body.category || '기타',
-      original_price: Number(body.original_price),
-      vip_discount_price: Number(body.vip_discount_price),
-      image_url: body.image_url || '',
-      description: body.description || '',
-      stock_quantity: Number(body.stock_quantity ?? 50),
+      ...parsed.fields,
       is_active: 1,
       is_best: 0,
-      brand_id: body.brand_id ? Number(body.brand_id) : 1,
       rating: 0,
       review_count: 0,
       created_at: nowStamp(),
     };
     db.products.push(product);
+    catalog.syncPointBlock(db, product);
     save();
     return { data: product };
   }],
   ['PUT', /^\/api\/products\/(\d+)$/, (req, id) => {
     const product = db.products.find((p) => p.id === Number(id));
     if (!product) return { status: 404, error: '상품을 찾을 수 없습니다' };
-    const body = req.body || {};
-    ['name', 'category', 'image_url', 'description'].forEach((key) => {
-      if (body[key] !== undefined) product[key] = body[key];
-    });
-    ['original_price', 'vip_discount_price', 'stock_quantity', 'is_active', 'is_best', 'brand_id'].forEach((key) => {
-      if (body[key] !== undefined && body[key] !== null && body[key] !== '') product[key] = Number(body[key]);
-    });
+    const parsed = catalog.readProductBody(req.body || {});
+    if (parsed.error) return { status: 400, error: parsed.error };
+    Object.assign(product, parsed.fields);
+    catalog.syncPointBlock(db, product);
     save();
     return { data: product };
   }],

@@ -69,23 +69,21 @@ function renderBrands() {
             <button class="btn btn-outline" onclick="saveBrandRate(${brand.id})">수수료 저장</button>
           </div>
           <table class="data-table">
-            <thead><tr><th>상품</th><th>정가</th><th>VIP가</th><th>재고</th></tr></thead>
+            <thead><tr><th>상품</th><th>카테고리</th><th>공급가</th><th>정가</th><th>판매가</th><th>재고</th></tr></thead>
             <tbody>
               ${(adminState.products || []).filter((product) => product.brand_id === brand.id).map((product) => `
                 <tr>
                   <td>${product.name}</td>
+                  <td>${productCategoryLabel(product)}</td>
+                  <td>${product.supply_price ? money(product.supply_price) : '-'}</td>
                   <td>${money(product.original_price)}</td>
                   <td>${money(product.vip_discount_price)}</td>
-                  <td>${product.stock_quantity}</td>
-                </tr>`).join('') || '<tr><td colspan="4" style="color:#9ca3af">등록된 상품이 없습니다</td></tr>'}
+                  <td>${stockLabel(product.stock_quantity)}</td>
+                </tr>`).join('') || '<tr><td colspan="6" style="color:#9ca3af">등록된 상품이 없습니다</td></tr>'}
             </tbody>
           </table>
-          <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:8px;margin-top:12px">
-            <input class="form-input" id="bp-name-${brand.id}" placeholder="상품명">
-            <input class="form-input" id="bp-price-${brand.id}" type="number" placeholder="정가">
-            <input class="form-input" id="bp-vip-${brand.id}" type="number" placeholder="VIP가">
-            <input class="form-input" id="bp-cat-${brand.id}" placeholder="카테고리" value="샴푸">
-            <button class="btn btn-primary" onclick="addBrandProduct(${brand.id})">상품 등록</button>
+          <div style="margin-top:12px">
+            <button class="btn btn-primary" onclick="openAddProductModal(${brand.id})">상품 등록</button>
           </div>
         </div>
       </div>`).join('')}
@@ -115,20 +113,6 @@ async function saveBrandRate(id) {
   const rate = (parseFloat(document.getElementById('brand-rate-' + id).value) || 0) / 100;
   const res = await api('/api/brands/' + id, 'PUT', { commission_rate: rate });
   if (res.success) { showToast('브랜드 수수료를 저장했습니다', 'success'); await loadPageData('brands'); }
-}
-
-async function addBrandProduct(brandId) {
-  const res = await api('/api/products', 'POST', {
-    name: document.getElementById('bp-name-' + brandId).value,
-    original_price: document.getElementById('bp-price-' + brandId).value,
-    vip_discount_price: document.getElementById('bp-vip-' + brandId).value,
-    category: document.getElementById('bp-cat-' + brandId).value || '기타',
-    brand_id: brandId,
-  });
-  if (!res.success) { showToast(res.error || '상품을 등록하지 못했습니다', 'error'); return; }
-  await api('/api/products/' + res.data.id, 'PUT', { brand_id: brandId });
-  showToast('상품을 등록했습니다', 'success');
-  await loadPageData('brands');
 }
 
 const couponDraft = {

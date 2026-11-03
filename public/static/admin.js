@@ -644,6 +644,25 @@ async function filterUsers(salonId) {
 // ============================================================
 // PRODUCTS PAGE
 // ============================================================
+function productBrandLabel(id) {
+  const brand = (adminState.brands || []).find((item) => item.id === id);
+  return brand ? brand.name : '-';
+}
+
+function productCategoryLabel(product) {
+  if (product.category_main && product.category_sub) return product.category_main + ' · ' + product.category_sub;
+  return product.category || '-';
+}
+
+function stockLabel(stock) {
+  if (stock == null || stock >= ProductCatalog.UNLIMITED_STOCK) return '제한없음';
+  return String(stock);
+}
+
+function escAttr(value) {
+  return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+
 function renderProducts() {
   return `
     <div style="display:flex;justify-content:space-between;margin-bottom:20px">
@@ -653,112 +672,405 @@ function renderProducts() {
     <div class="panel">
       <table class="data-table">
         <thead>
-          <tr><th>상품명</th><th>카테고리</th><th>정가</th><th>VIP 할인가</th><th>재고</th><th>관리</th></tr>
+          <tr><th>상품명</th><th>브랜드</th><th>카테고리</th><th>공급가</th><th>정가</th><th>판매가</th><th>재고</th><th>관리</th></tr>
         </thead>
         <tbody>
           ${adminState.products.map(p => `
           <tr>
             <td>
               <div style="display:flex;align-items:center;gap:10px">
-                <img src="${p.image_url || ''}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;background:#f3f4f6"
+                <img src="${escAttr(p.image_url || '')}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;background:#f3f4f6"
                      onerror="this.style.display='none'">
-                <span style="font-weight:600">${p.name}</span>
+                <span style="font-weight:600">${escAttr(p.name)}</span>
               </div>
             </td>
-            <td><span class="badge" style="background:#f3f4f6;color:#374151">${p.category}</span></td>
+            <td>${escAttr(productBrandLabel(p.brand_id))}</td>
+            <td><span class="badge" style="background:#f3f4f6;color:#374151">${escAttr(productCategoryLabel(p))}</span></td>
+            <td>${p.supply_price ? p.supply_price.toLocaleString() + '원' : '-'}</td>
             <td style="text-decoration:line-through;color:#9ca3af">${p.original_price.toLocaleString()}원</td>
-            <td style="font-weight:700;color:#e94560">${p.vip_discount_price.toLocaleString()}원</td>
-            <td>
-              <span style="color:${p.stock_quantity < 5 ? '#dc2626' : '#16a34a'};font-weight:600">${p.stock_quantity}</span>
-            </td>
+            <td style="font-weight:600;color:#e94560">${p.vip_discount_price.toLocaleString()}원</td>
+            <td><span style="color:${p.stock_quantity < 5 ? '#dc2626' : '#16a34a'};font-weight:600">${stockLabel(p.stock_quantity)}</span></td>
             <td>
               <div style="display:flex;gap:6px">
                 <button class="btn btn-sm btn-outline" onclick="openEditProductModal(${p.id})"><i class="fas fa-edit"></i></button>
                 <button class="btn btn-sm btn-danger" onclick="deleteProduct(${p.id})"><i class="fas fa-trash"></i></button>
               </div>
             </td>
-          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:24px">상품 없음</td></tr>'}
+          </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">상품 없음</td></tr>'}
         </tbody>
       </table>
     </div>
   `;
 }
 
-async function openAddProductModal() {
-  showModal(`
-    <h3 style="font-size:18px;font-weight:800;margin-bottom:20px">상품/서비스 추가</h3>
-    <div class="form-group"><label class="form-label">상품명 *</label><input class="form-input" id="m-p-name" placeholder="케라틴 트리트먼트"></div>
-    <div class="form-group">
-      <label class="form-label">카테고리 *</label>
-      <select class="form-select" id="m-p-cat">
-        ${['샴푸','컨디셔너','트리트먼트','오일&세럼','스타일링'].map(c => `<option>${c}</option>`).join('')}
-      </select>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-group"><label class="form-label">정가 *</label><input class="form-input" id="m-p-price" type="number" placeholder="100000"></div>
-      <div class="form-group"><label class="form-label">VIP가 *</label><input class="form-input" id="m-p-vip" type="number" placeholder="70000"></div>
-    </div>
-    <div class="form-group"><label class="form-label">재고</label><input class="form-input" id="m-p-stock" type="number" value="50"></div>
-    <div class="form-group"><label class="form-label">이미지 URL</label><input class="form-input" id="m-p-img" placeholder="https://..."></div>
-    <div class="form-group"><label class="form-label">설명</label><textarea class="form-input" id="m-p-desc" rows="2"></textarea></div>
-    <div style="display:flex;gap:10px;margin-top:24px">
-      <button class="btn btn-outline" style="flex:1" onclick="closeModal()">취소</button>
-      <button class="btn btn-accent" style="flex:1" onclick="submitAddProduct()"><i class="fas fa-plus"></i> 추가</button>
-    </div>
-  `);
+let productDraft = null;
+
+function emptyProductOption() {
+  return { id: 'opt-' + Math.random().toString(36).slice(2, 8), name: '', supplyPrice: '', additional: '0', stock: '', soldOut: false, restock: '', supplyTouched: false };
 }
 
-async function submitAddProduct() {
-  const body = {
-    name: document.getElementById('m-p-name').value,
-    category: document.getElementById('m-p-cat').value,
-    original_price: parseFloat(document.getElementById('m-p-price').value),
-    vip_discount_price: parseFloat(document.getElementById('m-p-vip').value),
-    stock_quantity: parseInt(document.getElementById('m-p-stock').value) || 50,
-    image_url: document.getElementById('m-p-img').value,
-    description: document.getElementById('m-p-desc').value
+function blankProductDraft(brandId) {
+  return {
+    id: null, name: '', brandId: brandId || '', categoryMain: '', categorySub: '',
+    supplyPrice: '', normalPrice: '', discountRate: '', discountAmount: '', discountSource: 'NONE',
+    stock: '', minOrder: '1', purchaseUnit: '1', maxPurchase: '', earnRate: '0', pointUseDisabled: false,
+    salePeriod: 'ALL', saleStart: '', saleEnd: '', imageUrl: '', description: '',
+    options: [emptyProductOption()],
   };
-  if (!body.name || !body.original_price || !body.vip_discount_price) { showToast('필수 항목을 입력하세요', 'error'); return; }
-  const res = await api('/api/products', 'POST', body);
-  if (res.success) { closeModal(); showToast('상품이 추가되었습니다', 'success'); await loadPageData('products'); }
 }
 
-async function openEditProductModal(id) {
-  const p = adminState.products.find(x => x.id === id);
-  if (!p) return;
-  showModal(`
-    <h3 style="font-size:18px;font-weight:800;margin-bottom:20px">상품 편집</h3>
-    <div class="form-group"><label class="form-label">상품명</label><input class="form-input" id="m-p-name" value="${p.name}"></div>
-    <div class="form-group">
-      <label class="form-label">카테고리</label>
-      <select class="form-select" id="m-p-cat">
-        ${['샴푸','컨디셔너','트리트먼트','오일&세럼','스타일링'].map(c => `<option ${c===p.category?'selected':''}>${c}</option>`).join('')}
-      </select>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div class="form-group"><label class="form-label">정가</label><input class="form-input" id="m-p-price" type="number" value="${p.original_price}"></div>
-      <div class="form-group"><label class="form-label">VIP가</label><input class="form-input" id="m-p-vip" type="number" value="${p.vip_discount_price}"></div>
-    </div>
-    <div class="form-group"><label class="form-label">재고</label><input class="form-input" id="m-p-stock" type="number" value="${p.stock_quantity}"></div>
-    <div style="display:flex;gap:10px;margin-top:24px">
-      <button class="btn btn-outline" style="flex:1" onclick="closeModal()">취소</button>
-      <button class="btn btn-primary" style="flex:1" onclick="submitEditProduct(${id})"><i class="fas fa-save"></i> 저장</button>
-    </div>
-  `);
-}
-
-async function submitEditProduct(id) {
-  const p = adminState.products.find(x => x.id === id);
-  const body = {
-    name: document.getElementById('m-p-name').value,
-    category: document.getElementById('m-p-cat').value,
-    original_price: parseFloat(document.getElementById('m-p-price').value),
-    vip_discount_price: parseFloat(document.getElementById('m-p-vip').value),
-    stock_quantity: parseInt(document.getElementById('m-p-stock').value),
-    image_url: p?.image_url, description: p?.description, is_active: 1
+function draftFromProduct(product) {
+  const located = ProductCatalog.locateCategory(product);
+  const discount = product.discount_type
+    ? { type: product.discount_type, value: product.discount_value || 0 }
+    : ProductCatalog.inferDiscount(product.original_price, product.vip_discount_price);
+  const options = (product.options || []).map((option) => ({
+    id: option.id,
+    name: option.name || '',
+    supplyPrice: option.supply_price ? String(option.supply_price) : '',
+    additional: String(option.additional_selling_price || 0),
+    stock: option.stock >= ProductCatalog.UNLIMITED_STOCK ? '' : String(option.stock ?? ''),
+    soldOut: !!option.sold_out,
+    restock: option.expected_restock_at || '',
+    supplyTouched: true,
+  }));
+  return {
+    id: product.id,
+    name: product.name || '',
+    brandId: product.brand_id || '',
+    categoryMain: product.category_main || located.main,
+    categorySub: product.category_sub || located.sub,
+    supplyPrice: product.supply_price ? String(product.supply_price) : '',
+    normalPrice: String(product.original_price || ''),
+    discountRate: discount.type === 'RATE' ? String(discount.value) : '',
+    discountAmount: discount.type === 'AMOUNT' ? String(discount.value) : '',
+    discountSource: discount.type || 'NONE',
+    stock: product.stock_quantity >= ProductCatalog.UNLIMITED_STOCK ? '' : String(product.stock_quantity ?? ''),
+    minOrder: String(product.min_order_quantity || 1),
+    purchaseUnit: String(product.purchase_unit || 1),
+    maxPurchase: product.max_purchase_quantity ? String(product.max_purchase_quantity) : '',
+    earnRate: String(product.earn_points_rate || 0),
+    pointUseDisabled: !!product.point_use_disabled,
+    salePeriod: product.sale_start_at || product.sale_end_at ? 'CUSTOM' : 'ALL',
+    saleStart: product.sale_start_at || '',
+    saleEnd: product.sale_end_at || '',
+    imageUrl: product.image_url || '',
+    description: product.description || '',
+    options: options.length ? options : [emptyProductOption()],
   };
-  await api(`/api/products/${id}`, 'PUT', body);
-  closeModal(); showToast('저장되었습니다', 'success'); await loadPageData('products');
+}
+
+function readProductDraft() {
+  if (!productDraft) return;
+  const read = (id) => { const el = document.getElementById(id); return el ? el.value : null; };
+  if (read('pf-name') == null) return;
+  productDraft.name = read('pf-name');
+  productDraft.brandId = read('pf-brand');
+  productDraft.supplyPrice = read('pf-supply');
+  productDraft.normalPrice = read('pf-normal');
+  productDraft.discountRate = read('pf-discount-rate');
+  productDraft.discountAmount = read('pf-discount-amount');
+  productDraft.stock = read('pf-stock');
+  productDraft.minOrder = read('pf-min');
+  productDraft.purchaseUnit = read('pf-unit');
+  productDraft.maxPurchase = read('pf-max');
+  productDraft.earnRate = read('pf-earn');
+  productDraft.pointUseDisabled = !!document.getElementById('pf-point-block').checked;
+  productDraft.salePeriod = read('pf-sale-period');
+  productDraft.saleStart = read('pf-sale-start');
+  productDraft.saleEnd = read('pf-sale-end');
+  productDraft.imageUrl = read('pf-image');
+  productDraft.description = read('pf-desc');
+  productDraft.options.forEach((option, index) => {
+    const name = read('pf-opt-name-' + index);
+    if (name == null) return;
+    option.name = name;
+    option.supplyPrice = read('pf-opt-supply-' + index);
+    option.additional = read('pf-opt-add-' + index);
+    option.stock = read('pf-opt-stock-' + index);
+    option.restock = read('pf-opt-restock-' + index) || '';
+  });
+  const rate = Number(productDraft.discountRate) || 0;
+  const amount = Number(productDraft.discountAmount) || 0;
+  if (rate > 0 && !(amount > 0)) productDraft.discountSource = 'RATE';
+  else if (amount > 0 && !(rate > 0)) productDraft.discountSource = 'AMOUNT';
+  else if (!(rate > 0) && !(amount > 0)) productDraft.discountSource = 'NONE';
+}
+
+function currentSellingPrice() {
+  return ProductCatalog.computeSellingPrice(
+    productDraft.normalPrice,
+    productDraft.discountSource,
+    productDraft.discountRate,
+    productDraft.discountAmount
+  );
+}
+
+function productFormHtml() {
+  const tree = ProductCatalog.CATEGORY_TREE;
+  const mains = Object.keys(tree);
+  const subs = productDraft.categoryMain ? (tree[productDraft.categoryMain] || []) : [];
+  const selling = currentSellingPrice();
+  const supply = Number(productDraft.supplyPrice) || 0;
+  const margin = selling - supply;
+  const marginRate = selling > 0 ? Math.round(((selling - supply) / selling) * 1000) / 10 : null;
+  const selectedLabel = productDraft.categoryMain && productDraft.categorySub
+    ? productDraft.categoryMain + ' · ' + productDraft.categorySub
+    : productDraft.categoryMain ? productDraft.categoryMain + ' · 2차 선택' : '카테고리를 선택하세요';
+  const brands = adminState.brands || [];
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h3 style="font-size:18px;font-weight:800">${productDraft.id ? '상품 수정' : '상품 등록'}</h3>
+      <span style="font-size:12px;color:#6b7280">할인율 또는 할인금액 중 하나만 입력하면 판매가가 계산됩니다.</span>
+    </div>
+    <div class="product-form-grid">
+      <div>
+        <div class="form-group"><label class="form-label">상품명 *</label><input class="form-input" id="pf-name" value="${escAttr(productDraft.name)}" placeholder="상품명"></div>
+        <div class="form-group">
+          <label class="form-label">브랜드 *</label>
+          <select class="form-select" id="pf-brand">
+            <option value="">브랜드 선택</option>
+            ${brands.map((brand) => `<option value="${brand.id}" ${String(brand.id) === String(productDraft.brandId) ? 'selected' : ''}>${escAttr(brand.name)}</option>`).join('')}
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div class="form-group">
+            <label class="form-label">판매기간</label>
+            <select class="form-select" id="pf-sale-period" onchange="toggleProductSalePeriod()">
+              <option value="ALL" ${productDraft.salePeriod === 'ALL' ? 'selected' : ''}>전체기간</option>
+              <option value="CUSTOM" ${productDraft.salePeriod === 'CUSTOM' ? 'selected' : ''}>기간지정</option>
+            </select>
+          </div>
+          <div class="form-group"><label class="form-label">판매시작일</label><input class="form-input" id="pf-sale-start" type="date" value="${escAttr(productDraft.saleStart)}" ${productDraft.salePeriod === 'ALL' ? 'disabled' : ''}></div>
+          <div class="form-group"><label class="form-label">판매종료일</label><input class="form-input" id="pf-sale-end" type="date" value="${escAttr(productDraft.saleEnd)}" ${productDraft.salePeriod === 'ALL' ? 'disabled' : ''}></div>
+        </div>
+      </div>
+      <div>
+        <label class="form-label">카테고리 *</label>
+        <div class="category-picker">
+          <div class="category-picker-head ${productDraft.categoryMain && productDraft.categorySub ? 'ready' : ''}">${escAttr(selectedLabel)}</div>
+          <div class="category-cols">
+            <div class="category-col">
+              <div class="category-col-title">1차</div>
+              ${mains.map((main) => `<button type="button" class="category-item ${main === productDraft.categoryMain ? 'active' : ''}" onclick="pickProductCategory('${escAttr(main)}','')">${escAttr(main)}</button>`).join('')}
+            </div>
+            <div class="category-col">
+              <div class="category-col-title">2차</div>
+              ${productDraft.categoryMain ? subs.map((sub) => `<button type="button" class="category-item ${sub === productDraft.categorySub ? 'active' : ''}" onclick="pickProductCategory(null,'${escAttr(sub)}')">${escAttr(sub)}</button>`).join('') : '<div class="category-empty">왼쪽에서 1차를 선택하세요</div>'}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="form-section">
+      <h4>가격 · 재고</h4>
+      <div class="price-grid">
+        <div class="form-group"><label class="form-label">공급가 *</label><input class="form-input price-input" id="pf-supply" type="number" min="0" value="${escAttr(productDraft.supplyPrice)}" oninput="refreshProductPrices()"></div>
+        <div class="form-group"><label class="form-label">정가 *</label><input class="form-input price-input" id="pf-normal" type="number" min="0" value="${escAttr(productDraft.normalPrice)}" oninput="refreshProductPrices()"></div>
+        <div class="form-group"><label class="form-label">할인율 %</label><input class="form-input price-input" id="pf-discount-rate" type="number" min="0" max="100" step="0.1" value="${escAttr(productDraft.discountRate)}" oninput="refreshProductPrices('rate')"></div>
+        <div class="form-group"><label class="form-label">할인금액</label><input class="form-input price-input" id="pf-discount-amount" type="number" min="0" value="${escAttr(productDraft.discountAmount)}" oninput="refreshProductPrices('amount')"></div>
+        <div class="form-group"><label class="form-label">판매가</label><div class="form-input price-input price-computed" id="pf-selling">${selling.toLocaleString()}원</div></div>
+        <div class="form-group"><label class="form-label">마진</label><div class="form-input price-input price-computed" id="pf-margin">${margin.toLocaleString()}원${marginRate != null ? ' (' + marginRate + '%)' : ''}</div></div>
+      </div>
+      <div class="price-grid" style="grid-template-columns:repeat(4,1fr)">
+        <div class="form-group"><label class="form-label">재고 수량</label><input class="form-input price-input" id="pf-stock" type="number" min="0" placeholder="제한없음" value="${escAttr(productDraft.stock)}"></div>
+        <div class="form-group"><label class="form-label">최소 발주 수량</label><input class="form-input price-input" id="pf-min" type="number" min="1" value="${escAttr(productDraft.minOrder)}"></div>
+        <div class="form-group"><label class="form-label">추가 단위</label><input class="form-input price-input" id="pf-unit" type="number" min="1" value="${escAttr(productDraft.purchaseUnit)}"></div>
+        <div class="form-group"><label class="form-label">최대 구매 수량</label><input class="form-input price-input" id="pf-max" type="number" min="1" placeholder="제한없음" value="${escAttr(productDraft.maxPurchase)}"></div>
+      </div>
+      <div style="display:grid;grid-template-columns:140px 1fr;gap:12px">
+        <div class="form-group"><label class="form-label">적립율 %</label><input class="form-input price-input" id="pf-earn" type="number" min="0" max="100" value="${escAttr(productDraft.earnRate)}"></div>
+        <div class="form-group">
+          <label class="form-label">포인트 사용 설정</label>
+          <label class="form-input" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="pf-point-block" ${productDraft.pointUseDisabled ? 'checked' : ''}>
+            포인트 사용 불가
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="form-section">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <h4 style="margin:0">옵션</h4>
+        <button class="btn btn-sm btn-outline" type="button" onclick="addProductOption()">옵션 추가</button>
+      </div>
+      <p class="hint">판매가 = 기본 판매가 + 추가판매금액. 공급가는 상품 공급가를 따르고, 옵션에서 직접 수정한 값만 따로 유지됩니다.</p>
+      <div class="option-head"><span>옵션명</span><span>공급가</span><span>추가판매금액</span><span>판매가</span><span>재고</span><span></span></div>
+      ${productDraft.options.map((option, index) => {
+        const optionSupply = option.supplyTouched ? option.supplyPrice : (productDraft.supplyPrice || option.supplyPrice || '');
+        const optionSelling = selling + (Number(option.additional) || 0);
+        return `
+          <div class="option-row ${option.soldOut ? 'soldout' : ''}">
+            <input class="form-input" id="pf-opt-name-${index}" value="${escAttr(option.name)}" placeholder="예: 500ml">
+            <input class="form-input price-input" id="pf-opt-supply-${index}" type="number" min="0" value="${escAttr(optionSupply)}" oninput="touchProductOptionSupply(${index})">
+            <input class="form-input price-input" id="pf-opt-add-${index}" type="number" min="0" value="${escAttr(option.additional)}" oninput="refreshProductPrices()">
+            <div class="form-input price-computed" id="pf-opt-selling-${index}">${Math.max(0, optionSelling).toLocaleString()}원</div>
+            <input class="form-input price-input" id="pf-opt-stock-${index}" type="number" min="0" placeholder="제한없음" value="${escAttr(option.stock)}">
+            <div style="display:flex;gap:4px">
+              <button class="btn btn-sm ${option.soldOut ? 'btn-danger' : 'btn-outline'}" type="button" onclick="toggleProductOptionSoldOut(${index})">${option.soldOut ? '해제' : '품절'}</button>
+              <button class="btn btn-sm btn-outline" type="button" onclick="removeProductOption(${index})"><i class="fas fa-trash"></i></button>
+            </div>
+            ${option.soldOut ? `<div class="option-restock"><span>재입고일</span><input class="form-input" id="pf-opt-restock-${index}" type="date" value="${escAttr(option.restock)}"></div>` : ''}
+          </div>`;
+      }).join('')}
+    </div>
+    <div class="form-section">
+      <h4>이미지 · 설명</h4>
+      <div class="form-group"><label class="form-label">이미지 URL</label><input class="form-input" id="pf-image" value="${escAttr(productDraft.imageUrl)}" placeholder="https://"></div>
+      <div class="form-group"><label class="form-label">설명</label><textarea class="form-input" id="pf-desc" rows="2">${escAttr(productDraft.description)}</textarea></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button class="btn btn-outline" style="flex:1" onclick="closeModal()">취소</button>
+      <button class="btn btn-accent" style="flex:1" onclick="submitProductForm()"><i class="fas fa-save"></i> 저장</button>
+    </div>
+  `;
+}
+
+function paintProductForm() {
+  const html = productFormHtml();
+  if (window.__adminModal) {
+    const box = window.__adminModal.querySelector('.modal-box');
+    box.classList.add('modal-wide');
+    box.innerHTML = html;
+    return;
+  }
+  showModal(html, true);
+}
+
+function openAddProductModal(brandId) {
+  productDraft = blankProductDraft(brandId || '');
+  paintProductForm();
+}
+
+function openEditProductModal(id) {
+  const product = adminState.products.find((item) => item.id === id);
+  if (!product) return;
+  productDraft = draftFromProduct(product);
+  paintProductForm();
+}
+
+function pickProductCategory(main, sub) {
+  readProductDraft();
+  if (main) {
+    productDraft.categoryMain = main;
+    productDraft.categorySub = '';
+  }
+  if (sub) productDraft.categorySub = sub;
+  paintProductForm();
+}
+
+function toggleProductSalePeriod() {
+  const custom = document.getElementById('pf-sale-period').value === 'CUSTOM';
+  ['pf-sale-start', 'pf-sale-end'].forEach((id) => {
+    const el = document.getElementById(id);
+    el.disabled = !custom;
+    if (!custom) el.value = '';
+  });
+}
+
+function refreshProductPrices(source) {
+  readProductDraft();
+  if (source === 'rate') {
+    productDraft.discountAmount = '';
+    productDraft.discountSource = Number(productDraft.discountRate) > 0 ? 'RATE' : 'NONE';
+    const amount = document.getElementById('pf-discount-amount');
+    if (amount) amount.value = '';
+  } else if (source === 'amount') {
+    productDraft.discountRate = '';
+    productDraft.discountSource = Number(productDraft.discountAmount) > 0 ? 'AMOUNT' : 'NONE';
+    const rate = document.getElementById('pf-discount-rate');
+    if (rate) rate.value = '';
+  } else if (!Number(productDraft.discountRate) && !Number(productDraft.discountAmount)) {
+    productDraft.discountSource = 'NONE';
+  }
+  const selling = currentSellingPrice();
+  const supply = Number(productDraft.supplyPrice) || 0;
+  const margin = selling - supply;
+  const marginRate = selling > 0 ? Math.round(((selling - supply) / selling) * 1000) / 10 : null;
+  const sellingEl = document.getElementById('pf-selling');
+  const marginEl = document.getElementById('pf-margin');
+  if (sellingEl) sellingEl.textContent = selling.toLocaleString() + '원';
+  if (marginEl) marginEl.textContent = margin.toLocaleString() + '원' + (marginRate != null ? ' (' + marginRate + '%)' : '');
+  productDraft.options.forEach((option, index) => {
+    const cell = document.getElementById('pf-opt-selling-' + index);
+    if (cell) cell.textContent = Math.max(0, selling + (Number(option.additional) || 0)).toLocaleString() + '원';
+    if (!option.supplyTouched && source == null) {
+      const supplyInput = document.getElementById('pf-opt-supply-' + index);
+      if (supplyInput) supplyInput.value = productDraft.supplyPrice || '';
+    }
+  });
+}
+
+function touchProductOptionSupply(index) {
+  productDraft.options[index].supplyTouched = true;
+  readProductDraft();
+}
+
+function addProductOption() {
+  readProductDraft();
+  productDraft.options.push(emptyProductOption());
+  paintProductForm();
+}
+
+function removeProductOption(index) {
+  readProductDraft();
+  productDraft.options.splice(index, 1);
+  if (!productDraft.options.length) productDraft.options.push(emptyProductOption());
+  paintProductForm();
+}
+
+function toggleProductOptionSoldOut(index) {
+  readProductDraft();
+  const option = productDraft.options[index];
+  option.soldOut = !option.soldOut;
+  if (!option.soldOut) option.restock = '';
+  paintProductForm();
+}
+
+async function submitProductForm() {
+  readProductDraft();
+  const selling = currentSellingPrice();
+  const discountValue = productDraft.discountSource === 'RATE'
+    ? Number(productDraft.discountRate) || 0
+    : productDraft.discountSource === 'AMOUNT' ? Number(productDraft.discountAmount) || 0 : 0;
+  const body = {
+    name: productDraft.name,
+    brand_id: productDraft.brandId,
+    category_main: productDraft.categoryMain,
+    category_sub: productDraft.categorySub,
+    supply_price: productDraft.supplyPrice,
+    original_price: productDraft.normalPrice,
+    discount_type: productDraft.discountSource,
+    discount_value: discountValue,
+    vip_discount_price: selling,
+    stock_quantity: productDraft.stock,
+    min_order_quantity: productDraft.minOrder,
+    purchase_unit: productDraft.purchaseUnit,
+    max_purchase_quantity: productDraft.maxPurchase,
+    earn_points_rate: productDraft.earnRate,
+    point_use_disabled: productDraft.pointUseDisabled,
+    sale_period: productDraft.salePeriod,
+    sale_start_at: productDraft.saleStart,
+    sale_end_at: productDraft.saleEnd,
+    image_url: productDraft.imageUrl,
+    description: productDraft.description,
+    options: productDraft.options.filter((option) => String(option.name || '').trim()).map((option) => ({
+      id: option.id,
+      name: option.name,
+      supply_price: option.supplyTouched ? option.supplyPrice : (productDraft.supplyPrice || option.supplyPrice),
+      additional_selling_price: option.additional,
+      stock: option.stock,
+      sold_out: option.soldOut,
+      expected_restock_at: option.restock,
+    })),
+  };
+  const res = productDraft.id
+    ? await api('/api/products/' + productDraft.id, 'PUT', body)
+    : await api('/api/products', 'POST', body);
+  if (!res.success) { showToast(res.error || '저장하지 못했습니다', 'error'); return; }
+  closeModal();
+  showToast(productDraft.id ? '저장되었습니다' : '상품이 추가되었습니다', 'success');
+  await loadPageData(adminState.page);
 }
 
 async function deleteProduct(id) {
@@ -928,10 +1240,10 @@ function renderRevenue() {
 // ============================================================
 // MODAL HELPERS
 // ============================================================
-function showModal(content) {
+function showModal(content, wide) {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
-  overlay.innerHTML = `<div class="modal-box">${content}</div>`;
+  overlay.innerHTML = `<div class="modal-box${wide ? ' modal-wide' : ''}">${content}</div>`;
   overlay.onclick = (e) => { if (e.target === overlay) closeModal(); };
   document.body.appendChild(overlay);
   window.__adminModal = overlay;
@@ -973,7 +1285,10 @@ async function loadPageData(page) {
       ]);
       break;
     case 'products':
-      await api('/api/products').then(r => { if (r.success) adminState.products = r.data; });
+      await Promise.all([
+        api('/api/products').then(r => { if (r.success) adminState.products = r.data; }),
+        api('/api/brands').then(r => { if (r.success) adminState.brands = r.data; }),
+      ]);
       break;
     case 'orders':
       await Promise.all([
