@@ -833,7 +833,10 @@ function serveFile(res, filePath, transform) {
   }
   let body = fs.readFileSync(filePath);
   if (transform) body = Buffer.from(transform(body.toString('utf8')), 'utf8');
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
+  res.writeHead(200, {
+    'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream',
+    'Cache-Control': 'no-store',
+  });
   res.end(body);
 }
 
