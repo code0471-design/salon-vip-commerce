@@ -28,6 +28,9 @@ function ensureExtras(data, seed) {
   data.coupons = data.coupons || seed.coupons || [];
   data.point_grants = data.point_grants || seed.point_grants || [];
   data.banners = data.banners || seed.banners || [];
+  data.banners.forEach((banner) => {
+    if (banner.banner_type === 'MAIN' && !banner.image_url) banner.image_url = 'static/banner-sample.png';
+  });
   data.settlement_overrides = data.settlement_overrides || [];
   data.point_blocked_ids = data.point_blocked_ids || [];
   data.coupons.forEach((coupon) => {

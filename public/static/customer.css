@@ -882,45 +882,43 @@ body {
 /* ═══════════════════════════════════════════
    HOME — 카테고리 아이콘 그리드
 ═══════════════════════════════════════════ */
+.home-banner {
+  margin: 12px 16px 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #111;
+}
+.home-banner img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
 .home-category-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 0;
-  padding: 16px 14px 12px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding: 12px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
   background: var(--white);
   border-bottom: 1px solid var(--border);
   margin-bottom: 4px;
 }
+.home-category-grid::-webkit-scrollbar { display: none; }
 
 .home-cat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 7px;
+  flex: 0 0 auto;
+  border: 0;
+  background: none;
   cursor: pointer;
-  padding: 4px 2px;
-  border-radius: 12px;
-  transition: background 0.15s;
-  -webkit-tap-highlight-color: transparent;
-}
-.home-cat-item:active { background: var(--light); }
-
-.home-cat-icon {
-  width: 48px; height: 48px;
-  border-radius: 16px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 18px;
-  transition: transform 0.15s;
-}
-.home-cat-item:active .home-cat-icon { transform: scale(0.92); }
-
-.home-cat-label {
-  font-size: 10px;
+  padding: 6px 2px;
+  font-family: var(--font);
+  font-size: 13px;
   font-weight: 700;
   color: var(--text);
-  text-align: center;
-  line-height: 1.2;
-  word-break: keep-all;
+  white-space: nowrap;
+  line-height: 1;
 }
 
 /* ═══════════════════════════════════════════

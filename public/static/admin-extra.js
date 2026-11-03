@@ -104,9 +104,12 @@ function renderBrandDetail(brand) {
         <span style="font-size:13px;color:#6b7280">브랜드 수수료 ${(brand.commission_rate * 100).toFixed(0)}%</span>
       </div>
       <div class="panel-body">
-        <div style="display:flex;gap:8px;margin-bottom:14px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:14px">
           <input class="form-input" id="brand-rate-${brand.id}" type="number" value="${Math.round(brand.commission_rate * 100)}" style="max-width:120px" min="0" max="100">
           <button class="btn btn-outline" onclick="saveBrandRate(${brand.id})">수수료 저장</button>
+          <button class="btn btn-primary" onclick="openAddProductModal(${brand.id})">상품 등록</button>
+          <button class="btn btn-outline" onclick="openBrandSalonBlock(${brand.id})">판매 제한 매장</button>
+          <span id="brand-block-count-${brand.id}" style="font-size:12px;color:#6b7280">판매 제한 ${(brand.blocked_salon_ids || []).length}곳</span>
         </div>
         <table class="data-table">
           <thead><tr><th>상품</th><th>카테고리</th><th>공급가</th><th>정가</th><th>판매가</th><th>재고</th></tr></thead>
@@ -122,11 +125,6 @@ function renderBrandDetail(brand) {
               </tr>`).join('') || '<tr><td colspan="6" style="color:#9ca3af">등록된 상품이 없습니다</td></tr>'}
           </tbody>
         </table>
-        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
-          <button class="btn btn-primary" onclick="openAddProductModal(${brand.id})">상품 등록</button>
-          <button class="btn btn-outline" onclick="openBrandSalonBlock(${brand.id})">판매 제한 매장</button>
-          <span id="brand-block-count-${brand.id}" style="font-size:12px;color:#6b7280">판매 제한 ${(brand.blocked_salon_ids || []).length}곳</span>
-        </div>
       </div>
     </div>`;
 }

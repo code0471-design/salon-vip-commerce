@@ -11,6 +11,7 @@ let state = {
   allProducts: [],
   brands: [],
   bestProducts: [],
+  banners: [],
   categories: ['전체', '샴푸', '컨디셔너', '트리트먼트', '오일/세럼', '스프레이', '컬크림', '왁스/젤'],
   selectedCategory: '전체',
   cart: [],
@@ -153,26 +154,9 @@ function renderHome() {
 
   const u = state.user;
   const best = state.bestProducts.length > 0 ? state.bestProducts : state.products.slice(0, 6);
-
-  // 카테고리 아이콘 맵
-  const catIcons = {
-    '샴푸':      'fa-pump-soap',
-    '컨디셔너':  'fa-bottle-water',
-    '트리트먼트':'fa-star',
-    '오일/세럼': 'fa-droplet',
-    '스프레이':  'fa-spray-can',
-    '컬크림':    'fa-fill-drip',
-    '왁스/젤':   'fa-cube',
-  };
-  const catColors = {
-    '샴푸':      '#4f7cff',
-    '컨디셔너':  '#7c4fff',
-    '트리트먼트':'#ff6b6b',
-    '오일/세럼': '#f59e0b',
-    '스프레이':  '#06b6d4',
-    '컬크림':    '#f97316',
-    '왁스/젤':   '#10b981',
-  };
+  const categories = ['샴푸', '컨디셔너', '트리트먼트', '오일/세럼', '스프레이', '컬크림', '왁스/젤'];
+  const mainBanner = (state.banners || []).find((banner) => banner.banner_type === 'MAIN' && banner.status === 'ACTIVE' && banner.image_url);
+  const bannerUrl = (mainBanner && mainBanner.image_url) || 'static/banner-sample.png';
 
   return `
     <!-- ① 고객 인사 배너 (한 줄) -->
@@ -184,34 +168,13 @@ function renderHome() {
       <div class="greeting-vip-chip"><i class="fas fa-crown"></i> VIP</div>
     </div>
 
-    <!-- ② 등록된 살롱 카드 -->
-    ${u.current_salon_id ? `
-    <div class="my-salon-card">
-      <div style="display:flex;align-items:center;gap:12px">
-        <div style="flex:1;padding-left:8px">
-          <div class="salon-tag">등록된 살롱</div>
-          <div style="font-size:17px;font-weight:800;color:var(--text);margin:4px 0 2px">${u.salon_name}</div>
-          <div style="font-size:12px;color:var(--muted)">담당 · ${u.designer_name || '미배정'}</div>
-        </div>
-        <div class="salon-verified"><i class="fas fa-check"></i></div>
-      </div>
-    </div>` : `
-    <div style="margin:10px 16px;background:var(--white);border:1.5px dashed var(--border);border-radius:var(--card-r);padding:20px;text-align:center">
-      <i class="fas fa-store" style="font-size:36px;color:var(--accent);margin-bottom:10px;display:block;opacity:0.7"></i>
-      <p style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:4px">살롱 QR을 스캔해 등록하세요</p>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:14px">나만의 살롱 · 담당 디자이너 등록</p>
-      <button class="btn-gold" onclick="navigate('scan')"><i class="fas fa-qrcode"></i> QR 스캔하기</button>
-    </div>`}
+    <div class="home-banner">
+      <img src="${bannerUrl}" alt="${(mainBanner && mainBanner.title) || '메인 배너'}">
+    </div>
 
-    <!-- ③ 카테고리 메뉴 (살롱카드 바로 아래) -->
     <div class="home-category-grid">
-      ${Object.entries(catIcons).map(([name, icon]) => `
-        <div class="home-cat-item" onclick="goShopCategory('${name}')">
-          <div class="home-cat-icon" style="background:${catColors[name]}18;border:1.5px solid ${catColors[name]}30">
-            <i class="fas ${icon}" style="color:${catColors[name]}"></i>
-          </div>
-          <span class="home-cat-label">${name}</span>
-        </div>`).join('')}
+      ${categories.map((name) => `
+        <button class="home-cat-item" onclick="goShopCategory('${name}')">${name}</button>`).join('')}
     </div>
 
     <!-- ④ BEST 제품 -->
@@ -951,18 +914,20 @@ async function loadAppData() {
     const salonId = catalogSalonId();
     const salonQuery = salonId ? '?salon_id=' + salonId : '';
     const bestQuery = salonId ? '?best=1&salon_id=' + salonId : '?best=1';
-    const [salonsRes, allRes, productsRes, bestRes, brandsRes] = await Promise.all([
+    const [salonsRes, allRes, productsRes, bestRes, brandsRes, bannersRes] = await Promise.all([
       api('/api/salons'),
       api('/api/products'),
       api('/api/products' + salonQuery),
       api('/api/products' + bestQuery),
       api('/api/brands'),
+      api('/api/banners'),
     ]);
     if (salonsRes.success) state.salons = salonsRes.data;
     if (allRes.success) state.allProducts = allRes.data;
     if (productsRes.success) state.products = productsRes.data;
     if (bestRes.success) state.bestProducts = bestRes.data;
     if (brandsRes.success) state.brands = brandsRes.data;
+    if (bannersRes.success) state.banners = bannersRes.data;
     if (state.user) await loadUserOrders();
     if (ownerSalon()) await loadStoreLedger();
   } catch (e) {

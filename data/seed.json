@@ -653,8 +653,8 @@
     {
       "id": 1,
       "banner_type": "MAIN",
-      "title": "SUBLIMIC 가을 케어",
-      "image_url": "",
+      "title": "청담 살롱의 선택, 커리쉴",
+      "image_url": "static/banner-sample.png",
       "starts_at": "2026-08-01",
       "ends_at": "2026-11-30",
       "sort_order": 1,
