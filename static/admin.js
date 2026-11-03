@@ -284,6 +284,13 @@ function renderDashboard() {
 // ============================================================
 // SALONS PAGE
 // ============================================================
+function blockedBrandLabel(salonId) {
+  const names = (adminState.brands || [])
+    .filter((brand) => (brand.blocked_salon_ids || []).map(Number).includes(Number(salonId)))
+    .map((brand) => brand.name);
+  return names.length ? names.join(', ') : '없음';
+}
+
 function renderSalons() {
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
@@ -303,6 +310,7 @@ function renderSalons() {
             <th>연락처</th>
             <th>계좌</th>
             <th>디자이너</th>
+            <th>본사 제한</th>
             <th>관리</th>
           </tr>
         </thead>
@@ -317,6 +325,7 @@ function renderSalons() {
             <td>${s.owner_phone || ''}</td>
             <td>${s.bank_account || '-'}</td>
             <td>활동 ${s.active_designers || 0} · 전체 ${s.designer_count || 0}</td>
+            <td style="font-size:12px;color:#6b7280">${blockedBrandLabel(s.id)}</td>
             <td>
               <div style="display:flex;gap:6px">
                 <button class="btn btn-sm btn-outline" onclick="openQRModal(${s.id})"><i class="fas fa-qrcode"></i></button>
@@ -1313,7 +1322,10 @@ async function loadPageData(page) {
       ]);
       break;
     case 'salons':
-      await api('/api/salons').then(r => { if (r.success) adminState.salons = r.data; });
+      await Promise.all([
+        api('/api/salons').then(r => { if (r.success) adminState.salons = r.data; }),
+        api('/api/brands').then(r => { if (r.success) adminState.brands = r.data; }),
+      ]);
       break;
     case 'designers':
       await Promise.all([
@@ -1343,6 +1355,7 @@ async function loadPageData(page) {
       await Promise.all([
         api('/api/brands').then(r => { if (r.success) adminState.brands = r.data; }),
         api('/api/products').then(r => { if (r.success) adminState.products = r.data; }),
+        api('/api/salons').then(r => { if (r.success) adminState.salons = r.data; }),
       ]);
       break;
     case 'coupons':

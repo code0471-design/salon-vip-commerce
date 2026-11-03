@@ -82,8 +82,10 @@ function renderBrands() {
                 </tr>`).join('') || '<tr><td colspan="6" style="color:#9ca3af">등록된 상품이 없습니다</td></tr>'}
             </tbody>
           </table>
-          <div style="margin-top:12px">
+          <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
             <button class="btn btn-primary" onclick="openAddProductModal(${brand.id})">상품 등록</button>
+            <button class="btn btn-outline" onclick="openBrandSalonBlock(${brand.id})">판매 제한 매장</button>
+            <span id="brand-block-count-${brand.id}" style="font-size:12px;color:#6b7280">판매 제한 ${(brand.blocked_salon_ids || []).length}곳</span>
           </div>
         </div>
       </div>`).join('')}
@@ -107,6 +109,60 @@ async function submitBrand() {
     commission_rate: (parseFloat(document.getElementById('m-brand-rate').value) || 0) / 100,
   });
   if (res.success) { closeModal(); showToast('브랜드를 추가했습니다', 'success'); await loadPageData('brands'); }
+}
+
+function openBrandSalonBlock(brandId) {
+  adminState.brandBlockId = brandId;
+  adminState.brandBlockQuery = '';
+  showModal(renderBrandBlockModal());
+}
+
+function renderBrandBlockModal() {
+  const brand = (adminState.brands || []).find((item) => item.id === adminState.brandBlockId);
+  if (!brand) return '';
+  return `
+    <h3 style="font-size:18px;font-weight:700;margin-bottom:6px">${brand.name} 판매 제한</h3>
+    <p style="font-size:12px;color:#6b7280;margin-bottom:12px">기본은 모든 매장이 판매할 수 있습니다. 끄면 그 매장만 이 브랜드를 팔 수 없습니다.</p>
+    <input class="form-input" id="brand-block-query" placeholder="매장명, 원장명 검색" value="${adminState.brandBlockQuery || ''}" oninput="onBrandBlockQuery(this.value)" style="margin-bottom:12px">
+    <div id="brand-block-list" style="max-height:360px;overflow:auto">${brandBlockRows()}</div>
+    <button class="btn btn-outline" style="width:100%;margin-top:12px" onclick="closeModal()">닫기</button>`;
+}
+
+function brandBlockRows() {
+  const brand = (adminState.brands || []).find((item) => item.id === adminState.brandBlockId);
+  if (!brand) return '';
+  const blocked = new Set((brand.blocked_salon_ids || []).map(Number));
+  const query = (adminState.brandBlockQuery || '').trim();
+  const salons = (adminState.salons || []).filter((salon) => !query || salon.salon_name.includes(query) || (salon.owner_name || '').includes(query));
+  if (!salons.length) return '<p style="color:#9ca3af;font-size:13px;padding:12px 0">해당하는 매장이 없습니다.</p>';
+  return salons.map((salon) => {
+    const off = blocked.has(salon.id);
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f1f5f9">
+      <div>
+        <div style="font-weight:700">${salon.salon_name}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:2px">${salon.owner_name || ''} · ${off ? '판매 제한' : '판매 가능'}</div>
+      </div>
+      <button class="btn btn-sm ${off ? 'btn-outline' : 'btn-primary'}" onclick="toggleBrandSalon(${brand.id}, ${salon.id}, ${off ? 'false' : 'true'})">${off ? '제한 해제' : '판매 제한'}</button>
+    </div>`;
+  }).join('');
+}
+
+function onBrandBlockQuery(value) {
+  adminState.brandBlockQuery = value;
+  const list = document.getElementById('brand-block-list');
+  if (list) list.innerHTML = brandBlockRows();
+}
+
+async function toggleBrandSalon(brandId, salonId, blocked) {
+  const res = await api('/api/brands/' + brandId + '/blocked-salons', 'POST', { salon_id: salonId, blocked });
+  if (!res.success) { showToast(res.error || '저장하지 못했습니다', 'error'); return; }
+  const index = (adminState.brands || []).findIndex((item) => item.id === brandId);
+  if (index >= 0) adminState.brands[index] = res.data;
+  const list = document.getElementById('brand-block-list');
+  if (list) list.innerHTML = brandBlockRows();
+  const count = document.getElementById('brand-block-count-' + brandId);
+  if (count) count.textContent = '판매 제한 ' + ((res.data.blocked_salon_ids || []).length) + '곳';
+  showToast(blocked ? '이 매장의 판매를 제한했습니다' : '판매 제한을 해제했습니다', 'success');
 }
 
 async function saveBrandRate(id) {
