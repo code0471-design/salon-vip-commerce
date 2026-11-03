@@ -74,20 +74,6 @@ function filteredShippingOrders() {
   });
 }
 
-function lineAmount(item) {
-  return (item.price || 0) * (item.qty || 1);
-}
-
-function shareByPrice(items, total) {
-  const amount = Number(total) || 0;
-  const prices = items.map(lineAmount);
-  const sum = prices.reduce((acc, price) => acc + price, 0);
-  if (!amount || !sum) return items.map(() => 0);
-  const shares = prices.map((price) => Math.floor(amount * price / sum));
-  shares[shares.length - 1] += amount - shares.reduce((acc, value) => acc + value, 0);
-  return shares;
-}
-
 function orderSupply(order) {
   return orderItemList(order).reduce((sum, item) => {
     const product = orderProduct(item.product_id);
@@ -116,7 +102,6 @@ function setOrderFilter(key, value) {
 
 function renderShippingOrders() {
   const orders = filteredShippingOrders();
-  const view = adminState.orderView === 'item' ? 'item' : 'order';
   const paid = orders.filter((order) => order.payment_status === 'PAID');
   const summary = {
     sales: paid.reduce((sum, order) => sum + (order.total_amount || 0), 0),
@@ -132,18 +117,8 @@ function renderShippingOrders() {
   ];
   const ships = [['ALL', '전체'], ['READY', '배송준비'], ['SHIPPING', '배송중'], ['DELIVERED', '배송완료']];
   const brands = (adminState.brands || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-  const itemRows = orders.flatMap((order) => {
-    const items = orderItemList(order);
-    const points = shareByPrice(items, order.points_used || 0);
-    const coupons = shareByPrice(items, order.coupon_discount || 0);
-    return items.map((item, index) => ({ order, item, points: points[index] || 0, coupon: coupons[index] || 0 }));
-  }).filter((row) => {
-    const brandId = String(adminState.orderBrand || 'ALL');
-    if (brandId === 'ALL') return true;
-    const product = orderProduct(row.item.product_id);
-    return product && String(product.brand_id) === brandId;
-  });
   return `
+    <div class="order-page">
     <div class="page-kicker">주문/배송</div>
     <p class="page-sub">날짜와 브랜드로 주문을 보고, 쿠폰·포인트·공급가·배송비·매장 정산액을 확인합니다. 정산액은 결제 매출의 30%입니다.</p>
     <div class="filter-card">
@@ -178,7 +153,7 @@ function renderShippingOrders() {
       </div>
     </div>
     <div class="summary-grid" style="margin-bottom:14px">
-      <div class="summary-card sales" style="grid-column:1 / -1">
+      <div class="summary-card order-summary" style="grid-column:1 / -1">
         <div class="metric-row">
           <div class="metric-tile"><strong style="font-weight:400">${money(summary.sales)}</strong><span>결제금액</span></div>
           <div class="metric-tile"><strong style="font-weight:400">${money(summary.points)}</strong><span>포인트</span></div>
@@ -189,12 +164,7 @@ function renderShippingOrders() {
         </div>
       </div>
     </div>
-    <div style="display:flex;gap:8px;margin-bottom:12px">
-      <button class="period-chip ${view === 'order' ? 'on' : ''}" onclick="setOrderFilter('orderView', 'order')">주문건별</button>
-      <button class="period-chip ${view === 'item' ? 'on' : ''}" onclick="setOrderFilter('orderView', 'item')">브랜드·상품별</button>
-    </div>
     <div class="panel" style="overflow-x:auto">
-      ${view === 'order' ? `
       <table class="data-table">
         <thead>
           <tr><th>주문일</th><th>고객 / 매장</th><th>디자이너</th><th>브랜드</th><th>결제금액</th><th>포인트</th><th>쿠폰</th><th>공급가</th><th>배송비</th><th>정산액</th><th>배송</th><th></th></tr>
@@ -216,34 +186,8 @@ function renderShippingOrders() {
               <td>${SHIP_NEXT[order.shipping_status] ? `<button class="btn btn-sm btn-outline" onclick="advanceShipping(${order.id}, '${SHIP_NEXT[order.shipping_status]}')">${SHIP_LABEL[SHIP_NEXT[order.shipping_status]]}</button>` : ''}</td>
             </tr>`).join('') || '<tr><td colspan="12" style="text-align:center;color:#9ca3af;padding:24px">조건에 맞는 주문이 없습니다</td></tr>'}
         </tbody>
-      </table>` : `
-      <table class="data-table">
-        <thead>
-          <tr><th>주문일</th><th>매장</th><th>브랜드</th><th>상품</th><th>수량</th><th>결제금액</th><th>포인트</th><th>쿠폰</th><th>공급가</th><th>정산액</th><th>배송</th></tr>
-        </thead>
-        <tbody>
-          ${itemRows.map((row) => {
-            const product = orderProduct(row.item.product_id);
-            const brand = product ? (adminState.brands || []).find((item) => item.id === product.brand_id) : null;
-            const supply = ((product && product.supply_price) || 0) * (row.item.qty || 1);
-            const payout = row.order.payment_status === 'PAID' ? Math.round(lineAmount(row.item) * 0.3) : 0;
-            return `
-            <tr>
-              <td style="font-weight:400">#${row.order.id}<div style="color:#9ca3af;font-size:12px">${String(row.order.created_at || '').slice(0, 16)}</div></td>
-              <td>${row.order.salon_name || '-'}</td>
-              <td>${brand ? brand.name : '-'}</td>
-              <td>${row.item.name || '-'}</td>
-              <td>${row.item.qty || 1}개</td>
-              <td style="font-weight:400">${money(lineAmount(row.item))}</td>
-              <td style="font-weight:400">${money(row.points)}</td>
-              <td style="font-weight:400">${money(row.coupon)}</td>
-              <td style="font-weight:400">${money(supply)}</td>
-              <td style="font-weight:400">${money(payout)}</td>
-              <td><span class="badge badge-${(row.order.shipping_status || 'READY').toLowerCase()}">${SHIP_LABEL[row.order.shipping_status] || '배송준비'}</span></td>
-            </tr>`;
-          }).join('') || '<tr><td colspan="11" style="text-align:center;color:#9ca3af;padding:24px">조건에 맞는 상품이 없습니다</td></tr>'}
-        </tbody>
-      </table>`}
+      </table>
+    </div>
     </div>`;
 }
 
