@@ -19,6 +19,9 @@ function mergeById(current, incoming) {
 
 function ensureExtras(data, seed) {
   data.brands = mergeById(data.brands, seed.brands);
+  data.brands.forEach((brand) => {
+    if (!Array.isArray(brand.blocked_salon_ids)) brand.blocked_salon_ids = [];
+  });
   data.salons.forEach((salon) => {
     if (!Array.isArray(salon.hidden_brand_ids)) salon.hidden_brand_ids = [];
   });
@@ -96,10 +99,22 @@ function hiddenBrandIds(salon) {
   return new Set((salon && salon.hidden_brand_ids) || []);
 }
 
+function brandBlocksSalon(brand, salonId) {
+  return Array.isArray(brand && brand.blocked_salon_ids) && brand.blocked_salon_ids.map(Number).includes(Number(salonId));
+}
+
+function productSaleBlock(salon, product) {
+  if (!salon || !product) return '';
+  if (hiddenBrandIds(salon).has(product.brand_id)) return '이 매장에서 판매하지 않습니다';
+  const brand = db.brands.find((item) => item.id === product.brand_id);
+  if (brandBlocksSalon(brand, salon.id)) return '본사 판매 제한으로 이 매장에서 판매할 수 없습니다';
+  return '';
+}
+
 function visibleProducts(products, salonId) {
   if (!salonId) return products;
-  const hidden = hiddenBrandIds(findSalon(salonId));
-  return products.filter((product) => !hidden.has(product.brand_id));
+  const salon = findSalon(salonId);
+  return products.filter((product) => !productSaleBlock(salon, product));
 }
 
 function findSalon(id) {
@@ -550,6 +565,7 @@ const routes = [
       id: nextId(db.brands),
       name: body.name,
       commission_rate: Number(body.commission_rate ?? 0.1),
+      blocked_salon_ids: [],
       status: 'ACTIVE',
       created_at: nowStamp(),
     };
@@ -564,6 +580,22 @@ const routes = [
     if (body.name !== undefined) brand.name = body.name;
     if (body.commission_rate !== undefined) brand.commission_rate = Number(body.commission_rate);
     if (body.status !== undefined) brand.status = body.status;
+    save();
+    return { data: brand };
+  }],
+  ['POST', /^\/api\/brands\/(\d+)\/blocked-salons$/, (req, id) => {
+    const brand = db.brands.find((item) => item.id === Number(id));
+    if (!brand) return { status: 404, error: '브랜드를 찾을 수 없습니다' };
+    const body = req.body || {};
+    const salon = findSalon(body.salon_id);
+    if (!salon) return { status: 400, error: '살롱을 찾을 수 없습니다' };
+    brand.blocked_salon_ids = brand.blocked_salon_ids || [];
+    const salonId = salon.id;
+    if (body.blocked) {
+      if (!brand.blocked_salon_ids.includes(salonId)) brand.blocked_salon_ids.push(salonId);
+    } else {
+      brand.blocked_salon_ids = brand.blocked_salon_ids.filter((item) => item !== salonId);
+    }
     save();
     return { data: brand };
   }],
@@ -765,7 +797,8 @@ const routes = [
     for (const item of body.items || []) {
       const product = db.products.find((p) => p.id === Number(item.product_id) && p.is_active);
       if (!product) return { status: 400, error: '상품을 찾을 수 없습니다' };
-      if (hiddenBrandIds(salon).has(product.brand_id)) return { status: 400, error: `${product.name}은 이 매장에서 판매하지 않습니다` };
+      const block = productSaleBlock(salon, product);
+      if (block) return { status: 400, error: `${product.name}은 ${block}` };
       const qty = Number(item.qty || 1);
       if (product.stock_quantity < qty) return { status: 400, error: `${product.name} 재고가 부족합니다` };
       items.push({ product_id: product.id, name: product.name, qty, price: product.vip_discount_price });

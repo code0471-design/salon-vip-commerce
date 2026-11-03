@@ -1009,6 +1009,10 @@ async function loadStoreLedger() {
   if (settleRes.success) state.storeSettlement = settleRes.data;
 }
 
+function brandBlocksStore(brand, salonId) {
+  return (brand.blocked_salon_ids || []).map(Number).includes(Number(salonId));
+}
+
 function brandFeeLabel(brand) {
   const rate = Number(brand.commission_rate);
   if (!Number.isFinite(rate)) return '수수료 -';
@@ -1028,14 +1032,16 @@ function renderStoreBrands() {
       <p style="font-size:13px;color:var(--muted);margin-bottom:8px">${salon.salon_name} · 끄면 이 매장 고객에게 그 브랜드 상품이 안 보입니다.</p>
       ${brands.map((brand) => {
         const count = (state.allProducts || []).filter((product) => product.brand_id === brand.id).length;
-        const off = hidden.has(brand.id);
+        const blocked = brandBlocksStore(brand, salon.id);
+        const off = blocked || hidden.has(brand.id);
+        const status = blocked ? '본사 판매 제한' : (off ? '미노출' : '노출');
         return `
           <div class="brand-row">
             <div>
               <div style="font-weight:700">${brand.name}</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px">${brandFeeLabel(brand)} · 상품 ${count}개 · ${off ? '미노출' : '노출'}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">${brandFeeLabel(brand)} · 상품 ${count}개 · ${status}</div>
             </div>
-            <button class="switch ${off ? '' : 'on'}" onclick="toggleSalonBrand(${brand.id}, ${off ? 'false' : 'true'})" aria-label="${brand.name} ${off ? '노출' : '미노출'}"></button>
+            <button class="switch ${off ? '' : 'on'} ${blocked ? 'locked' : ''}" onclick="${blocked ? `showToast('본사에서 판매를 제한한 브랜드입니다','error')` : `toggleSalonBrand(${brand.id}, ${off ? 'false' : 'true'})`}" aria-label="${brand.name} ${status}"></button>
           </div>`;
       }).join('')}
     </div>`;
@@ -1074,7 +1080,8 @@ function renderStore() {
   if (state.storeView === 'brands') return renderStoreBrands();
   const hidden = new Set(salon.hidden_brand_ids || []);
   const brands = state.brands || [];
-  const hiddenCount = brands.filter((brand) => hidden.has(brand.id)).length;
+  const blockedCount = brands.filter((brand) => brandBlocksStore(brand, salon.id)).length;
+  const hiddenCount = brands.filter((brand) => hidden.has(brand.id) && !brandBlocksStore(brand, salon.id)).length;
   const period = (state.storeSettlement && state.storeSettlement.month) || currentPeriod();
   const rows = (state.storeSettlement && state.storeSettlement.rows) || [];
   const current = rows.find((row) => row.period === period) || { period, orders: 0, sales: 0, payout: 0, status: 'PENDING' };
@@ -1088,7 +1095,7 @@ function renderStore() {
       <button class="store-menu" onclick="openStoreBrands()">
         <span>
           <strong>브랜드 판매 노출</strong>
-          <small>노출 ${brands.length - hiddenCount}개 · 미노출 ${hiddenCount}개</small>
+          <small>노출 ${brands.length - hiddenCount - blockedCount}개 · 미노출 ${hiddenCount}개${blockedCount ? ' · 본사 제한 ' + blockedCount + '개' : ''}</small>
         </span>
         <i class="fas fa-chevron-right"></i>
       </button>
