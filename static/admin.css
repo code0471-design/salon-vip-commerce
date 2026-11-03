@@ -451,8 +451,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .form-split section + section { border-left: 1px solid #f1f5f9; }
 .inline-field { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
 .inline-field > label { width: 72px; flex: none; font-size: 12px; font-weight: 600; color: #64748b; }
+.order-page .page-kicker:before { background: #1e293b; }
+.order-page .period-chip.on { background: #1e293b; border-color: #1e293b; color: #fff; }
+.order-page .order-summary:before { display: none; }
+.order-page .order-summary .metric-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 @media (max-width: 980px) {
   .summary-grid, .form-split { grid-template-columns: 1fr; }
   .summary-card.sales .metric-row, .summary-card.payout .metric-row { grid-template-columns: 1fr 1fr; }
+  .order-page .order-summary .metric-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .form-split section + section { border-left: 0; border-top: 1px solid #f1f5f9; }
 }

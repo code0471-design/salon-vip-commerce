@@ -21,7 +21,6 @@ let adminState = {
   settlementQuery: '',
   settlementSelected: [],
   settlementDetail: '',
-  orderView: 'order',
   orderQuery: '',
   orderBrand: 'ALL',
   orderPeriod: 'ALL',
