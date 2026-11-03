@@ -137,6 +137,7 @@ function toggleSidebar() {
 
 async function navigateTo(page) {
   adminState.page = page;
+  adminState.selectedBrandId = null;
   adminState.sidebarOpen = false;
   if (location.hash !== '#' + page) history.replaceState(null, '', '#' + page);
   renderAdmin();

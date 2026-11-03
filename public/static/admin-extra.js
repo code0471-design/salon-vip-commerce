@@ -48,48 +48,87 @@ async function advanceShipping(id, status) {
 }
 
 function renderBrands() {
-  const brands = adminState.brands || [];
+  const brand = (adminState.brands || []).find((item) => item.id === adminState.selectedBrandId);
+  if (brand) return renderBrandDetail(brand);
+  const brands = (adminState.brands || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   return `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <div>
-        <h2 style="font-size:18px;font-weight:700">브랜드 (${brands.length})</h2>
-        <p style="font-size:12px;color:#6b7280;margin-top:4px">브랜드를 고르고 그 브랜드 상품을 등록합니다. 수수료는 브랜드 설정이고, 정산 지급 대상은 아닙니다.</p>
+        <h2 style="font-size:18px;font-weight:700">브랜드 목록 (${brands.length})</h2>
       </div>
       <button class="btn btn-accent" onclick="openAddBrand()"><i class="fas fa-plus"></i> 브랜드 추가</button>
     </div>
-    ${brands.map((brand) => `
-      <div class="panel">
-        <div class="panel-header">
-          <span class="panel-title">${brand.name}</span>
-          <span style="font-size:13px;color:#6b7280">브랜드 수수료 ${(brand.commission_rate * 100).toFixed(0)}%</span>
+    <div class="panel">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>브랜드</th>
+            <th>수수료</th>
+            <th>상품</th>
+            <th>판매 제한</th>
+            <th>관리</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${brands.map((item) => {
+            const count = (adminState.products || []).filter((product) => product.brand_id === item.id).length;
+            const blocked = (item.blocked_salon_ids || []).length;
+            return `
+            <tr>
+              <td style="font-weight:600">${item.name}</td>
+              <td>${Math.round(item.commission_rate * 100)}%</td>
+              <td>${count}개</td>
+              <td>${blocked ? blocked + '곳' : '없음'}</td>
+              <td><button class="btn btn-sm btn-primary" onclick="openBrandDetail(${item.id})">관리</button></td>
+            </tr>`;
+          }).join('') || '<tr><td colspan="5" style="color:#9ca3af">등록된 브랜드가 없습니다</td></tr>'}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function openBrandDetail(id) {
+  adminState.selectedBrandId = id;
+  renderAdmin();
+}
+
+function renderBrandDetail(brand) {
+  const products = (adminState.products || []).filter((product) => product.brand_id === brand.id);
+  return `
+    <div style="margin-bottom:16px">
+      <button class="btn btn-outline btn-sm" onclick="openBrandDetail(null)"><i class="fas fa-chevron-left"></i> 브랜드 목록</button>
+    </div>
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">${brand.name}</span>
+        <span style="font-size:13px;color:#6b7280">브랜드 수수료 ${(brand.commission_rate * 100).toFixed(0)}%</span>
+      </div>
+      <div class="panel-body">
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <input class="form-input" id="brand-rate-${brand.id}" type="number" value="${Math.round(brand.commission_rate * 100)}" style="max-width:120px" min="0" max="100">
+          <button class="btn btn-outline" onclick="saveBrandRate(${brand.id})">수수료 저장</button>
         </div>
-        <div class="panel-body">
-          <div style="display:flex;gap:8px;margin-bottom:14px">
-            <input class="form-input" id="brand-rate-${brand.id}" type="number" value="${Math.round(brand.commission_rate * 100)}" style="max-width:120px" min="0" max="100">
-            <button class="btn btn-outline" onclick="saveBrandRate(${brand.id})">수수료 저장</button>
-          </div>
-          <table class="data-table">
-            <thead><tr><th>상품</th><th>카테고리</th><th>공급가</th><th>정가</th><th>판매가</th><th>재고</th></tr></thead>
-            <tbody>
-              ${(adminState.products || []).filter((product) => product.brand_id === brand.id).map((product) => `
-                <tr>
-                  <td>${product.name}</td>
-                  <td>${productCategoryLabel(product)}</td>
-                  <td>${product.supply_price ? money(product.supply_price) : '-'}</td>
-                  <td>${money(product.original_price)}</td>
-                  <td>${money(product.vip_discount_price)}</td>
-                  <td>${stockLabel(product.stock_quantity)}</td>
-                </tr>`).join('') || '<tr><td colspan="6" style="color:#9ca3af">등록된 상품이 없습니다</td></tr>'}
-            </tbody>
-          </table>
-          <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
-            <button class="btn btn-primary" onclick="openAddProductModal(${brand.id})">상품 등록</button>
-            <button class="btn btn-outline" onclick="openBrandSalonBlock(${brand.id})">판매 제한 매장</button>
-            <span id="brand-block-count-${brand.id}" style="font-size:12px;color:#6b7280">판매 제한 ${(brand.blocked_salon_ids || []).length}곳</span>
-          </div>
+        <table class="data-table">
+          <thead><tr><th>상품</th><th>카테고리</th><th>공급가</th><th>정가</th><th>판매가</th><th>재고</th></tr></thead>
+          <tbody>
+            ${products.map((product) => `
+              <tr>
+                <td>${product.name}</td>
+                <td>${productCategoryLabel(product)}</td>
+                <td>${product.supply_price ? money(product.supply_price) : '-'}</td>
+                <td>${money(product.original_price)}</td>
+                <td>${money(product.vip_discount_price)}</td>
+                <td>${stockLabel(product.stock_quantity)}</td>
+              </tr>`).join('') || '<tr><td colspan="6" style="color:#9ca3af">등록된 상품이 없습니다</td></tr>'}
+          </tbody>
+        </table>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary" onclick="openAddProductModal(${brand.id})">상품 등록</button>
+          <button class="btn btn-outline" onclick="openBrandSalonBlock(${brand.id})">판매 제한 매장</button>
+          <span id="brand-block-count-${brand.id}" style="font-size:12px;color:#6b7280">판매 제한 ${(brand.blocked_salon_ids || []).length}곳</span>
         </div>
-      </div>`).join('')}
-  `;
+      </div>
+    </div>`;
 }
 
 function openAddBrand() {
