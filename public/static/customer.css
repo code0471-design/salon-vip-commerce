@@ -140,6 +140,16 @@ body {
   background: none; border: 0; padding: 0 0 12px; color: var(--muted);
   font-size: 13px; cursor: pointer; font-family: var(--font);
 }
+.staff-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 0 12px; }
+.staff-row::-webkit-scrollbar { display: none; }
+.staff-chip {
+  flex: 0 0 auto; border: 1px solid var(--border); background: white; border-radius: 14px;
+  padding: 8px 12px; text-align: left; cursor: pointer; font-family: var(--font); color: var(--text);
+}
+.staff-chip span { display: block; font-size: 12px; font-weight: 700; }
+.staff-chip small { display: block; margin-top: 2px; font-size: 11px; color: var(--muted); }
+.staff-chip.on { background: var(--primary); border-color: var(--primary); color: white; }
+.staff-chip.on small { color: rgba(255,255,255,0.7); }
 .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border); }
 .switch { width: 46px; height: 28px; border: 0; border-radius: 999px; background: #e5e7eb; position: relative; cursor: pointer; flex: 0 0 auto; }
 .switch.on { background: #111827; }
