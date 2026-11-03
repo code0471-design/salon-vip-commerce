@@ -8,6 +8,8 @@ let state = {
   user: null,
   salons: [],
   products: [],
+  allProducts: [],
+  brands: [],
   bestProducts: [],
   categories: ['전체', '샴푸', '컨디셔너', '트리트먼트', '오일/세럼', '스프레이', '컬크림', '왁스/젤'],
   selectedCategory: '전체',
@@ -87,12 +89,24 @@ function renderShell() {
   `;
 }
 
+function ownerSalon() {
+  if (!state.user || !state.user.is_owner) return null;
+  return state.salons.find((salon) => salon.id === state.user.owned_salon_id) || null;
+}
+
+function catalogSalonId() {
+  if (!state.user) return '';
+  return state.user.owned_salon_id || state.user.current_salon_id || '';
+}
+
 function renderBottomNav() {
   const tabs = [
-    { id: 'home',    icon: 'fa-home',    label: '홈' },
-    { id: 'scan',    icon: 'fa-qrcode',  label: 'QR 스캔' },
-    { id: 'shop',    icon: 'fa-store',   label: '쇼핑' },
-    { id: 'profile', icon: 'fa-user',    label: '내 정보' }
+    { id: 'home', icon: 'fa-home', label: '홈' },
+    ownerSalon()
+      ? { id: 'store', icon: 'fa-store', label: '내 매장' }
+      : { id: 'scan', icon: 'fa-qrcode', label: 'QR 스캔' },
+    { id: 'shop', icon: 'fa-shopping-bag', label: '쇼핑' },
+    { id: 'profile', icon: 'fa-user', label: '내 정보' }
   ];
   return `<nav class="bottom-nav">${tabs.map(t => `
     <button class="nav-item ${state.currentPage === t.id ? 'active' : ''}" onclick="navigate('${t.id}')">
@@ -111,6 +125,7 @@ function renderCartFAB() {
 function renderPage() {
   switch(state.currentPage) {
     case 'home':    return renderHome();
+    case 'store':   return renderStore();
     case 'scan':    return renderScan();
     case 'shop':    return renderShop();
     case 'orders':  return renderOrders();
@@ -292,6 +307,7 @@ function renderLogin() {
         </button>
         <div style="text-align:center;margin-top:14px">
           <button onclick="loginAsDemo()" class="demo-link">데모 계정으로 둘러보기</button>
+          <button onclick="loginAsOwner()" class="demo-link" style="margin-left:12px">원장으로 보기</button>
         </div>
       </div>
     </div>
@@ -310,6 +326,20 @@ async function handleLogin() {
     await loadAppData();
     render();
     showToast('환영합니다, ' + name + '님! 👋', 'success');
+  }
+}
+
+async function loginAsOwner() {
+  const res = await api('/api/users', 'POST', {
+    kakao_id: 'owner-salon-1',
+    name: '김지수',
+    phone: '010-1234-5678',
+  });
+  if (res.success) {
+    saveUser(res.data);
+    await loadAppData();
+    navigate('store');
+    showToast('프로헤어 강남점 원장으로 들어왔습니다', 'success');
   }
 }
 
@@ -441,7 +471,7 @@ async function confirmScan() {
       saveUser(res.data);
       state.selectedSalon = null;
       state.selectedDesigner = null;
-      await loadUserOrders();
+      await loadAppData();
       render();
       showToast(res.message, 'success');
     }
@@ -457,6 +487,7 @@ async function confirmSwitch() {
   if (res.success) {
     saveUser(res.data);
     state.switchInfo = null;
+    await loadAppData();
     state.selectedSalon = null;
     state.selectedDesigner = null;
     await loadUserOrders();
@@ -897,18 +928,60 @@ function attachListeners() { /* reserved for swipe gestures */ }
 // ============================================================
 async function loadAppData() {
   try {
-    const [salonsRes, productsRes, bestRes] = await Promise.all([
+    const salonId = catalogSalonId();
+    const salonQuery = salonId ? '?salon_id=' + salonId : '';
+    const bestQuery = salonId ? '?best=1&salon_id=' + salonId : '?best=1';
+    const [salonsRes, allRes, productsRes, bestRes, brandsRes] = await Promise.all([
       api('/api/salons'),
       api('/api/products'),
-      api('/api/products?best=1')
+      api('/api/products' + salonQuery),
+      api('/api/products' + bestQuery),
+      api('/api/brands'),
     ]);
     if (salonsRes.success) state.salons = salonsRes.data;
+    if (allRes.success) state.allProducts = allRes.data;
     if (productsRes.success) state.products = productsRes.data;
     if (bestRes.success) state.bestProducts = bestRes.data;
+    if (brandsRes.success) state.brands = brandsRes.data;
     if (state.user) await loadUserOrders();
   } catch (e) {
     console.error('Load error:', e);
   }
+}
+
+function renderStore() {
+  const salon = ownerSalon();
+  if (!salon) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
+  const hidden = new Set(salon.hidden_brand_ids || []);
+  const brands = (state.brands || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  return `
+    <div style="padding:20px 16px 28px">
+      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">내 매장</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">${salon.salon_name} · 기본은 모든 브랜드가 보입니다. 끄면 이 매장 고객에게 그 브랜드 상품이 안 보입니다.</p>
+      ${brands.map((brand) => {
+        const count = (state.allProducts || []).filter((product) => product.brand_id === brand.id).length;
+        const off = hidden.has(brand.id);
+        return `
+          <div class="brand-row">
+            <div>
+              <div style="font-weight:700">${brand.name}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">${off ? '미노출' : '노출'} · 상품 ${count}개</div>
+            </div>
+            <button class="switch ${off ? '' : 'on'}" onclick="toggleSalonBrand(${brand.id}, ${off ? 'false' : 'true'})" aria-label="${brand.name} ${off ? '노출' : '미노출'}"></button>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+async function toggleSalonBrand(brandId, hidden) {
+  const salon = ownerSalon();
+  if (!salon) return;
+  const res = await api('/api/salons/' + salon.id + '/hidden-brands', 'POST', { brand_id: brandId, hidden });
+  if (!res.success) { showToast(res.error || '저장하지 못했습니다', 'error'); return; }
+  const index = state.salons.findIndex((item) => item.id === salon.id);
+  if (index >= 0) state.salons[index] = res.data;
+  await loadAppData();
+  render();
 }
 
 async function loadUserOrders() {
