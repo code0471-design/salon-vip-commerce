@@ -290,6 +290,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   animation: scaleIn 0.25s ease;
   box-shadow: 0 20px 60px rgba(0,0,0,0.2);
 }
+.modal-box.modal-wide { width: 980px; padding: 22px 24px; }
+.product-form-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 16px; align-items: start; }
+.form-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid #eef0f3; }
+.form-section h4 { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+.hint { font-size: 12px; color: #9ca3af; margin: 6px 0 8px; }
+.price-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.price-input { text-align: center; }
+.price-computed { display: flex; align-items: center; justify-content: center; background: #f8fafc; font-weight: 600; color: #be123c; }
+.category-picker { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; height: 248px; display: flex; flex-direction: column; background: #fff; }
+.category-picker-head { padding: 8px 12px; font-size: 12px; font-weight: 600; background: #f8fafc; color: #64748b; border-bottom: 1px solid #eef0f3; }
+.category-picker-head.ready { background: #eef2ff; color: #3730a3; }
+.category-cols { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; flex: 1; }
+.category-col { overflow: auto; }
+.category-col + .category-col { border-left: 1px solid var(--border); }
+.category-col-title { position: sticky; top: 0; padding: 6px 12px; font-size: 11px; color: #64748b; background: #f8fafc; border-bottom: 1px solid #eef0f3; }
+.category-item { display: block; width: 100%; text-align: left; padding: 8px 12px; background: #fff; border: 0; cursor: pointer; font-size: 13px; color: #334155; }
+.category-item.active { background: #eef2ff; color: #3730a3; font-weight: 600; }
+.category-empty { padding: 12px; font-size: 13px; color: #94a3b8; }
+.option-head, .option-row { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr 0.8fr auto; gap: 8px; align-items: center; }
+.option-head { font-size: 12px; color: #64748b; font-weight: 600; margin-bottom: 6px; }
+.option-row { margin-bottom: 8px; }
+.option-row.soldout input { background: #fff1f2; }
+.option-restock { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #be123c; }
+.option-restock .form-input { max-width: 180px; }
 @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
 
 /* ---- Toast ---- */

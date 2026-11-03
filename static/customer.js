@@ -584,7 +584,7 @@ function openProductDetail(id) {
         <p style="font-size:13px;color:var(--muted);line-height:1.65;margin-bottom:14px;border-top:1px solid var(--border);padding-top:12px">${p.description || ''}</p>
         <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:16px">
           <span>무료배송</span>
-          <span>재고 ${p.stock_quantity}개</span>
+          <span>${p.stock_quantity >= 9999 ? '재고 있음' : '재고 ' + p.stock_quantity + '개'}</span>
         </div>
 
         ${qty > 0 ? `
