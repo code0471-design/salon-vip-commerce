@@ -741,6 +741,9 @@
     db.coupons = db.coupons || seed.coupons || [];
     db.point_grants = db.point_grants || seed.point_grants || [];
     db.banners = db.banners || seed.banners || [];
+    db.banners.forEach((banner) => {
+      if (banner.banner_type === 'MAIN' && !banner.image_url) banner.image_url = 'static/banner-sample.png';
+    });
     db.settlement_overrides = db.settlement_overrides || [];
     db.point_blocked_ids = db.point_blocked_ids || [];
     (db.coupons || []).forEach((coupon) => {
