@@ -17,6 +17,7 @@ let state = {
   orders: [],
   storeOrders: [],
   storeSettlement: null,
+  storeView: '',
   scanResult: null,
   switchInfo: null,
   selectedSalon: null,
@@ -57,6 +58,13 @@ function showToast(msg, type = '') {
 // ---- Navigation ----
 function navigate(page) {
   state.currentPage = page;
+  state.storeView = '';
+  render();
+  window.scrollTo(0, 0);
+}
+
+function openStoreBrands() {
+  state.storeView = 'brands';
   render();
   window.scrollTo(0, 0);
 }
@@ -919,6 +927,7 @@ function handleLogout() {
   state.orders = [];
   state.storeOrders = [];
   state.storeSettlement = null;
+  state.storeView = '';
   state.cart = [];
   sessionStorage.removeItem('salon_user');
   navigate('home');
@@ -993,11 +1002,45 @@ async function loadStoreLedger() {
   if (settleRes.success) state.storeSettlement = settleRes.data;
 }
 
-function renderStore() {
+function brandFeeLabel(brand) {
+  const rate = Number(brand.commission_rate);
+  if (!Number.isFinite(rate)) return '수수료 -';
+  const pct = Math.round(rate * 1000) / 10;
+  return '수수료 ' + (Number.isInteger(pct) ? pct : pct.toFixed(1)) + '%';
+}
+
+function renderStoreBrands() {
   const salon = ownerSalon();
   if (!salon) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
   const hidden = new Set(salon.hidden_brand_ids || []);
   const brands = (state.brands || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  return `
+    <div style="padding:20px 16px 28px">
+      <button class="store-back" onclick="navigate('store')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>내 매장</button>
+      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">브랜드 판매 노출</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:8px">${salon.salon_name} · 끄면 이 매장 고객에게 그 브랜드 상품이 안 보입니다.</p>
+      ${brands.map((brand) => {
+        const count = (state.allProducts || []).filter((product) => product.brand_id === brand.id).length;
+        const off = hidden.has(brand.id);
+        return `
+          <div class="brand-row">
+            <div>
+              <div style="font-weight:700">${brand.name}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">${brandFeeLabel(brand)} · 상품 ${count}개 · ${off ? '미노출' : '노출'}</div>
+            </div>
+            <button class="switch ${off ? '' : 'on'}" onclick="toggleSalonBrand(${brand.id}, ${off ? 'false' : 'true'})" aria-label="${brand.name} ${off ? '노출' : '미노출'}"></button>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function renderStore() {
+  const salon = ownerSalon();
+  if (!salon) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
+  if (state.storeView === 'brands') return renderStoreBrands();
+  const hidden = new Set(salon.hidden_brand_ids || []);
+  const brands = state.brands || [];
+  const hiddenCount = brands.filter((brand) => hidden.has(brand.id)).length;
   const period = (state.storeSettlement && state.storeSettlement.month) || currentPeriod();
   const rows = (state.storeSettlement && state.storeSettlement.rows) || [];
   const current = rows.find((row) => row.period === period) || { period, orders: 0, sales: 0, payout: 0, status: 'PENDING' };
@@ -1007,7 +1050,14 @@ function renderStore() {
   return `
     <div style="padding:20px 16px 28px">
       <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">내 매장</h2>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">${salon.salon_name}</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">${salon.salon_name}</p>
+      <button class="store-menu" onclick="openStoreBrands()">
+        <span>
+          <strong>브랜드 판매 노출</strong>
+          <small>노출 ${brands.length - hiddenCount}개 · 미노출 ${hiddenCount}개</small>
+        </span>
+        <i class="fas fa-chevron-right"></i>
+      </button>
       <div class="settle-card">
         <div class="settle-kicker">${monthLabel(current.period)} 정산 · ${statusLabel[current.status] || '정산예정'}</div>
         <div class="settle-amount">${won(current.payout)}</div>
@@ -1054,20 +1104,6 @@ function renderStore() {
                 </div>`;
             }).join('')}
           </div>`}
-      <div class="section-label">브랜드 노출</div>
-      <p style="font-size:12px;color:var(--muted);margin:-4px 0 8px">끄면 이 매장 고객에게 그 브랜드 상품이 안 보입니다.</p>
-      ${brands.map((brand) => {
-        const count = (state.allProducts || []).filter((product) => product.brand_id === brand.id).length;
-        const off = hidden.has(brand.id);
-        return `
-          <div class="brand-row">
-            <div>
-              <div style="font-weight:700">${brand.name}</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px">${off ? '미노출' : '노출'} · 상품 ${count}개</div>
-            </div>
-            <button class="switch ${off ? '' : 'on'}" onclick="toggleSalonBrand(${brand.id}, ${off ? 'false' : 'true'})" aria-label="${brand.name} ${off ? '노출' : '미노출'}"></button>
-          </div>`;
-      }).join('')}
     </div>`;
 }
 
