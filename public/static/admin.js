@@ -21,6 +21,13 @@ let adminState = {
   settlementQuery: '',
   settlementSelected: [],
   settlementDetail: '',
+  orderView: 'order',
+  orderQuery: '',
+  orderBrand: 'ALL',
+  orderPeriod: 'ALL',
+  orderStart: '',
+  orderEnd: '',
+  orderShip: 'ALL',
   pointsSection: 'grant',
   blockedProducts: [],
   loading: false,
@@ -1350,6 +1357,8 @@ async function loadPageData(page) {
       await Promise.all([
         api('/api/orders').then(r => { if (r.success) adminState.orders = r.data; }),
         api('/api/salons').then(r => { if (r.success) adminState.salons = r.data; }),
+        api('/api/brands').then(r => { if (r.success) adminState.brands = r.data; }),
+        api('/api/products').then(r => { if (r.success) adminState.products = r.data; }),
       ]);
       break;
     case 'brands':

@@ -10,32 +10,240 @@ function brandName(id) {
   return (adminState.brands || []).find((brand) => brand.id === id)?.name || '전체';
 }
 
+function orderItemList(order) {
+  let items = order.order_items;
+  if (typeof items === 'string') {
+    try { items = JSON.parse(items || '[]'); } catch (e) { items = []; }
+  }
+  return Array.isArray(items) ? items : [];
+}
+
+function orderProduct(id) {
+  return (adminState.products || []).find((product) => product.id === Number(id));
+}
+
+function orderBrandIds(order) {
+  return [...new Set(orderItemList(order).map((item) => {
+    const product = orderProduct(item.product_id);
+    return product ? product.brand_id : null;
+  }).filter((id) => id != null))];
+}
+
+function orderBrandText(order) {
+  const names = orderBrandIds(order).map((id) => (adminState.brands || []).find((brand) => brand.id === id)?.name).filter(Boolean);
+  return names.join(', ') || '-';
+}
+
+function isoDay(date) {
+  return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+}
+
+function orderInPeriod(order) {
+  const key = String(order.created_at || '').slice(0, 10);
+  const period = adminState.orderPeriod || 'ALL';
+  if (period === 'ALL') return true;
+  const today = new Date();
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (period === 'TODAY') return key === isoDay(start);
+  if (period === 'THIS_WEEK') {
+    const monday = new Date(start);
+    monday.setDate(start.getDate() - ((start.getDay() + 6) % 7));
+    return key >= isoDay(monday) && key <= isoDay(start);
+  }
+  if (period === 'THIS_MONTH') return key.slice(0, 7) === isoDay(start).slice(0, 7);
+  if (period === 'LAST_MONTH') {
+    const last = new Date(start.getFullYear(), start.getMonth() - 1, 1);
+    return key.slice(0, 7) === isoDay(last).slice(0, 7);
+  }
+  if (adminState.orderStart && key < adminState.orderStart) return false;
+  if (adminState.orderEnd && key > adminState.orderEnd) return false;
+  return true;
+}
+
+function filteredShippingOrders() {
+  const query = (adminState.orderQuery || '').trim().toLowerCase();
+  const brandId = String(adminState.orderBrand || 'ALL');
+  const ship = adminState.orderShip || 'ALL';
+  return (adminState.orders || []).filter((order) => {
+    if (!orderInPeriod(order)) return false;
+    if (ship !== 'ALL' && (order.shipping_status || 'READY') !== ship) return false;
+    if (brandId !== 'ALL' && !orderBrandIds(order).map(String).includes(brandId)) return false;
+    if (!query) return true;
+    const text = [order.id, order.user_name, order.salon_name, order.designer_name, orderBrandText(order)].join(' ').toLowerCase();
+    return text.includes(query);
+  });
+}
+
+function lineAmount(item) {
+  return (item.price || 0) * (item.qty || 1);
+}
+
+function shareByPrice(items, total) {
+  const amount = Number(total) || 0;
+  const prices = items.map(lineAmount);
+  const sum = prices.reduce((acc, price) => acc + price, 0);
+  if (!amount || !sum) return items.map(() => 0);
+  const shares = prices.map((price) => Math.floor(amount * price / sum));
+  shares[shares.length - 1] += amount - shares.reduce((acc, value) => acc + value, 0);
+  return shares;
+}
+
+function orderSupply(order) {
+  return orderItemList(order).reduce((sum, item) => {
+    const product = orderProduct(item.product_id);
+    return sum + ((product && product.supply_price) || 0) * (item.qty || 1);
+  }, 0);
+}
+
+function orderPayout(order) {
+  if (order.payment_status !== 'PAID') return 0;
+  return Math.round((order.total_amount || 0) * 0.3);
+}
+
+function feeText(value) {
+  return value ? money(value) : '무료';
+}
+
+function setOrderFilter(key, value) {
+  adminState[key] = value;
+  const pos = key === 'orderQuery' ? String(value).length : 0;
+  renderAdmin();
+  if (key === 'orderQuery') {
+    const input = document.getElementById('order-query');
+    if (input) { input.focus(); input.setSelectionRange(pos, input.value.length); }
+  }
+}
+
 function renderShippingOrders() {
+  const orders = filteredShippingOrders();
+  const view = adminState.orderView === 'item' ? 'item' : 'order';
+  const paid = orders.filter((order) => order.payment_status === 'PAID');
+  const summary = {
+    sales: paid.reduce((sum, order) => sum + (order.total_amount || 0), 0),
+    points: paid.reduce((sum, order) => sum + (order.points_used || 0), 0),
+    coupon: paid.reduce((sum, order) => sum + (order.coupon_discount || 0), 0),
+    shipping: paid.reduce((sum, order) => sum + (order.shipping_fee || 0), 0),
+    supply: paid.reduce((sum, order) => sum + orderSupply(order), 0),
+    payout: paid.reduce((sum, order) => sum + orderPayout(order), 0),
+  };
+  const periods = [
+    ['ALL', '전체'], ['TODAY', '오늘'], ['THIS_WEEK', '이번주'],
+    ['THIS_MONTH', '이번달'], ['LAST_MONTH', '지난달'], ['CUSTOM', '기간 지정'],
+  ];
+  const ships = [['ALL', '전체'], ['READY', '배송준비'], ['SHIPPING', '배송중'], ['DELIVERED', '배송완료']];
+  const brands = (adminState.brands || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  const itemRows = orders.flatMap((order) => {
+    const items = orderItemList(order);
+    const points = shareByPrice(items, order.points_used || 0);
+    const coupons = shareByPrice(items, order.coupon_discount || 0);
+    return items.map((item, index) => ({ order, item, points: points[index] || 0, coupon: coupons[index] || 0 }));
+  }).filter((row) => {
+    const brandId = String(adminState.orderBrand || 'ALL');
+    if (brandId === 'ALL') return true;
+    const product = orderProduct(row.item.product_id);
+    return product && String(product.brand_id) === brandId;
+  });
   return `
-    <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px">
-      <div>
-        <h2 style="font-size:18px;font-weight:700">주문/배송 (${adminState.orders.length}건)</h2>
-        <p style="font-size:12px;color:#6b7280;margin-top:4px">결제 뒤 배송준비, 배송중, 배송완료로 넘깁니다.</p>
+    <div class="page-kicker">주문/배송</div>
+    <p class="page-sub">날짜와 브랜드로 주문을 보고, 쿠폰·포인트·공급가·배송비·매장 정산액을 확인합니다. 정산액은 결제 매출의 30%입니다.</p>
+    <div class="filter-card">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:220px">
+          <label class="field-label">검색어</label>
+          <input class="soft-input" id="order-query" value="${adminState.orderQuery || ''}" placeholder="주문번호, 매장, 고객, 디자이너" oninput="setOrderFilter('orderQuery', this.value)">
+        </div>
+        <div>
+          <label class="field-label">브랜드</label>
+          <select class="soft-select" style="min-width:180px" onchange="setOrderFilter('orderBrand', this.value)">
+            <option value="ALL">전체 브랜드</option>
+            ${brands.map((brand) => `<option value="${brand.id}" ${String(adminState.orderBrand) === String(brand.id) ? 'selected' : ''}>${brand.name}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label class="field-label">배송</label>
+          <select class="soft-select" onchange="setOrderFilter('orderShip', this.value)">
+            ${ships.map(([value, label]) => `<option value="${value}" ${adminState.orderShip === value ? 'selected' : ''}>${label}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="period-row">
+        <span class="field-label" style="margin:0">주문일</span>
+        ${periods.map(([value, label]) => `<button type="button" class="period-chip ${adminState.orderPeriod === value ? 'on' : ''}" onclick="setOrderFilter('orderPeriod', '${value}')">${label}</button>`).join('')}
+        ${adminState.orderPeriod === 'CUSTOM' ? `
+          <input class="soft-input" type="date" style="width:150px" value="${adminState.orderStart || ''}" onchange="setOrderFilter('orderStart', this.value)">
+          <span>~</span>
+          <input class="soft-input" type="date" style="width:150px" value="${adminState.orderEnd || ''}" onchange="setOrderFilter('orderEnd', this.value)">
+        ` : ''}
+        <span style="margin-left:auto;font-size:12px;color:#94a3b8">조회 ${orders.length}건</span>
       </div>
     </div>
-    <div class="panel">
+    <div class="summary-grid" style="margin-bottom:14px">
+      <div class="summary-card sales" style="grid-column:1 / -1">
+        <div class="metric-row">
+          <div class="metric-tile"><strong style="font-weight:400">${money(summary.sales)}</strong><span>결제금액</span></div>
+          <div class="metric-tile"><strong style="font-weight:400">${money(summary.points)}</strong><span>포인트</span></div>
+          <div class="metric-tile"><strong style="font-weight:400">${money(summary.coupon)}</strong><span>쿠폰</span></div>
+          <div class="metric-tile"><strong style="font-weight:400">${money(summary.supply)}</strong><span>공급가</span></div>
+          <div class="metric-tile"><strong style="font-weight:400">${feeText(summary.shipping)}</strong><span>배송비</span></div>
+          <div class="metric-tile"><strong style="font-weight:400">${money(summary.payout)}</strong><span>정산액 30%</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="period-chip ${view === 'order' ? 'on' : ''}" onclick="setOrderFilter('orderView', 'order')">주문건별</button>
+      <button class="period-chip ${view === 'item' ? 'on' : ''}" onclick="setOrderFilter('orderView', 'item')">브랜드·상품별</button>
+    </div>
+    <div class="panel" style="overflow-x:auto">
+      ${view === 'order' ? `
       <table class="data-table">
         <thead>
-          <tr><th>주문</th><th>고객</th><th>매장</th><th>디자이너</th><th>결제금액</th><th>배송</th><th></th></tr>
+          <tr><th>주문일</th><th>고객 / 매장</th><th>디자이너</th><th>브랜드</th><th>결제금액</th><th>포인트</th><th>쿠폰</th><th>공급가</th><th>배송비</th><th>정산액</th><th>배송</th><th></th></tr>
         </thead>
         <tbody>
-          ${adminState.orders.map((order) => `
+          ${orders.map((order) => `
             <tr>
-              <td style="font-weight:400">#${order.id}<div style="color:#9ca3af;font-size:12px">${order.created_at}</div></td>
-              <td>${order.user_name}</td>
-              <td>${order.salon_name}</td>
+              <td style="font-weight:400">#${order.id}<div style="color:#9ca3af;font-size:12px">${String(order.created_at || '').slice(0, 16)}</div></td>
+              <td>${order.user_name || '-'}<div style="color:#6b7280;font-size:12px">${order.salon_name || '-'}</div></td>
               <td>${order.designer_name || '담당 없음'}${order.designer_status === 'RESIGNED' ? ' <span class="badge badge-resigned">퇴사</span>' : ''}</td>
-              <td>${money(order.total_amount)}</td>
+              <td>${orderBrandText(order)}</td>
+              <td style="font-weight:400">${money(order.total_amount)}</td>
+              <td style="font-weight:400">${money(order.points_used || 0)}</td>
+              <td style="font-weight:400">${money(order.coupon_discount || 0)}</td>
+              <td style="font-weight:400">${money(orderSupply(order))}</td>
+              <td style="font-weight:400">${feeText(order.shipping_fee || 0)}</td>
+              <td style="font-weight:400">${money(orderPayout(order))}</td>
               <td><span class="badge badge-${(order.shipping_status || 'READY').toLowerCase()}">${SHIP_LABEL[order.shipping_status] || '배송준비'}</span></td>
               <td>${SHIP_NEXT[order.shipping_status] ? `<button class="btn btn-sm btn-outline" onclick="advanceShipping(${order.id}, '${SHIP_NEXT[order.shipping_status]}')">${SHIP_LABEL[SHIP_NEXT[order.shipping_status]]}</button>` : ''}</td>
-            </tr>`).join('') || '<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">주문이 없습니다</td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="12" style="text-align:center;color:#9ca3af;padding:24px">조건에 맞는 주문이 없습니다</td></tr>'}
         </tbody>
-      </table>
+      </table>` : `
+      <table class="data-table">
+        <thead>
+          <tr><th>주문일</th><th>매장</th><th>브랜드</th><th>상품</th><th>수량</th><th>결제금액</th><th>포인트</th><th>쿠폰</th><th>공급가</th><th>정산액</th><th>배송</th></tr>
+        </thead>
+        <tbody>
+          ${itemRows.map((row) => {
+            const product = orderProduct(row.item.product_id);
+            const brand = product ? (adminState.brands || []).find((item) => item.id === product.brand_id) : null;
+            const supply = ((product && product.supply_price) || 0) * (row.item.qty || 1);
+            const payout = row.order.payment_status === 'PAID' ? Math.round(lineAmount(row.item) * 0.3) : 0;
+            return `
+            <tr>
+              <td style="font-weight:400">#${row.order.id}<div style="color:#9ca3af;font-size:12px">${String(row.order.created_at || '').slice(0, 16)}</div></td>
+              <td>${row.order.salon_name || '-'}</td>
+              <td>${brand ? brand.name : '-'}</td>
+              <td>${row.item.name || '-'}</td>
+              <td>${row.item.qty || 1}개</td>
+              <td style="font-weight:400">${money(lineAmount(row.item))}</td>
+              <td style="font-weight:400">${money(row.points)}</td>
+              <td style="font-weight:400">${money(row.coupon)}</td>
+              <td style="font-weight:400">${money(supply)}</td>
+              <td style="font-weight:400">${money(payout)}</td>
+              <td><span class="badge badge-${(row.order.shipping_status || 'READY').toLowerCase()}">${SHIP_LABEL[row.order.shipping_status] || '배송준비'}</span></td>
+            </tr>`;
+          }).join('') || '<tr><td colspan="11" style="text-align:center;color:#9ca3af;padding:24px">조건에 맞는 상품이 없습니다</td></tr>'}
+        </tbody>
+      </table>`}
     </div>`;
 }
 
