@@ -18,6 +18,7 @@ let state = {
   storeOrders: [],
   storeSettlement: null,
   storeView: '',
+  salesStaff: '',
   scanResult: null,
   switchInfo: null,
   selectedSalon: null,
@@ -113,7 +114,7 @@ function renderBottomNav() {
   const tabs = [
     { id: 'home', icon: 'fa-home', label: '홈' },
     ownerSalon()
-      ? { id: 'store', icon: 'fa-store', label: '내 매장' }
+      ? { id: 'store', icon: 'fa-chart-line', label: '매출' }
       : { id: 'scan', icon: 'fa-qrcode', label: 'QR 스캔' },
     { id: 'shop', icon: 'fa-shopping-bag', label: '쇼핑' },
     { id: 'profile', icon: 'fa-user', label: '내 정보' }
@@ -718,13 +719,13 @@ function openCart() {
         <span>합계</span>
         <span class="cart-total-val">${total.toLocaleString()}원</span>
       </div>
-      <div class="rev-breakdown">
+      ${state.user && state.user.is_owner ? '' : `<div class="rev-breakdown">
         <div style="font-size:11px;font-weight:700;color:#16a34a;margin-bottom:8px">💰 수익 배분</div>
         <div class="rev-grid">
           <div class="rev-item"><div style="font-size:10px;color:var(--muted)">플랫폼</div><div style="font-size:13px;font-weight:700">${Math.round(total*0.4).toLocaleString()}원</div><div style="font-size:10px;color:var(--muted)">40%</div></div>
           <div class="rev-item"><div style="font-size:10px;color:var(--muted)">매장</div><div style="font-size:13px;font-weight:700">${salonAmt.toLocaleString()}원</div><div style="font-size:10px;color:var(--muted)">30%</div></div>
         </div>
-      </div>
+      </div>`}
       <button class="btn-primary" style="margin-top:4px" onclick="placeOrder()">
         <i class="fas fa-credit-card"></i> 결제하기 ${total.toLocaleString()}원
       </button>
@@ -826,7 +827,13 @@ function openOrderDetail(id) {
         <span>합계</span>
         <span class="cart-total-val">${(o.total_amount||0).toLocaleString()}원</span>
       </div>
-      <div class="rev-breakdown">
+      ${state.user && state.user.is_owner
+        ? (o.payment_status === 'PAID' ? `<div class="rev-breakdown">
+            <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">매장 정산</div>
+            <div style="font-size:16px;font-weight:700;color:var(--text)">${Math.round((o.total_amount || 0) * 0.3).toLocaleString()}원</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">판매 금액의 30%</div>
+          </div>` : '')
+        : `<div class="rev-breakdown">
         <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">수익 배분 내역</div>
         <div class="rev-grid">
           <div class="rev-item">
@@ -840,7 +847,7 @@ function openOrderDetail(id) {
             <div style="font-size:10px;color:var(--muted)">30%</div>
           </div>
         </div>
-      </div>
+      </div>`}
       <button onclick="closeModal()" style="width:100%;background:none;border:none;padding:14px;color:var(--muted);font-size:13px;cursor:pointer;margin-top:8px">닫기</button>
     </div>`;
   modal.onclick = (e) => { if (e.target === modal) closeModal(); };
@@ -1016,7 +1023,7 @@ function renderStoreBrands() {
   const brands = (state.brands || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   return `
     <div style="padding:20px 16px 28px">
-      <button class="store-back" onclick="navigate('store')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>내 매장</button>
+      <button class="store-back" onclick="navigate('store')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>매출</button>
       <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">브랜드 판매 노출</h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:8px">${salon.salon_name} · 끄면 이 매장 고객에게 그 브랜드 상품이 안 보입니다.</p>
       ${brands.map((brand) => {
@@ -1034,6 +1041,33 @@ function renderStoreBrands() {
     </div>`;
 }
 
+function renderStaffFilters(sales) {
+  const totals = new Map();
+  sales.forEach((order) => {
+    if (order.payment_status !== 'PAID') return;
+    const name = order.designer_name || '담당 없음';
+    const row = totals.get(name) || { name, count: 0, sales: 0 };
+    row.count += 1;
+    row.sales += order.total_amount || 0;
+    totals.set(name, row);
+  });
+  const people = [...totals.values()].sort((a, b) => b.sales - a.sales);
+  const allSales = people.reduce((sum, row) => sum + row.sales, 0);
+  const selected = state.salesStaff || '';
+  const picked = people.find((row) => row.name === selected);
+  const chip = (name, title, sub) => `<button type="button" class="staff-chip${selected === name ? ' on' : ''}" data-staff="${encodeURIComponent(name)}" onclick="setSalesStaff(decodeURIComponent(this.dataset.staff))"><span>${title}</span><small>${sub}</small></button>`;
+  return `<div class="staff-row">
+      ${chip('', '전체', won(allSales))}
+      ${people.map((row) => chip(row.name, row.name, row.count + '건 · ' + won(row.sales))).join('')}
+    </div>
+    ${picked ? `<p style="font-size:12px;color:var(--muted);margin:-2px 0 10px">${picked.name} · 판매 ${picked.count}건 · 정산 ${won(Math.round(picked.sales * 0.3))}</p>` : ''}`;
+}
+
+function setSalesStaff(name) {
+  state.salesStaff = name || '';
+  render();
+}
+
 function renderStore() {
   const salon = ownerSalon();
   if (!salon) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
@@ -1049,7 +1083,7 @@ function renderStore() {
   const sales = (state.storeOrders || []).slice().sort((a, b) => b.id - a.id);
   return `
     <div style="padding:20px 16px 28px">
-      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">내 매장</h2>
+      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">매출</h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:14px">${salon.salon_name}</p>
       <button class="store-menu" onclick="openStoreBrands()">
         <span>
@@ -1084,8 +1118,9 @@ function renderStore() {
       <div class="section-label">판매 내역</div>
       ${sales.length === 0
         ? `<p style="font-size:13px;color:var(--muted);padding:8px 0 12px">아직 판매 내역이 없습니다.</p>`
-        : `<div class="order-list" style="padding:0">
-            ${sales.map((order) => {
+        : `${renderStaffFilters(sales)}
+          <div class="order-list" style="padding:0">
+            ${sales.filter((order) => !state.salesStaff || (order.designer_name || '담당 없음') === state.salesStaff).map((order) => {
               const items = orderItemNames(order);
               const paid = order.payment_status === 'PAID';
               const statusMap = { PAID:'결제완료', PENDING:'결제대기', CANCELLED:'취소됨', REFUNDED:'환불됨' };
@@ -1103,7 +1138,10 @@ function renderStore() {
                   </div>
                 </div>`;
             }).join('')}
-          </div>`}
+          </div>
+          ${sales.filter((order) => !state.salesStaff || (order.designer_name || '담당 없음') === state.salesStaff).length === 0
+            ? `<p style="font-size:13px;color:var(--muted);padding:8px 0 12px">이 담당자의 판매 내역이 없습니다.</p>`
+            : ''}`}
     </div>`;
 }
 
