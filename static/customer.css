@@ -604,6 +604,26 @@ body {
 .order-items-preview { font-size: 11px; color: var(--muted); max-width: 60%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .order-amount { font-size: 16px; font-weight: 800; color: var(--rose); }
 
+.settle-card {
+  background: var(--primary);
+  color: white;
+  border-radius: 18px;
+  padding: 18px 18px 16px;
+}
+.settle-kicker { font-size: 12px; color: rgba(255,255,255,0.62); }
+.settle-amount { font-size: 28px; font-weight: 600; letter-spacing: -0.4px; margin: 6px 0 2px; }
+.settle-sub { font-size: 12px; color: rgba(255,255,255,0.62); }
+.settle-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.settle-metric { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 10px 12px; }
+.settle-metric span { display: block; font-size: 11px; color: rgba(255,255,255,0.55); }
+.settle-metric strong { display: block; margin-top: 3px; font-size: 15px; font-weight: 600; }
+.section-label { font-size: 15px; font-weight: 800; margin: 22px 0 10px; color: var(--text); }
+.past-settle {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: white; border-radius: 14px; padding: 14px 16px; margin-bottom: 8px;
+  border: 1px solid var(--border);
+}
+
 /* ═══════════════════════════════════════════
    ORDER REVENUE BREAKDOWN
 ═══════════════════════════════════════════ */

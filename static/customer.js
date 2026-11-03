@@ -15,6 +15,8 @@ let state = {
   selectedCategory: '전체',
   cart: [],
   orders: [],
+  storeOrders: [],
+  storeSettlement: null,
   scanResult: null,
   switchInfo: null,
   selectedSalon: null,
@@ -789,7 +791,7 @@ function renderOrderCard(o) {
 }
 
 function openOrderDetail(id) {
-  const o = state.orders.find(x => x.id === id);
+  const o = state.orders.find(x => x.id === id) || (state.storeOrders || []).find(x => x.id === id);
   if (!o) return;
   const items = JSON.parse(o.order_items || '[]');
   const statusMap = { PAID:'결제완료', PENDING:'결제대기', CANCELLED:'취소됨', REFUNDED:'환불됨' };
@@ -915,6 +917,8 @@ function renderLoginPrompt() {
 function handleLogout() {
   state.user = null;
   state.orders = [];
+  state.storeOrders = [];
+  state.storeSettlement = null;
   state.cart = [];
   sessionStorage.removeItem('salon_user');
   navigate('home');
@@ -944,9 +948,49 @@ async function loadAppData() {
     if (bestRes.success) state.bestProducts = bestRes.data;
     if (brandsRes.success) state.brands = brandsRes.data;
     if (state.user) await loadUserOrders();
+    if (ownerSalon()) await loadStoreLedger();
   } catch (e) {
     console.error('Load error:', e);
   }
+}
+
+function won(amount) {
+  return (Number(amount) || 0).toLocaleString('ko-KR') + '원';
+}
+
+function currentPeriod() {
+  const now = new Date();
+  return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+}
+
+function monthLabel(period) {
+  const [year, month] = String(period || '').split('-');
+  if (!year || !month) return '';
+  const m = Number(month);
+  return year === String(new Date().getFullYear()) ? m + '월' : year.slice(2) + '.' + m;
+}
+
+function orderItemNames(order) {
+  let items = order.order_items;
+  if (typeof items === 'string') {
+    try { items = JSON.parse(items || '[]'); } catch (e) { items = []; }
+  }
+  return Array.isArray(items) ? items : [];
+}
+
+async function loadStoreLedger() {
+  const salon = ownerSalon();
+  if (!salon) {
+    state.storeOrders = [];
+    state.storeSettlement = null;
+    return;
+  }
+  const [ordersRes, settleRes] = await Promise.all([
+    api('/api/orders?salon_id=' + salon.id),
+    api('/api/settlements?salon_id=' + salon.id),
+  ]);
+  if (ordersRes.success) state.storeOrders = ordersRes.data || [];
+  if (settleRes.success) state.storeSettlement = settleRes.data;
 }
 
 function renderStore() {
@@ -954,10 +998,64 @@ function renderStore() {
   if (!salon) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
   const hidden = new Set(salon.hidden_brand_ids || []);
   const brands = (state.brands || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  const period = (state.storeSettlement && state.storeSettlement.month) || currentPeriod();
+  const rows = (state.storeSettlement && state.storeSettlement.rows) || [];
+  const current = rows.find((row) => row.period === period) || { period, orders: 0, sales: 0, payout: 0, status: 'PENDING' };
+  const statusLabel = { PENDING: '정산예정', CONFIRMED: '정산확정', PAID: '지급완료' };
+  const past = rows.filter((row) => row.period !== period && row.orders > 0);
+  const sales = (state.storeOrders || []).slice().sort((a, b) => b.id - a.id);
   return `
     <div style="padding:20px 16px 28px">
       <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">내 매장</h2>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">${salon.salon_name} · 기본은 모든 브랜드가 보입니다. 끄면 이 매장 고객에게 그 브랜드 상품이 안 보입니다.</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">${salon.salon_name}</p>
+      <div class="settle-card">
+        <div class="settle-kicker">${monthLabel(current.period)} 정산 · ${statusLabel[current.status] || '정산예정'}</div>
+        <div class="settle-amount">${won(current.payout)}</div>
+        <div class="settle-sub">결제된 판매 매출의 30%</div>
+        <div class="settle-metrics">
+          <div class="settle-metric"><span>판매 매출</span><strong>${won(current.sales)}</strong></div>
+          <div class="settle-metric"><span>결제 건수</span><strong>${current.orders || 0}건</strong></div>
+        </div>
+      </div>
+      ${past.length ? `
+        <div class="section-label">지난 정산</div>
+        ${past.map((row) => `
+          <div class="past-settle">
+            <div>
+              <div style="font-weight:700">${monthLabel(row.period)}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">판매 ${row.orders}건 · 매출 ${won(row.sales)}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-weight:700">${won(row.payout)}</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:2px">${statusLabel[row.status] || ''}</div>
+            </div>
+          </div>`).join('')}
+      ` : ''}
+      <div class="section-label">판매 내역</div>
+      ${sales.length === 0
+        ? `<p style="font-size:13px;color:var(--muted);padding:8px 0 12px">아직 판매 내역이 없습니다.</p>`
+        : `<div class="order-list" style="padding:0">
+            ${sales.map((order) => {
+              const items = orderItemNames(order);
+              const paid = order.payment_status === 'PAID';
+              const statusMap = { PAID:'결제완료', PENDING:'결제대기', CANCELLED:'취소됨', REFUNDED:'환불됨' };
+              return `
+                <div class="order-card" onclick="openOrderDetail(${order.id})">
+                  <div class="order-card-top">
+                    <span style="font-size:11px;color:var(--muted)">${new Date(order.created_at).toLocaleDateString('ko-KR')} · ${order.user_name || '고객'}</span>
+                    <span class="order-status-badge status-${order.payment_status}">${statusMap[order.payment_status] || order.payment_status}</span>
+                  </div>
+                  <div class="order-salon">${items.slice(0, 2).map((item) => item.name).join(' · ') || '상품'}</div>
+                  <div class="order-designer"><i class="fas fa-user-tie" style="margin-right:4px;opacity:0.5"></i>${order.designer_name || '담당 없음'}</div>
+                  <div class="order-footer">
+                    <span style="font-size:12px;color:var(--muted)">${paid ? '정산 ' + won(Math.round((order.total_amount || 0) * 0.3)) : ''}</span>
+                    <span class="order-amount">${won(order.total_amount)}</span>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>`}
+      <div class="section-label">브랜드 노출</div>
+      <p style="font-size:12px;color:var(--muted);margin:-4px 0 8px">끄면 이 매장 고객에게 그 브랜드 상품이 안 보입니다.</p>
       ${brands.map((brand) => {
         const count = (state.allProducts || []).filter((product) => product.brand_id === brand.id).length;
         const off = hidden.has(brand.id);
