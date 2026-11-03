@@ -9,8 +9,19 @@ const PUBLIC = path.join(ROOT, 'public');
 const DB_PATH = path.join(ROOT, 'data', 'db.json');
 const SEED_PATH = path.join(ROOT, 'data', 'seed.json');
 
+function mergeById(current, incoming) {
+  const list = Array.isArray(current) ? current : [];
+  (incoming || []).forEach((item) => {
+    if (!list.some((row) => row.id === item.id)) list.push(item);
+  });
+  return list;
+}
+
 function ensureExtras(data, seed) {
-  data.brands = data.brands && data.brands.length ? data.brands : (seed.brands || []);
+  data.brands = mergeById(data.brands, seed.brands);
+  data.salons.forEach((salon) => {
+    if (!Array.isArray(salon.hidden_brand_ids)) salon.hidden_brand_ids = [];
+  });
   data.coupons = data.coupons || seed.coupons || [];
   data.point_grants = data.point_grants || seed.point_grants || [];
   data.banners = data.banners || seed.banners || [];
@@ -71,6 +82,26 @@ function fail(res, status, error) {
   send(res, status, { success: false, error });
 }
 
+function phoneKey(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function ownedSalon(user) {
+  const phone = phoneKey(user && user.phone);
+  if (!phone) return null;
+  return db.salons.find((salon) => phoneKey(salon.owner_phone) === phone) || null;
+}
+
+function hiddenBrandIds(salon) {
+  return new Set((salon && salon.hidden_brand_ids) || []);
+}
+
+function visibleProducts(products, salonId) {
+  if (!salonId) return products;
+  const hidden = hiddenBrandIds(findSalon(salonId));
+  return products.filter((product) => !hidden.has(product.brand_id));
+}
+
 function findSalon(id) {
   return db.salons.find((s) => s.id === Number(id));
 }
@@ -82,11 +113,14 @@ function findDesigner(id) {
 function publicUser(user) {
   const salon = findSalon(user.current_salon_id);
   const designer = findDesigner(user.mapped_designer_id);
+  const owned = ownedSalon(user);
   return {
     ...user,
-    salon_name: salon ? salon.salon_name : null,
+    salon_name: salon ? salon.salon_name : (owned ? owned.salon_name : null),
     designer_name: designer ? designer.designer_name : null,
     designer_img: designer ? designer.profile_img : null,
+    is_owner: !!owned,
+    owned_salon_id: owned ? owned.id : null,
   };
 }
 
@@ -270,6 +304,7 @@ const routes = [
     const best = req.query.get('best') === '1';
     let products = db.products.filter((p) => p.is_active);
     if (best) products = products.filter((p) => p.is_best);
+    products = visibleProducts(products, req.query.get('salon_id'));
     return { data: products };
   }],
   ['POST', /^\/api\/products$/, (req) => {
@@ -320,6 +355,7 @@ const routes = [
       owner_name: body.owner_name,
       owner_phone: body.owner_phone,
       bank_account: body.bank_account || '',
+      hidden_brand_ids: [],
       created_at: nowStamp(),
     };
     db.salons.push(salon);
@@ -333,6 +369,22 @@ const routes = [
     ['salon_name', 'owner_name', 'owner_phone', 'bank_account'].forEach((key) => {
       if (body[key] !== undefined) salon[key] = body[key];
     });
+    save();
+    return { data: publicSalon(salon) };
+  }],
+  ['POST', /^\/api\/salons\/(\d+)\/hidden-brands$/, (req, id) => {
+    const salon = findSalon(id);
+    if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
+    const body = req.body || {};
+    const brandId = Number(body.brand_id);
+    const brand = db.brands.find((item) => item.id === brandId);
+    if (!brand) return { status: 400, error: '브랜드를 찾을 수 없습니다' };
+    salon.hidden_brand_ids = salon.hidden_brand_ids || [];
+    if (body.hidden) {
+      if (!salon.hidden_brand_ids.includes(brandId)) salon.hidden_brand_ids.push(brandId);
+    } else {
+      salon.hidden_brand_ids = salon.hidden_brand_ids.filter((item) => item !== brandId);
+    }
     save();
     return { data: publicSalon(salon) };
   }],
@@ -428,12 +480,22 @@ const routes = [
   ['POST', /^\/api\/users$/, (req) => {
     const body = req.body || {};
     if (!body.name) return { status: 400, error: '이름을 입력해주세요' };
+    const existing = body.kakao_id ? db.users.find((item) => item.kakao_id === body.kakao_id) : null;
+    if (existing) {
+      if (body.name) existing.name = body.name;
+      if (body.phone) existing.phone = body.phone;
+      const ownedExisting = ownedSalon(existing);
+      if (ownedExisting && !existing.current_salon_id) existing.current_salon_id = ownedExisting.id;
+      save();
+      return { data: publicUser(existing) };
+    }
+    const owned = ownedSalon({ phone: body.phone });
     const user = {
       id: nextId(db.users),
       kakao_id: body.kakao_id || `kakao_${Date.now()}`,
       name: body.name,
       phone: body.phone || '',
-      current_salon_id: null,
+      current_salon_id: owned ? owned.id : null,
       mapped_designer_id: null,
       created_at: nowStamp(),
     };
@@ -703,6 +765,7 @@ const routes = [
     for (const item of body.items || []) {
       const product = db.products.find((p) => p.id === Number(item.product_id) && p.is_active);
       if (!product) return { status: 400, error: '상품을 찾을 수 없습니다' };
+      if (hiddenBrandIds(salon).has(product.brand_id)) return { status: 400, error: `${product.name}은 이 매장에서 판매하지 않습니다` };
       const qty = Number(item.qty || 1);
       if (product.stock_quantity < qty) return { status: 400, error: `${product.name} 재고가 부족합니다` };
       items.push({ product_id: product.id, name: product.name, qty, price: product.vip_discount_price });
