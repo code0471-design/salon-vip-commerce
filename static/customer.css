@@ -161,6 +161,13 @@ body {
 }
 .price-rate-row input { width: 96px; }
 .price-apply { border: 0; background: #1e293b; color: white; border-radius: 10px; padding: 10px 14px; font-weight: 700; font-family: var(--font); cursor: pointer; }
+.discount-steps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.discount-step {
+  border: 1px solid var(--border); background: white; color: var(--text);
+  border-radius: 999px; padding: 7px 11px; font-size: 13px; font-weight: 700;
+  font-family: var(--font); cursor: pointer;
+}
+.discount-step.on { background: #1e293b; border-color: #1e293b; color: white; }
 .price-row { padding: 14px 0; border-bottom: 1px solid var(--border); }
 .price-name { font-size: 14px; font-weight: 700; line-height: 1.4; }
 .price-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }

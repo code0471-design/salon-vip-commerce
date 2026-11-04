@@ -324,6 +324,7 @@
         bank_account: body.bank_account || '',
         hidden_brand_ids: [],
         brand_discount_rates: {},
+        product_discount_rates: {},
         product_prices: {},
         created_at: nowStamp(),
       };
@@ -367,7 +368,7 @@
         const brand = db.brands.find((item) => item.id === brandId);
         if (!brand) return { status: 400, error: '브랜드를 찾을 수 없습니다' };
         const rate = Number(body.discount_rate);
-        if (!Number.isFinite(rate) || rate < 0 || rate > 100) return { status: 400, error: '할인율은 0에서 100 사이입니다' };
+        if (!Number.isFinite(rate) || rate < 0 || rate > 100 || rate % 5 !== 0) return { status: 400, error: '할인율은 5% 단위로 고르세요' };
         const key = String(brandId);
         if (rate === 0) delete salon.brand_discount_rates[key];
         else salon.brand_discount_rates[key] = Math.round(rate * 10) / 10;
@@ -379,6 +380,15 @@
         if (!product) return { status: 400, error: '상품을 찾을 수 없습니다' };
         const key = String(product.id);
         if (body.clear) {
+          delete salon.product_prices[key];
+          delete salon.product_discount_rates[key];
+          save();
+          return { data: publicSalon(salon) };
+        }
+        if (body.discount_rate != null && body.discount_rate !== '') {
+          const checkedRate = ProductCatalog.validateDiscountRate(product, body.discount_rate);
+          if (checkedRate.error) return { status: 400, error: checkedRate.error };
+          salon.product_discount_rates[key] = checkedRate.rate;
           delete salon.product_prices[key];
           save();
           return { data: publicSalon(salon) };

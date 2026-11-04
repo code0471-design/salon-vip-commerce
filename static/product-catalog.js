@@ -172,6 +172,9 @@
     if (!salon.product_prices || typeof salon.product_prices !== 'object' || Array.isArray(salon.product_prices)) {
       salon.product_prices = {};
     }
+    if (!salon.product_discount_rates || typeof salon.product_discount_rates !== 'object' || Array.isArray(salon.product_discount_rates)) {
+      salon.product_discount_rates = {};
+    }
     return salon;
   }
 
@@ -192,16 +195,48 @@
     return next;
   }
 
+  function priceForRate(product, rate) {
+    const hq = hqPrice(product);
+    const value = Math.min(100, Math.max(0, Number(rate) || 0));
+    return Math.round(hq * (100 - value) / 100);
+  }
+
+  function discountSteps(product) {
+    const floor = salonCost(product);
+    const steps = [0];
+    for (let rate = 5; rate <= 95; rate += 5) {
+      if (priceForRate(product, rate) < floor) break;
+      steps.push(rate);
+    }
+    return steps;
+  }
+
+  function validateDiscountRate(product, rate) {
+    const value = Number(rate);
+    if (!Number.isFinite(value) || value < 0 || value > 100 || value % 5 !== 0) {
+      return { error: '할인율은 5% 단위로 고르세요' };
+    }
+    const price = priceForRate(product, value);
+    const floor = salonCost(product);
+    if (price < floor) return { error: '살롱가 ' + wonText(floor) + '보다 낮게 할인할 수 없습니다' };
+    return { rate: value, price: price };
+  }
+
   function storeSellingPrice(salon, product) {
     const hq = hqPrice(product);
     const floor = salonCost(product);
     const ceiling = Math.max(hq, floor);
+    const key = String(product && product.id);
+    const productRates = (salon && salon.product_discount_rates) || {};
+    if (Object.prototype.hasOwnProperty.call(productRates, key)) {
+      return clampPrice(priceForRate(product, productRates[key]), floor, ceiling);
+    }
     const prices = (salon && salon.product_prices) || {};
-    const raw = prices[String(product && product.id)];
+    const raw = prices[key];
     if (raw != null && raw !== '') return clampPrice(raw, floor, ceiling);
     const rates = (salon && salon.brand_discount_rates) || {};
     const rate = Math.min(100, Math.max(0, Number(rates[String(product && product.brand_id)]) || 0));
-    return clampPrice(Math.round(hq * (100 - rate) / 100), floor, ceiling);
+    return clampPrice(priceForRate(product, rate), floor, ceiling);
   }
 
   function validateStorePrice(product, price) {
@@ -252,6 +287,8 @@
     hqPrice: hqPrice,
     salonCost: salonCost,
     storeSellingPrice: storeSellingPrice,
+    discountSteps: discountSteps,
+    validateDiscountRate: validateDiscountRate,
     validateStorePrice: validateStorePrice,
     orderStorePayout: orderStorePayout,
     syncPointBlock: syncPointBlock,
