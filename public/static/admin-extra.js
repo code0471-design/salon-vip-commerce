@@ -273,8 +273,8 @@ function renderBrandDetail(brand) {
                 <td>${money(product.supply_price || 0)}</td>
                 <td>${money(productSalonPrice(product))}</td>
                 <td>${money(product.vip_discount_price)}</td>
-                <td>${money(productHqMargin(product))}</td>
-                <td>${money(productStoreMargin(product))}</td>
+                <td>${marginLabel(productHqMargin(product), productSalonPrice(product))}</td>
+                <td>${marginLabel(productStoreMargin(product), product.vip_discount_price)}</td>
                 <td>${stockLabel(product.stock_quantity)}</td>
               </tr>`).join('') || '<tr><td colspan="8" style="color:#9ca3af">등록된 상품이 없습니다</td></tr>'}
           </tbody>

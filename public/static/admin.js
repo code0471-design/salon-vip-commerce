@@ -859,6 +859,12 @@ function productStoreMargin(product) {
   return (Number(product.vip_discount_price) || 0) - productSalonPrice(product);
 }
 
+function marginLabel(amount, base) {
+  const denom = Number(base) || 0;
+  const rate = denom > 0 ? Math.round((amount / denom) * 1000) / 10 : null;
+  return amount.toLocaleString() + '원' + (rate == null ? '' : ' (' + rate + '%)');
+}
+
 function productIsDeleted(product) {
   return !!product.deleted_at;
 }
@@ -946,8 +952,8 @@ function downloadProductExcel() {
       product.supply_price || 0,
       productSalonPrice(product),
       product.vip_discount_price || 0,
-      productHqMargin(product),
-      productStoreMargin(product),
+      marginLabel(productHqMargin(product), productSalonPrice(product)),
+      marginLabel(productStoreMargin(product), product.vip_discount_price),
       productStatusMeta(productSaleState(product)).label,
     ]);
   });
@@ -1038,8 +1044,8 @@ function renderProducts() {
               <td style="font-weight:400">${wonText(product.supply_price)}</td>
               <td style="font-weight:400">${wonText(productSalonPrice(product))}</td>
               <td style="font-weight:400">${wonText(product.vip_discount_price)}</td>
-              <td style="font-weight:400;${hqMargin < 0 ? 'color:#e11d48' : ''}">${wonText(hqMargin)}</td>
-              <td style="font-weight:400;${storeMargin < 0 ? 'color:#e11d48' : ''}">${wonText(storeMargin)}</td>
+              <td style="font-weight:400;${hqMargin < 0 ? 'color:#e11d48' : ''}">${marginLabel(hqMargin, productSalonPrice(product))}</td>
+              <td style="font-weight:400;${storeMargin < 0 ? 'color:#e11d48' : ''}">${marginLabel(storeMargin, product.vip_discount_price)}</td>
               <td><span class="sale-badge ${meta.tone}">${meta.label}</span></td>
               <td>${productIsDeleted(product)
                 ? `<button class="text-link muted" type="button" onclick="restoreProduct(${product.id})">복구</button>`
@@ -1231,8 +1237,8 @@ function productFormHtml() {
         <div class="form-group"><label class="form-label">판매가</label><div class="form-input price-input price-computed" id="pf-selling">${selling.toLocaleString()}원</div><p class="hint">고객 구입가</p></div>
       </div>
       <div class="price-grid" style="grid-template-columns:1fr 1fr;margin-top:8px">
-        <div class="form-group"><label class="form-label">본사 마진</label><div class="form-input price-input price-computed" id="pf-hq-margin" style="${hqMargin < 0 ? 'color:#e11d48' : ''}">${hqMargin.toLocaleString()}원</div><p class="hint">살롱가 − 공급가</p></div>
-        <div class="form-group"><label class="form-label">매장 마진</label><div class="form-input price-input price-computed" id="pf-store-margin" style="${storeMargin < 0 ? 'color:#e11d48' : ''}">${storeMargin.toLocaleString()}원</div><p class="hint">판매가 − 살롱가</p></div>
+        <div class="form-group"><label class="form-label">본사 마진</label><div class="form-input price-input price-computed" id="pf-hq-margin" style="${hqMargin < 0 ? 'color:#e11d48' : ''}">${marginLabel(hqMargin, salon)}</div><p class="hint">살롱가 − 공급가, 살롱가 기준</p></div>
+        <div class="form-group"><label class="form-label">매장 마진</label><div class="form-input price-input price-computed" id="pf-store-margin" style="${storeMargin < 0 ? 'color:#e11d48' : ''}">${marginLabel(storeMargin, selling)}</div><p class="hint">판매가 − 살롱가, 판매가 기준</p></div>
       </div>
       <div class="price-grid" style="grid-template-columns:repeat(5,1fr)">
         <div class="form-group"><label class="form-label">재고 수량</label><input class="form-input price-input" id="pf-stock" type="number" min="0" placeholder="제한없음" value="${escAttr(productDraft.stock)}"></div>
@@ -1402,8 +1408,8 @@ function refreshProductPrices(source) {
   const hqEl = document.getElementById('pf-hq-margin');
   const storeEl = document.getElementById('pf-store-margin');
   if (sellingEl) sellingEl.textContent = selling.toLocaleString() + '원';
-  if (hqEl) { hqEl.textContent = hqMargin.toLocaleString() + '원'; hqEl.style.color = hqMargin < 0 ? '#e11d48' : ''; }
-  if (storeEl) { storeEl.textContent = storeMargin.toLocaleString() + '원'; storeEl.style.color = storeMargin < 0 ? '#e11d48' : ''; }
+  if (hqEl) { hqEl.textContent = marginLabel(hqMargin, salon); hqEl.style.color = hqMargin < 0 ? '#e11d48' : ''; }
+  if (storeEl) { storeEl.textContent = marginLabel(storeMargin, selling); storeEl.style.color = storeMargin < 0 ? '#e11d48' : ''; }
   productDraft.options.forEach((option, index) => {
     const cell = document.getElementById('pf-opt-selling-' + index);
     if (cell) cell.textContent = Math.max(0, selling + (Number(option.additional) || 0)).toLocaleString() + '원';
