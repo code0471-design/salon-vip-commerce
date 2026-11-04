@@ -846,10 +846,17 @@ function productStatusMeta(state) {
   return found ? { label: found[1], tone: found[2] } : { label: '판매중', tone: 'selling' };
 }
 
-function productMarginRate(product) {
-  const selling = Number(product.vip_discount_price) || 0;
-  if (selling <= 0) return null;
-  return Math.round(((selling - (Number(product.supply_price) || 0)) / selling) * 1000) / 10;
+function productSalonPrice(product) {
+  if (product.salon_price != null && product.salon_price !== '') return Number(product.salon_price) || 0;
+  return Math.round((Number(product.vip_discount_price) || 0) * 0.7);
+}
+
+function productHqMargin(product) {
+  return productSalonPrice(product) - (Number(product.supply_price) || 0);
+}
+
+function productStoreMargin(product) {
+  return (Number(product.vip_discount_price) || 0) - productSalonPrice(product);
 }
 
 function productIsDeleted(product) {
@@ -901,8 +908,8 @@ function visibleAdminProducts() {
   if (dir === 'asc' || dir === 'desc') {
     const sign = dir === 'asc' ? 1 : -1;
     rows.sort((a, b) => {
-      const left = productMarginRate(a);
-      const right = productMarginRate(b);
+      const left = productStoreMargin(a);
+      const right = productStoreMargin(b);
       const av = left == null ? -Infinity : left;
       const bv = right == null ? -Infinity : right;
       if (av === bv) return String(b.created_at || '').localeCompare(String(a.created_at || ''));
@@ -928,9 +935,8 @@ function downloadCsv(filename, rows) {
 }
 
 function downloadProductExcel() {
-  const rows = [['상품번호', '등록일', '브랜드', '상품명', '카테고리', '공급가', '정상가', '판매가', '마진%', '노출상태']];
+  const rows = [['상품번호', '등록일', '브랜드', '상품명', '카테고리', '공급가', '살롱가', '판매가', '본사 마진', '매장 마진', '노출상태']];
   visibleAdminProducts().forEach((product) => {
-    const rate = productMarginRate(product);
     rows.push([
       productNumber(product),
       String(product.created_at || '').slice(0, 10),
@@ -938,9 +944,10 @@ function downloadProductExcel() {
       product.name || '',
       productCategoryLabel(product),
       product.supply_price || 0,
-      product.original_price || 0,
+      productSalonPrice(product),
       product.vip_discount_price || 0,
-      rate == null ? '' : rate,
+      productHqMargin(product),
+      productStoreMargin(product),
       productStatusMeta(productSaleState(product)).label,
     ]);
   });
@@ -1010,9 +1017,10 @@ function renderProducts() {
             <th>브랜드</th>
             <th>상품명</th>
             <th>공급가</th>
-            <th>정상가</th>
+            <th>살롱가</th>
             <th>판매가</th>
-            <th><button type="button" class="sort-head" onclick="cycleProductMarginSort()">마진% ${arrow}</button></th>
+            <th>본사 마진</th>
+            <th><button type="button" class="sort-head" onclick="cycleProductMarginSort()">매장 마진 ${arrow}</button></th>
             <th>노출상태</th>
             <th>관리</th>
           </tr>
@@ -1020,22 +1028,24 @@ function renderProducts() {
         <tbody>
           ${rows.map((product) => {
             const meta = productStatusMeta(productSaleState(product));
-            const rate = productMarginRate(product);
+            const hqMargin = productHqMargin(product);
+            const storeMargin = productStoreMargin(product);
             return `
             <tr>
               <td style="font-weight:400">${escAttr(productNumber(product))}<div style="color:#9ca3af;font-size:12px">${escAttr(String(product.created_at || '').slice(0, 10))}</div></td>
               <td>${escAttr(productBrandLabel(product.brand_id))}</td>
               <td>${escAttr(product.name)}</td>
               <td style="font-weight:400">${wonText(product.supply_price)}</td>
-              <td style="font-weight:400">${wonText(product.original_price)}</td>
+              <td style="font-weight:400">${wonText(productSalonPrice(product))}</td>
               <td style="font-weight:400">${wonText(product.vip_discount_price)}</td>
-              <td style="font-weight:400;${rate != null && rate < 0 ? 'color:#e11d48' : ''}">${rate == null ? '-' : rate + '%'}</td>
+              <td style="font-weight:400;${hqMargin < 0 ? 'color:#e11d48' : ''}">${wonText(hqMargin)}</td>
+              <td style="font-weight:400;${storeMargin < 0 ? 'color:#e11d48' : ''}">${wonText(storeMargin)}</td>
               <td><span class="sale-badge ${meta.tone}">${meta.label}</span></td>
               <td>${productIsDeleted(product)
                 ? `<button class="text-link muted" type="button" onclick="restoreProduct(${product.id})">복구</button>`
                 : `<button class="text-link muted" type="button" onclick="openEditProductModal(${product.id})">상세</button>`}</td>
             </tr>`;
-          }).join('') || `<tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:24px">${adminState.productDeleted ? '삭제된 상품이 없습니다' : '조건에 맞는 상품이 없습니다'}</td></tr>`}
+          }).join('') || `<tr><td colspan="10" style="text-align:center;color:#9ca3af;padding:24px">${adminState.productDeleted ? '삭제된 상품이 없습니다' : '조건에 맞는 상품이 없습니다'}</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -1051,7 +1061,7 @@ function emptyProductOption() {
 function blankProductDraft(brandId) {
   return {
     id: null, name: '', brandId: brandId || '', category: '',
-    supplyPrice: '', normalPrice: '', discountRate: '', discountAmount: '', discountSource: 'NONE',
+    supplyPrice: '', salonPrice: '', normalPrice: '', discountRate: '', discountAmount: '', discountSource: 'NONE',
     stock: '', minOrder: '1', purchaseUnit: '1', maxPurchase: '', earnRate: '0', pointUseDisabled: false,
     salePeriod: 'ALL', saleStart: '', saleEnd: '', saleStatus: 'SELLING', imageUrl: '', detailImages: [], description: '', deleted: false,
     options: [emptyProductOption()],
@@ -1078,6 +1088,7 @@ function draftFromProduct(product) {
     brandId: product.brand_id || '',
     category: ProductCatalog.normalizeCategory(product),
     supplyPrice: product.supply_price ? String(product.supply_price) : '',
+    salonPrice: String(productSalonPrice(product)),
     normalPrice: String(product.original_price || ''),
     discountRate: discount.type === 'RATE' ? String(discount.value) : '',
     discountAmount: discount.type === 'AMOUNT' ? String(discount.value) : '',
@@ -1108,6 +1119,7 @@ function readProductDraft() {
   productDraft.brandId = read('pf-brand');
   productDraft.category = read('pf-category');
   productDraft.supplyPrice = read('pf-supply');
+  productDraft.salonPrice = read('pf-salon');
   productDraft.normalPrice = read('pf-normal');
   productDraft.discountRate = read('pf-discount-rate');
   productDraft.discountAmount = read('pf-discount-amount');
@@ -1169,8 +1181,9 @@ function productImageRow(kind) {
 function productFormHtml() {
   const selling = currentSellingPrice();
   const supply = Number(productDraft.supplyPrice) || 0;
-  const margin = selling - supply;
-  const marginRate = selling > 0 ? Math.round(((selling - supply) / selling) * 1000) / 10 : null;
+  const salon = Number(productDraft.salonPrice) || 0;
+  const hqMargin = salon - supply;
+  const storeMargin = selling - salon;
   const brands = adminState.brands || [];
   const categories = ProductCatalog.CATEGORIES.slice();
   if (productDraft.category && categories.indexOf(productDraft.category) < 0) categories.push(productDraft.category);
@@ -1210,12 +1223,16 @@ function productFormHtml() {
     <div class="form-section">
       <h4>가격 · 재고</h4>
       <div class="price-grid">
-        <div class="form-group"><label class="form-label">공급가 *</label><input class="form-input price-input" id="pf-supply" type="number" min="0" value="${escAttr(productDraft.supplyPrice)}" oninput="refreshProductPrices()"></div>
+        <div class="form-group"><label class="form-label">공급가 *</label><input class="form-input price-input" id="pf-supply" type="number" min="0" value="${escAttr(productDraft.supplyPrice)}" oninput="refreshProductPrices()"><p class="hint">제품사 원가</p></div>
+        <div class="form-group"><label class="form-label">살롱가 *</label><input class="form-input price-input" id="pf-salon" type="number" min="0" value="${escAttr(productDraft.salonPrice)}" oninput="refreshProductPrices()"><p class="hint">매장 원가</p></div>
         <div class="form-group"><label class="form-label">정가 *</label><input class="form-input price-input" id="pf-normal" type="number" min="0" value="${escAttr(productDraft.normalPrice)}" oninput="refreshProductPrices()"></div>
         <div class="form-group"><label class="form-label">할인율 %</label><input class="form-input price-input" id="pf-discount-rate" type="number" min="0" max="100" step="0.1" value="${escAttr(productDraft.discountRate)}" oninput="refreshProductPrices('rate')"></div>
         <div class="form-group"><label class="form-label">할인금액</label><input class="form-input price-input" id="pf-discount-amount" type="number" min="0" value="${escAttr(productDraft.discountAmount)}" oninput="refreshProductPrices('amount')"></div>
-        <div class="form-group"><label class="form-label">판매가</label><div class="form-input price-input price-computed" id="pf-selling">${selling.toLocaleString()}원</div></div>
-        <div class="form-group"><label class="form-label">마진</label><div class="form-input price-input price-computed" id="pf-margin">${margin.toLocaleString()}원${marginRate != null ? ' (' + marginRate + '%)' : ''}</div></div>
+        <div class="form-group"><label class="form-label">판매가</label><div class="form-input price-input price-computed" id="pf-selling">${selling.toLocaleString()}원</div><p class="hint">고객 구입가</p></div>
+      </div>
+      <div class="price-grid" style="grid-template-columns:1fr 1fr;margin-top:8px">
+        <div class="form-group"><label class="form-label">본사 마진</label><div class="form-input price-input price-computed" id="pf-hq-margin" style="${hqMargin < 0 ? 'color:#e11d48' : ''}">${hqMargin.toLocaleString()}원</div><p class="hint">살롱가 − 공급가</p></div>
+        <div class="form-group"><label class="form-label">매장 마진</label><div class="form-input price-input price-computed" id="pf-store-margin" style="${storeMargin < 0 ? 'color:#e11d48' : ''}">${storeMargin.toLocaleString()}원</div><p class="hint">판매가 − 살롱가</p></div>
       </div>
       <div class="price-grid" style="grid-template-columns:repeat(5,1fr)">
         <div class="form-group"><label class="form-label">재고 수량</label><input class="form-input price-input" id="pf-stock" type="number" min="0" placeholder="제한없음" value="${escAttr(productDraft.stock)}"></div>
@@ -1378,12 +1395,15 @@ function refreshProductPrices(source) {
   }
   const selling = currentSellingPrice();
   const supply = Number(productDraft.supplyPrice) || 0;
-  const margin = selling - supply;
-  const marginRate = selling > 0 ? Math.round(((selling - supply) / selling) * 1000) / 10 : null;
+  const salon = Number(productDraft.salonPrice) || 0;
+  const hqMargin = salon - supply;
+  const storeMargin = selling - salon;
   const sellingEl = document.getElementById('pf-selling');
-  const marginEl = document.getElementById('pf-margin');
+  const hqEl = document.getElementById('pf-hq-margin');
+  const storeEl = document.getElementById('pf-store-margin');
   if (sellingEl) sellingEl.textContent = selling.toLocaleString() + '원';
-  if (marginEl) marginEl.textContent = margin.toLocaleString() + '원' + (marginRate != null ? ' (' + marginRate + '%)' : '');
+  if (hqEl) { hqEl.textContent = hqMargin.toLocaleString() + '원'; hqEl.style.color = hqMargin < 0 ? '#e11d48' : ''; }
+  if (storeEl) { storeEl.textContent = storeMargin.toLocaleString() + '원'; storeEl.style.color = storeMargin < 0 ? '#e11d48' : ''; }
   productDraft.options.forEach((option, index) => {
     const cell = document.getElementById('pf-opt-selling-' + index);
     if (cell) cell.textContent = Math.max(0, selling + (Number(option.additional) || 0)).toLocaleString() + '원';
@@ -1431,6 +1451,7 @@ async function submitProductForm() {
     brand_id: productDraft.brandId,
     category: productDraft.category,
     supply_price: productDraft.supplyPrice,
+    salon_price: productDraft.salonPrice,
     original_price: productDraft.normalPrice,
     discount_type: productDraft.discountSource,
     discount_value: discountValue,
@@ -1508,8 +1529,8 @@ function parseCsv(text) {
 
 function downloadProductTemplate() {
   downloadCsv('상품일괄등록.csv', [
-    ['브랜드', '상품명', '카테고리', '공급가', '정상가', '판매가'],
-    ['SUBLIMIC', '샘플 샴푸', '샴푸', '12000', '20000', '18000'],
+    ['브랜드', '상품명', '카테고리', '공급가', '살롱가', '정상가', '판매가'],
+    ['SUBLIMIC', '샘플 샴푸', '샴푸', '12000', '14000', '20000', '18000'],
   ]);
 }
 
@@ -1517,7 +1538,7 @@ function openBulkProductModal() {
   window.__bulkProductRows = null;
   showModal(`
     <h3 style="font-size:18px;font-weight:800;margin-bottom:8px">상품 일괄 등록</h3>
-    <p style="font-size:13px;color:#64748b;line-height:1.5">CSV 첫 줄은 브랜드, 상품명, 카테고리, 공급가, 정상가, 판매가입니다. 브랜드 이름은 등록된 브랜드와 같아야 하고, 카테고리는 샴푸·컨디셔너·트리트먼트·오일/세럼·스프레이·컬크림·왁스/젤 중 하나입니다.</p>
+    <p style="font-size:13px;color:#64748b;line-height:1.5">CSV 첫 줄은 브랜드, 상품명, 카테고리, 공급가, 살롱가, 정상가, 판매가입니다. 브랜드 이름은 등록된 브랜드와 같아야 하고, 카테고리는 샴푸·컨디셔너·트리트먼트·오일/세럼·스프레이·컬크림·왁스/젤 중 하나입니다.</p>
     <div style="margin:12px 0"><button class="ghost-btn" type="button" onclick="downloadProductTemplate()">양식 다운로드</button></div>
     <input type="file" accept=".csv,text/csv" onchange="readBulkProductFile(this)">
     <div id="bulk-product-result" style="margin-top:12px;font-size:13px;color:#334155"></div>
@@ -1560,8 +1581,10 @@ async function runBulkProductUpload() {
     const name = String(cells[1] || '').trim();
     const category = String(cells[2] || '').trim();
     const supply = Number(cells[3]);
-    const normal = Number(cells[4]);
-    const selling = Number(cells[5]);
+    const hasSalon = cells.length >= 7;
+    const salon = hasSalon ? Number(cells[4]) : Math.round(Number(cells[5]) * 0.7);
+    const normal = Number(hasSalon ? cells[5] : cells[4]);
+    const selling = Number(hasSalon ? cells[6] : cells[5]);
     if (!brand || !name) { errors.push((index + 2) + '행: 브랜드 또는 상품명'); continue; }
     const discount = ProductCatalog.inferDiscount(normal, selling);
     const res = await api('/api/products', 'POST', {
@@ -1569,6 +1592,7 @@ async function runBulkProductUpload() {
       brand_id: brand.id,
       category: category,
       supply_price: supply,
+      salon_price: salon,
       original_price: normal,
       vip_discount_price: selling,
       discount_type: discount.type,
@@ -1621,6 +1645,7 @@ function productWriteBody(product, patch) {
     brand_id: product.brand_id,
     category: ProductCatalog.normalizeCategory(product) || product.category,
     supply_price: product.supply_price || 0,
+    salon_price: productSalonPrice(product),
     original_price: product.original_price,
     discount_type: discount.type,
     discount_value: discount.value,

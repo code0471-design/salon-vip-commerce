@@ -264,17 +264,19 @@ function renderBrandDetail(brand) {
           <span id="brand-block-count-${brand.id}" style="font-size:12px;color:#6b7280">판매 제한 ${(brand.blocked_salon_ids || []).length}곳</span>
         </div>
         <table class="data-table">
-          <thead><tr><th>상품</th><th>카테고리</th><th>공급가</th><th>정가</th><th>판매가</th><th>재고</th></tr></thead>
+          <thead><tr><th>상품</th><th>카테고리</th><th>공급가</th><th>살롱가</th><th>판매가</th><th>본사 마진</th><th>매장 마진</th><th>재고</th></tr></thead>
           <tbody>
             ${products.map((product) => `
               <tr>
                 <td>${product.name}</td>
                 <td>${productCategoryLabel(product)}</td>
-                <td>${product.supply_price ? money(product.supply_price) : '-'}</td>
-                <td>${money(product.original_price)}</td>
+                <td>${money(product.supply_price || 0)}</td>
+                <td>${money(productSalonPrice(product))}</td>
                 <td>${money(product.vip_discount_price)}</td>
+                <td>${money(productHqMargin(product))}</td>
+                <td>${money(productStoreMargin(product))}</td>
                 <td>${stockLabel(product.stock_quantity)}</td>
-              </tr>`).join('') || '<tr><td colspan="6" style="color:#9ca3af">등록된 상품이 없습니다</td></tr>'}
+              </tr>`).join('') || '<tr><td colspan="8" style="color:#9ca3af">등록된 상품이 없습니다</td></tr>'}
           </tbody>
         </table>
       </div>
