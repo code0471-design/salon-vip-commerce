@@ -897,10 +897,10 @@ body {
 .home-category-grid {
   display: flex;
   flex-wrap: nowrap;
-  justify-content: center;
+  justify-content: space-evenly;
   align-items: center;
-  gap: 6px;
-  padding: 14px 10px;
+  gap: 0;
+  padding: 14px 2px;
   overflow-x: auto;
   scrollbar-width: none;
   background: var(--white);
