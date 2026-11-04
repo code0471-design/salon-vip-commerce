@@ -32,6 +32,8 @@ let adminState = {
   productStatuses: ['WAITING', 'SELLING', 'SOLDOUT', 'STOP'],
   productDeleted: false,
   productMarginSort: '',
+  userQuery: '',
+  userSalon: 'ALL',
   pointsSection: 'grant',
   blockedProducts: [],
   loading: false,
@@ -610,56 +612,81 @@ async function submitAddDesigner() {
 // ============================================================
 // USERS PAGE
 // ============================================================
+function userOrderStats(userId) {
+  const orders = (adminState.orders || []).filter((order) => order.user_id === userId && order.payment_status !== 'CANCELLED');
+  return {
+    count: orders.length,
+    amount: orders.reduce((sum, order) => sum + (Number(order.total_amount) || 0), 0),
+  };
+}
+
+function visibleUsers() {
+  const query = (adminState.userQuery || '').trim().toLowerCase();
+  const digits = query.replace(/\D/g, '');
+  const salon = String(adminState.userSalon || 'ALL');
+  return (adminState.users || []).filter((user) => {
+    if (salon !== 'ALL' && String(user.current_salon_id) !== salon && String(user.owned_salon_id) !== salon) return false;
+    if (!query) return true;
+    const phone = String(user.phone || '').replace(/\D/g, '');
+    const text = [user.name, user.phone, user.salon_name, user.designer_name].join(' ').toLowerCase();
+    return text.indexOf(query) >= 0 || (digits.length >= 3 && phone.indexOf(digits) >= 0);
+  });
+}
+
+function setUserFilter(key, value) {
+  adminState[key] = value;
+  const pos = key === 'userQuery' ? String(value).length : 0;
+  renderAdmin();
+  if (key === 'userQuery') {
+    const input = document.getElementById('user-query');
+    if (input) { input.focus(); input.setSelectionRange(pos, input.value.length); }
+  }
+}
+
 function renderUsers() {
+  const users = visibleUsers();
   return `
-    <div style="display:flex;justify-content:space-between;margin-bottom:20px">
-      <h2 style="font-size:18px;font-weight:700">고객 목록 (${adminState.users.length}명)</h2>
-      <p style="font-size:12px;color:#6b7280;margin-top:4px">최근 가입 순</p>
-      <select class="form-select" style="width:180px" onchange="filterUsers(this.value)">
-        <option value="">전체 살롱</option>
-        ${adminState.salons.map(s => `<option value="${s.id}">${s.salon_name}</option>`).join('')}
-      </select>
+    <div class="page-kicker">고객 관리</div>
+    <p class="page-sub">이름, 연락처, 매장, 담당 디자이너로 찾고 주문 건수와 금액을 봅니다.</p>
+    <div class="filter-card">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:220px">
+          <label class="field-label">검색</label>
+          <input class="soft-input" id="user-query" value="${escAttr(adminState.userQuery || '')}" placeholder="이름, 연락처, 매장, 디자이너" oninput="setUserFilter('userQuery', this.value)">
+        </div>
+        <div>
+          <label class="field-label">매장</label>
+          <select class="soft-select" style="min-width:180px" onchange="setUserFilter('userSalon', this.value)">
+            <option value="ALL">전체 매장</option>
+            ${adminState.salons.map((salon) => `<option value="${salon.id}" ${String(adminState.userSalon) === String(salon.id) ? 'selected' : ''}>${escAttr(salon.salon_name)}</option>`).join('')}
+          </select>
+        </div>
+        <span style="margin-left:auto;font-size:12px;color:#94a3b8;padding-bottom:10px">조회 ${users.length}명</span>
+      </div>
     </div>
-    <div class="panel">
+    <div class="panel" style="overflow-x:auto">
       <table class="data-table">
         <thead>
-          <tr><th>고객</th><th>연락처</th><th>소속 살롱</th><th>담당 디자이너</th><th>가입일</th></tr>
+          <tr><th>고객</th><th>연락처</th><th>소속 매장</th><th>담당 디자이너</th><th>주문건수</th><th>주문금액</th><th>가입일</th></tr>
         </thead>
-        <tbody id="user-table-body">
-          ${renderUserRows(adminState.users)}
+        <tbody>
+          ${users.map((user) => {
+            const stats = userOrderStats(user.id);
+            return `
+            <tr>
+              <td style="font-weight:400">${escAttr(user.name || '-')}</td>
+              <td style="color:#6b7280">${escAttr(user.phone || '-')}</td>
+              <td>${user.salon_name ? escAttr(user.salon_name) : '<span style="color:#9ca3af">미등록</span>'}</td>
+              <td>${user.designer_name ? escAttr(user.designer_name) : '<span style="color:#9ca3af">없음</span>'}</td>
+              <td style="font-weight:400">${stats.count}건</td>
+              <td style="font-weight:400">${stats.amount.toLocaleString()}원</td>
+              <td style="color:#9ca3af;font-size:12px">${escAttr(String(user.created_at || '').slice(0, 10))}</td>
+            </tr>`;
+          }).join('') || '<tr><td colspan="7" style="text-align:center;color:#9ca3af;padding:24px">조건에 맞는 고객이 없습니다</td></tr>'}
         </tbody>
       </table>
     </div>
   `;
-}
-
-function renderUserRows(users) {
-  return users.map(u => `
-    <tr>
-      <td>
-        <div style="display:flex;align-items:center;gap:10px">
-          <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#1a1a2e,#0f3460);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:white;flex-shrink:0">
-            ${u.name.charAt(0)}
-          </div>
-          <div>
-            <div style="font-weight:600">${u.name}</div>
-            <div style="font-size:11px;color:#9ca3af">ID: ${u.id}</div>
-          </div>
-        </div>
-      </td>
-      <td style="color:#6b7280">${u.phone || '-'}</td>
-      <td>${u.salon_name ? `<span class="badge badge-active">${u.salon_name}</span>` : '<span style="color:#9ca3af">미등록</span>'}</td>
-      <td>${u.designer_name || '<span style="color:#9ca3af">없음</span>'}</td>
-      <td style="color:#9ca3af;font-size:12px">${new Date(u.created_at).toLocaleDateString('ko-KR')}</td>
-    </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:#9ca3af;padding:24px">고객 없음</td></tr>';
-}
-
-async function filterUsers(salonId) {
-  const res = await api(`/api/users${salonId ? '?salon_id=' + salonId : ''}`);
-  if (res.success) {
-    const tbody = document.getElementById('user-table-body');
-    if (tbody) tbody.innerHTML = renderUserRows(res.data);
-  }
 }
 
 // ============================================================
@@ -1749,6 +1776,7 @@ async function loadPageData(page) {
       await Promise.all([
         api('/api/users').then(r => { if (r.success) adminState.users = r.data; }),
         api('/api/salons').then(r => { if (r.success) adminState.salons = r.data; }),
+        api('/api/orders').then(r => { if (r.success) adminState.orders = r.data; }),
       ]);
       break;
     case 'products':
