@@ -74,6 +74,7 @@ function openStoreBrands() {
 
 function openStorePrices() {
   state.storeView = 'prices';
+  state.priceBrand = 0;
   render();
   window.scrollTo(0, 0);
 }
@@ -1056,41 +1057,68 @@ function storePriceProducts(salon) {
   });
 }
 
+function priceBrandSummary(salon, brand, products) {
+  if (brandBlocksStore(brand, salon.id)) return '본사 판매 제한';
+  const rates = salon.brand_discount_rates || {};
+  const overrides = salon.product_prices || {};
+  const rate = Number(rates[String(brand.id)]) || 0;
+  const custom = products.filter((product) => overrides[String(product.id)] != null && overrides[String(product.id)] !== '').length;
+  const hidden = (salon.hidden_brand_ids || []).includes(brand.id) ? ' · 미노출' : '';
+  const discount = rate ? '할인 ' + rate + '%' : '할인 없음';
+  return '상품 ' + products.length + '개 · ' + discount + (custom ? ' · 개별가 ' + custom + '개' : '') + hidden;
+}
+
 function renderStorePrices() {
   const salon = ownerSalon();
   if (!salon) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
   const products = storePriceProducts(salon);
-  const brandIds = [...new Set(products.map((product) => product.brand_id))];
-  const brands = brandIds
-    .map((id) => (state.brands || []).find((brand) => brand.id === id))
-    .filter(Boolean)
-    .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-  if (!brands.some((brand) => brand.id === state.priceBrand)) state.priceBrand = brands[0] ? brands[0].id : 0;
+  const brands = (state.brands || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   const brand = brands.find((item) => item.id === state.priceBrand) || null;
-  const rates = salon.brand_discount_rates || {};
-  const overrides = salon.product_prices || {};
-  const hidden = new Set(salon.hidden_brand_ids || []);
-  const rate = brand ? (Number(rates[String(brand.id)]) || 0) : 0;
-  const rows = products.filter((product) => !brand || product.brand_id === brand.id);
+  if (!brand) return renderPriceBrandList(salon, brands, products);
+  return renderPriceBrandDetail(salon, brand, products.filter((product) => product.brand_id === brand.id));
+}
+
+function renderPriceBrandList(salon, brands, products) {
   return `
     <div style="padding:20px 16px 28px">
       <button class="store-back" onclick="navigate('store')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>매출</button>
       <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">판매가 설정</h2>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">${escText(salon.salon_name)} 고객에게만 적용됩니다. 본사 판매가보다 높게, 살롱가보다 낮게는 정할 수 없고, 내린 금액은 이 매장 수익에서 빠집니다.</p>
-      ${brands.length > 1 ? `<div class="staff-row">
-        ${brands.map((item) => `<button type="button" class="staff-chip${item.id === state.priceBrand ? ' on' : ''}" onclick="setPriceBrand(${item.id})"><span>${escText(item.name)}</span></button>`).join('')}
-      </div>` : ''}
-      ${brand ? `
-        <div class="price-brand-box">
-          <label>${escText(brand.name)} 일괄 할인</label>
-          <div class="price-rate-row">
-            <input id="brand-rate" type="number" min="0" max="100" step="0.1" value="${rate || ''}" placeholder="0">
-            <span style="font-size:14px;font-weight:700">%</span>
-            <button class="price-apply" onclick="saveBrandDiscount(${brand.id})">적용</button>
-          </div>
-          <p>본사 판매가에서 이 비율만큼 내립니다. 개별 가격을 저장한 상품은 그대로 둡니다.</p>
-        </div>` : '<p style="font-size:13px;color:var(--muted)">판매할 상품이 없습니다.</p>'}
-      ${rows.map((product) => {
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">${escText(salon.salon_name)}에서 할인할 브랜드를 고르세요.</p>
+      ${brands.map((brand) => {
+        const blocked = brandBlocksStore(brand, salon.id);
+        const rows = products.filter((product) => product.brand_id === brand.id);
+        return `
+          <button class="store-menu" onclick="${blocked ? `showToast('본사에서 판매를 제한한 브랜드입니다','error')` : `setPriceBrand(${brand.id})`}">
+            <span>
+              <strong>${escText(brand.name)}</strong>
+              <small>${priceBrandSummary(salon, brand, rows)}</small>
+            </span>
+            <i class="fas fa-chevron-right"></i>
+          </button>`;
+      }).join('') || '<p style="font-size:13px;color:var(--muted)">브랜드가 없습니다.</p>'}
+    </div>`;
+}
+
+function renderPriceBrandDetail(salon, brand, rows) {
+  const rates = salon.brand_discount_rates || {};
+  const overrides = salon.product_prices || {};
+  const hidden = new Set(salon.hidden_brand_ids || []);
+  const rate = Number(rates[String(brand.id)]) || 0;
+  return `
+    <div style="padding:20px 16px 28px">
+      <button class="store-back" onclick="closePriceBrand()"><i class="fas fa-chevron-left" style="margin-right:6px"></i>브랜드 목록</button>
+      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">${escText(brand.name)}</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">이 매장 고객에게만 적용됩니다. 본사 판매가보다 높게, 살롱가보다 낮게는 정할 수 없고, 내린 금액은 이 매장 수익에서 빠집니다.</p>
+      <div class="price-brand-box">
+        <label>일괄 할인</label>
+        <div class="price-rate-row">
+          <input id="brand-rate" type="number" min="0" max="100" step="0.1" value="${rate || ''}" placeholder="0">
+          <span style="font-size:14px;font-weight:700">%</span>
+          <button class="price-apply" onclick="saveBrandDiscount(${brand.id})">적용</button>
+        </div>
+        <p>본사 판매가에서 이 비율만큼 내립니다. 개별 가격을 저장한 상품은 그대로 둡니다.</p>
+      </div>
+      ${rows.length ? rows.map((product) => {
         const hq = ProductCatalog.hqPrice(product);
         const floor = ProductCatalog.salonCost(product);
         const store = ProductCatalog.storeSellingPrice(salon, product);
@@ -1110,13 +1138,20 @@ function renderStorePrices() {
             ${held ? '<div class="price-hold">살롱가가 최저가라 여기까지입니다.</div>' : ''}
             ${custom ? `<button class="price-link" onclick="clearProductPrice(${product.id})">일괄 할인 따르기</button>` : ''}
           </div>`;
-      }).join('')}
+      }).join('') : '<p style="font-size:13px;color:var(--muted);padding-top:8px">이 브랜드 상품이 없습니다.</p>'}
     </div>`;
 }
 
 function setPriceBrand(id) {
   state.priceBrand = id;
   render();
+  window.scrollTo(0, 0);
+}
+
+function closePriceBrand() {
+  state.priceBrand = 0;
+  render();
+  window.scrollTo(0, 0);
 }
 
 async function saveBrandDiscount(brandId) {
