@@ -27,6 +27,11 @@ let adminState = {
   orderStart: '',
   orderEnd: '',
   orderShip: 'ALL',
+  productQuery: '',
+  productBrand: 'ALL',
+  productStatuses: ['WAITING', 'SELLING', 'SOLDOUT', 'STOP'],
+  productDeleted: false,
+  productMarginSort: '',
   pointsSection: 'grant',
   blockedProducts: [],
   loading: false,
@@ -72,7 +77,7 @@ function renderSidebar() {
     { id: 'salons', icon: 'fa-store', label: '살롱 관리', section: null },
     { id: 'designers', icon: 'fa-cut', label: '디자이너 관리', section: null },
     { id: 'brands', icon: 'fa-tags', label: '브랜드 관리', section: 'COMMERCE' },
-    { id: 'products', icon: 'fa-box', label: '서비스/상품', section: null },
+    { id: 'products', icon: 'fa-box', label: '상품 관리', section: null },
     { id: 'users', icon: 'fa-users', label: '고객 관리', section: null },
     { id: 'orders', icon: 'fa-truck', label: '주문/배송', section: null },
     { id: 'coupons', icon: 'fa-ticket-alt', label: '쿠폰 관리', section: null },
@@ -109,7 +114,7 @@ function renderTopbar() {
     salons: '살롱 관리',
     designers: '디자이너 관리',
     users: '고객 관리',
-    products: '서비스/상품 관리',
+    products: '상품 관리',
     orders: '주문/배송',
     brands: '브랜드 관리',
     coupons: '쿠폰 관리',
@@ -674,44 +679,225 @@ function stockLabel(stock) {
   return String(stock);
 }
 
+const PRODUCT_STATUS = [
+  ['WAITING', '등록대기', 'waiting'],
+  ['SELLING', '판매중', 'selling'],
+  ['SOLDOUT', '품절', 'soldout'],
+  ['STOP', '판매중지', 'stop'],
+];
+
+function productNumber(product) {
+  return product.product_number || String(100000 + Number(product.id || 0));
+}
+
+function productSaleState(product) {
+  const status = product.sale_status || (product.is_active ? 'SELLING' : 'STOP');
+  if (status === 'STOP' || status === 'WAITING' || status === 'SOLDOUT') return status;
+  const today = new Date();
+  const day = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+  const start = String(product.sale_start_at || '').slice(0, 10);
+  const end = String(product.sale_end_at || '').slice(0, 10);
+  if ((start && day < start) || (end && day > end)) return 'EXPIRED';
+  if (Number(product.stock_quantity) === 0) return 'SOLDOUT';
+  return 'SELLING';
+}
+
+function productStatusMeta(state) {
+  if (state === 'EXPIRED') return { label: '기간만료', tone: 'stop' };
+  const found = PRODUCT_STATUS.find((item) => item[0] === state);
+  return found ? { label: found[1], tone: found[2] } : { label: '판매중', tone: 'selling' };
+}
+
+function productMarginRate(product) {
+  const selling = Number(product.vip_discount_price) || 0;
+  if (selling <= 0) return null;
+  return Math.round(((selling - (Number(product.supply_price) || 0)) / selling) * 1000) / 10;
+}
+
+function productIsDeleted(product) {
+  return !!product.deleted_at;
+}
+
+function setProductFilter(key, value) {
+  adminState[key] = value;
+  const pos = key === 'productQuery' ? String(value).length : 0;
+  renderAdmin();
+  if (key === 'productQuery') {
+    const input = document.getElementById('product-query');
+    if (input) { input.focus(); input.setSelectionRange(pos, input.value.length); }
+  }
+}
+
+function toggleProductStatus(status) {
+  const all = PRODUCT_STATUS.map((item) => item[0]);
+  const current = Array.isArray(adminState.productStatuses) ? adminState.productStatuses.slice() : all.slice();
+  if (status === 'ALL') adminState.productStatuses = current.length === all.length ? [] : all.slice();
+  else if (current.indexOf(status) >= 0) adminState.productStatuses = current.filter((item) => item !== status);
+  else adminState.productStatuses = current.concat(status);
+  renderAdmin();
+}
+
+function cycleProductMarginSort() {
+  const order = ['', 'desc', 'asc'];
+  const index = order.indexOf(adminState.productMarginSort || '');
+  adminState.productMarginSort = order[(index + 1) % order.length];
+  renderAdmin();
+}
+
+function visibleAdminProducts() {
+  const deleted = !!adminState.productDeleted;
+  const query = (adminState.productQuery || '').trim().toLowerCase();
+  const brand = String(adminState.productBrand || 'ALL');
+  const statuses = Array.isArray(adminState.productStatuses) ? adminState.productStatuses : PRODUCT_STATUS.map((item) => item[0]);
+  const rows = (adminState.products || []).filter((product) => {
+    if (productIsDeleted(product) !== deleted) return false;
+    if (brand !== 'ALL' && String(product.brand_id) !== brand) return false;
+    const state = productSaleState(product);
+    const bucket = state === 'EXPIRED' ? 'STOP' : state;
+    if (statuses.indexOf(bucket) < 0) return false;
+    if (!query) return true;
+    return String(product.name || '').toLowerCase().indexOf(query) >= 0 || productNumber(product).toLowerCase().indexOf(query) >= 0;
+  });
+  rows.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')) || b.id - a.id);
+  const dir = adminState.productMarginSort;
+  if (dir === 'asc' || dir === 'desc') {
+    const sign = dir === 'asc' ? 1 : -1;
+    rows.sort((a, b) => {
+      const left = productMarginRate(a);
+      const right = productMarginRate(b);
+      const av = left == null ? -Infinity : left;
+      const bv = right == null ? -Infinity : right;
+      if (av === bv) return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+      return (av - bv) * sign;
+    });
+  }
+  return rows;
+}
+
+function csvCell(value) {
+  const text = String(value == null ? '' : value);
+  return /[",\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+}
+
+function downloadCsv(filename, rows) {
+  const csv = '\uFEFF' + rows.map((row) => row.map(csvCell).join(',')).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function downloadProductExcel() {
+  const rows = [['상품번호', '등록일', '브랜드', '상품명', '카테고리', '공급가', '정상가', '판매가', '마진%', '노출상태']];
+  visibleAdminProducts().forEach((product) => {
+    const rate = productMarginRate(product);
+    rows.push([
+      productNumber(product),
+      String(product.created_at || '').slice(0, 10),
+      productBrandLabel(product.brand_id),
+      product.name || '',
+      productCategoryLabel(product),
+      product.supply_price || 0,
+      product.original_price || 0,
+      product.vip_discount_price || 0,
+      rate == null ? '' : rate,
+      productStatusMeta(productSaleState(product)).label,
+    ]);
+  });
+  const today = new Date();
+  const stamp = today.getFullYear() + String(today.getMonth() + 1).padStart(2, '0') + String(today.getDate()).padStart(2, '0');
+  downloadCsv('상품목록_' + stamp + '.csv', rows);
+}
+
+function wonText(value) {
+  return (Number(value) || 0).toLocaleString() + '원';
+}
+
 function escAttr(value) {
   return String(value ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 }
 
 function renderProducts() {
+  const rows = visibleAdminProducts();
+  const brands = (adminState.brands || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  const selected = Array.isArray(adminState.productStatuses) ? adminState.productStatuses : PRODUCT_STATUS.map((item) => item[0]);
+  const allOn = PRODUCT_STATUS.every((item) => selected.indexOf(item[0]) >= 0);
+  const arrow = adminState.productMarginSort === 'asc' ? '▲' : adminState.productMarginSort === 'desc' ? '▼' : '↕';
   return `
-    <div style="display:flex;justify-content:space-between;margin-bottom:20px">
-      <h2 style="font-size:18px;font-weight:700">서비스/상품 (${adminState.products.length}개)</h2>
-      <button class="btn btn-accent" onclick="openAddProductModal()"><i class="fas fa-plus"></i> 상품 추가</button>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div>
+        <div class="page-kicker">상품 관리</div>
+        <p class="page-sub">등록된 상품을 조회하고 신규 상품을 등록할 수 있습니다.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="ghost-btn" type="button" onclick="downloadProductExcel()"><i class="fas fa-download"></i> 엑셀 다운로드</button>
+        <button class="ghost-btn" type="button" onclick="openBulkProductModal()"><i class="fas fa-file-csv"></i> 상품 일괄 등록</button>
+        <button class="ghost-btn" type="button" onclick="openBulkImageModal()"><i class="fas fa-image"></i> 이미지 일괄 업로드</button>
+        <button class="btn btn-primary" type="button" onclick="openAddProductModal()"><i class="fas fa-plus"></i> 상품 등록</button>
+      </div>
     </div>
-    <div class="panel">
+    <div class="filter-card">
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:220px">
+          <label class="field-label">검색</label>
+          <input class="soft-input" id="product-query" value="${escAttr(adminState.productQuery || '')}" placeholder="상품명 또는 상품번호 검색" oninput="setProductFilter('productQuery', this.value)">
+        </div>
+        <div>
+          <label class="field-label">브랜드</label>
+          <select class="soft-select" style="min-width:180px" onchange="setProductFilter('productBrand', this.value)">
+            <option value="ALL">전체 브랜드</option>
+            ${brands.map((brand) => `<option value="${brand.id}" ${String(adminState.productBrand) === String(brand.id) ? 'selected' : ''}>${escAttr(brand.name)}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:14px">
+        <div class="field-label">판매 상태</div>
+        <div class="status-checks">
+          <label><input type="checkbox" ${allOn ? 'checked' : ''} onchange="toggleProductStatus('ALL')"> 전체</label>
+          ${PRODUCT_STATUS.map(([value, label]) => `<label><input type="checkbox" ${selected.indexOf(value) >= 0 ? 'checked' : ''} onchange="toggleProductStatus('${value}')"> ${label}</label>`).join('')}
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button type="button" class="product-tab ${adminState.productDeleted ? '' : 'on'}" onclick="setProductFilter('productDeleted', false)">전체 상품</button>
+      <button type="button" class="product-tab ${adminState.productDeleted ? 'on' : ''}" onclick="setProductFilter('productDeleted', true)">삭제된 상품</button>
+    </div>
+    <div class="panel" style="overflow-x:auto">
       <table class="data-table">
         <thead>
-          <tr><th>상품명</th><th>브랜드</th><th>카테고리</th><th>공급가</th><th>정가</th><th>판매가</th><th>재고</th><th>관리</th></tr>
+          <tr>
+            <th>상품번호</th>
+            <th>브랜드</th>
+            <th>상품명</th>
+            <th>공급가</th>
+            <th>정상가</th>
+            <th>판매가</th>
+            <th><button type="button" class="sort-head" onclick="cycleProductMarginSort()">마진% ${arrow}</button></th>
+            <th>노출상태</th>
+            <th>관리</th>
+          </tr>
         </thead>
         <tbody>
-          ${adminState.products.map(p => `
-          <tr>
-            <td>
-              <div style="display:flex;align-items:center;gap:10px">
-                <img src="${escAttr(p.image_url || '')}" style="width:40px;height:40px;border-radius:8px;object-fit:cover;background:#f3f4f6"
-                     onerror="this.style.display='none'">
-                <span style="font-weight:600">${escAttr(p.name)}</span>
-              </div>
-            </td>
-            <td>${escAttr(productBrandLabel(p.brand_id))}</td>
-            <td><span class="badge" style="background:#f3f4f6;color:#374151">${escAttr(productCategoryLabel(p))}</span></td>
-            <td>${p.supply_price ? p.supply_price.toLocaleString() + '원' : '-'}</td>
-            <td style="text-decoration:line-through;color:#9ca3af">${p.original_price.toLocaleString()}원</td>
-            <td style="font-weight:600;color:#e94560">${p.vip_discount_price.toLocaleString()}원</td>
-            <td><span style="color:${p.stock_quantity < 5 ? '#dc2626' : '#16a34a'};font-weight:600">${stockLabel(p.stock_quantity)}</span></td>
-            <td>
-              <div style="display:flex;gap:6px">
-                <button class="btn btn-sm btn-outline" onclick="openEditProductModal(${p.id})"><i class="fas fa-edit"></i></button>
-                <button class="btn btn-sm btn-danger" onclick="deleteProduct(${p.id})"><i class="fas fa-trash"></i></button>
-              </div>
-            </td>
-          </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">상품 없음</td></tr>'}
+          ${rows.map((product) => {
+            const meta = productStatusMeta(productSaleState(product));
+            const rate = productMarginRate(product);
+            return `
+            <tr>
+              <td style="font-weight:400">${escAttr(productNumber(product))}<div style="color:#9ca3af;font-size:12px">${escAttr(String(product.created_at || '').slice(0, 10))}</div></td>
+              <td>${escAttr(productBrandLabel(product.brand_id))}</td>
+              <td>${escAttr(product.name)}</td>
+              <td style="font-weight:400">${wonText(product.supply_price)}</td>
+              <td style="font-weight:400">${wonText(product.original_price)}</td>
+              <td style="font-weight:400">${wonText(product.vip_discount_price)}</td>
+              <td style="font-weight:400;${rate != null && rate < 0 ? 'color:#e11d48' : ''}">${rate == null ? '-' : rate + '%'}</td>
+              <td><span class="sale-badge ${meta.tone}">${meta.label}</span></td>
+              <td>${productIsDeleted(product)
+                ? `<button class="text-link muted" type="button" onclick="restoreProduct(${product.id})">복구</button>`
+                : `<button class="text-link muted" type="button" onclick="openEditProductModal(${product.id})">상세</button>`}</td>
+            </tr>`;
+          }).join('') || `<tr><td colspan="9" style="text-align:center;color:#9ca3af;padding:24px">${adminState.productDeleted ? '삭제된 상품이 없습니다' : '조건에 맞는 상품이 없습니다'}</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -729,7 +915,7 @@ function blankProductDraft(brandId) {
     id: null, name: '', brandId: brandId || '', category: '',
     supplyPrice: '', normalPrice: '', discountRate: '', discountAmount: '', discountSource: 'NONE',
     stock: '', minOrder: '1', purchaseUnit: '1', maxPurchase: '', earnRate: '0', pointUseDisabled: false,
-    salePeriod: 'ALL', saleStart: '', saleEnd: '', imageUrl: '', detailImages: [], description: '',
+    salePeriod: 'ALL', saleStart: '', saleEnd: '', saleStatus: 'SELLING', imageUrl: '', detailImages: [], description: '', deleted: false,
     options: [emptyProductOption()],
   };
 }
@@ -767,6 +953,8 @@ function draftFromProduct(product) {
     salePeriod: product.sale_start_at || product.sale_end_at ? 'CUSTOM' : 'ALL',
     saleStart: product.sale_start_at || '',
     saleEnd: product.sale_end_at || '',
+    saleStatus: product.sale_status || 'SELLING',
+    deleted: !!product.deleted_at,
     imageUrl: product.image_url || '',
     detailImages: Array.isArray(product.detail_image_urls) ? product.detail_image_urls.slice() : [],
     description: product.description || '',
@@ -794,6 +982,7 @@ function readProductDraft() {
   productDraft.salePeriod = read('pf-sale-period');
   productDraft.saleStart = read('pf-sale-start');
   productDraft.saleEnd = read('pf-sale-end');
+  productDraft.saleStatus = read('pf-sale-status') || productDraft.saleStatus;
   productDraft.description = read('pf-desc');
   productDraft.options.forEach((option, index) => {
     const name = read('pf-opt-name-' + index);
@@ -890,8 +1079,13 @@ function productFormHtml() {
         <div class="form-group"><label class="form-label">판매가</label><div class="form-input price-input price-computed" id="pf-selling">${selling.toLocaleString()}원</div></div>
         <div class="form-group"><label class="form-label">마진</label><div class="form-input price-input price-computed" id="pf-margin">${margin.toLocaleString()}원${marginRate != null ? ' (' + marginRate + '%)' : ''}</div></div>
       </div>
-      <div class="price-grid" style="grid-template-columns:repeat(4,1fr)">
+      <div class="price-grid" style="grid-template-columns:repeat(5,1fr)">
         <div class="form-group"><label class="form-label">재고 수량</label><input class="form-input price-input" id="pf-stock" type="number" min="0" placeholder="제한없음" value="${escAttr(productDraft.stock)}"></div>
+        <div class="form-group"><label class="form-label">판매 상태</label>
+          <select class="form-select" id="pf-sale-status">
+            ${PRODUCT_STATUS.map(([value, label]) => `<option value="${value}" ${productDraft.saleStatus === value ? 'selected' : ''}>${label}</option>`).join('')}
+          </select>
+        </div>
         <div class="form-group"><label class="form-label">최소 발주 수량</label><input class="form-input price-input" id="pf-min" type="number" min="1" value="${escAttr(productDraft.minOrder)}"></div>
         <div class="form-group"><label class="form-label">추가 단위</label><input class="form-input price-input" id="pf-unit" type="number" min="1" value="${escAttr(productDraft.purchaseUnit)}"></div>
         <div class="form-group"><label class="form-label">최대 구매 수량</label><input class="form-input price-input" id="pf-max" type="number" min="1" placeholder="제한없음" value="${escAttr(productDraft.maxPurchase)}"></div>
@@ -946,7 +1140,9 @@ function productFormHtml() {
     </div>
     <div style="display:flex;gap:10px;margin-top:18px">
       <button class="btn btn-outline" style="flex:1" onclick="closeModal()">취소</button>
-      <button class="btn btn-accent" style="flex:1" onclick="submitProductForm()"><i class="fas fa-save"></i> 저장</button>
+      ${productDraft.id && !productDraft.deleted ? `<button class="btn btn-outline" type="button" onclick="deleteProduct(${productDraft.id})">삭제</button>` : ''}
+      ${productDraft.deleted ? `<button class="btn btn-outline" type="button" onclick="restoreProduct(${productDraft.id})">복구</button>` : ''}
+      <button class="btn btn-primary" style="flex:1" onclick="submitProductForm()"><i class="fas fa-save"></i> 저장</button>
     </div>
   `;
 }
@@ -1110,6 +1306,7 @@ async function submitProductForm() {
     sale_period: productDraft.salePeriod,
     sale_start_at: productDraft.saleStart,
     sale_end_at: productDraft.saleEnd,
+    sale_status: productDraft.saleStatus || 'SELLING',
     image_url: productDraft.imageUrl,
     detail_image_urls: productDraft.detailImages || [],
     description: productDraft.description,
@@ -1133,9 +1330,217 @@ async function submitProductForm() {
 }
 
 async function deleteProduct(id) {
-  if (!confirm('이 상품을 비활성화하시겠습니까?')) return;
-  await api(`/api/products/${id}`, 'DELETE');
-  showToast('비활성화되었습니다', 'success'); await loadPageData('products');
+  if (!confirm('삭제된 상품 목록으로 옮깁니다. 계속할까요?')) return;
+  const res = await api(`/api/products/${id}`, 'DELETE');
+  if (!res.success) { showToast(res.error || '삭제하지 못했습니다', 'error'); return; }
+  closeModal();
+  showToast('삭제된 상품으로 옮겼습니다', 'success');
+  await loadPageData('products');
+}
+
+async function restoreProduct(id) {
+  const res = await api('/api/products/' + id + '/restore', 'POST');
+  if (!res.success) { showToast(res.error || '복구하지 못했습니다', 'error'); return; }
+  closeModal();
+  showToast('상품을 복구했습니다', 'success');
+  await loadPageData('products');
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  const src = String(text || '').replace(/^\uFEFF/, '');
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (quoted) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') { cell += '"'; i += 1; }
+        else quoted = false;
+      } else cell += ch;
+    } else if (ch === '"') quoted = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else if (ch !== '\r') cell += ch;
+  }
+  if (cell.length || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter((item) => item.some((value) => String(value).trim()));
+}
+
+function downloadProductTemplate() {
+  downloadCsv('상품일괄등록.csv', [
+    ['브랜드', '상품명', '카테고리', '공급가', '정상가', '판매가'],
+    ['SUBLIMIC', '샘플 샴푸', '샴푸', '12000', '20000', '18000'],
+  ]);
+}
+
+function openBulkProductModal() {
+  window.__bulkProductRows = null;
+  showModal(`
+    <h3 style="font-size:18px;font-weight:800;margin-bottom:8px">상품 일괄 등록</h3>
+    <p style="font-size:13px;color:#64748b;line-height:1.5">CSV 첫 줄은 브랜드, 상품명, 카테고리, 공급가, 정상가, 판매가입니다. 브랜드 이름은 등록된 브랜드와 같아야 하고, 카테고리는 샴푸·컨디셔너·트리트먼트·오일/세럼·스프레이·컬크림·왁스/젤 중 하나입니다.</p>
+    <div style="margin:12px 0"><button class="ghost-btn" type="button" onclick="downloadProductTemplate()">양식 다운로드</button></div>
+    <input type="file" accept=".csv,text/csv" onchange="readBulkProductFile(this)">
+    <div id="bulk-product-result" style="margin-top:12px;font-size:13px;color:#334155"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-outline" style="flex:1" type="button" onclick="closeModal()">닫기</button>
+      <button class="btn btn-primary" style="flex:1" type="button" onclick="runBulkProductUpload()">등록</button>
+    </div>
+  `);
+}
+
+function readBulkProductFile(input) {
+  const file = input.files && input.files[0];
+  const box = document.getElementById('bulk-product-result');
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const rows = parseCsv(String(reader.result || ''));
+    const head = (rows[0] || []).map((cell) => cell.trim());
+    if (head[0] !== '브랜드' || head[1] !== '상품명') {
+      window.__bulkProductRows = null;
+      if (box) box.textContent = '첫 줄 헤더를 확인해 주세요. 양식 다운로드 파일을 사용하면 됩니다.';
+      return;
+    }
+    window.__bulkProductRows = rows.slice(1);
+    if (box) box.textContent = window.__bulkProductRows.length + '개 행을 읽었습니다.';
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+async function runBulkProductUpload() {
+  const rows = window.__bulkProductRows || [];
+  const box = document.getElementById('bulk-product-result');
+  if (!rows.length) { if (box) box.textContent = 'CSV 파일을 먼저 선택해 주세요.'; return; }
+  const brands = adminState.brands || [];
+  let ok = 0;
+  const errors = [];
+  for (let index = 0; index < rows.length; index++) {
+    const cells = rows[index];
+    const brand = brands.find((item) => item.name === String(cells[0] || '').trim());
+    const name = String(cells[1] || '').trim();
+    const category = String(cells[2] || '').trim();
+    const supply = Number(cells[3]);
+    const normal = Number(cells[4]);
+    const selling = Number(cells[5]);
+    if (!brand || !name) { errors.push((index + 2) + '행: 브랜드 또는 상품명'); continue; }
+    const discount = ProductCatalog.inferDiscount(normal, selling);
+    const res = await api('/api/products', 'POST', {
+      name: name,
+      brand_id: brand.id,
+      category: category,
+      supply_price: supply,
+      original_price: normal,
+      vip_discount_price: selling,
+      discount_type: discount.type,
+      discount_value: discount.value,
+      sale_status: 'SELLING',
+      stock_quantity: '',
+    });
+    if (res.success) ok += 1;
+    else errors.push((index + 2) + '행: ' + (res.error || '실패'));
+  }
+  if (box) box.textContent = ok + '개 등록' + (errors.length ? ' · ' + errors.slice(0, 5).join(' / ') : '');
+  await loadPageData('products');
+}
+
+function openBulkImageModal() {
+  window.__bulkImageFiles = [];
+  showModal(`
+    <h3 style="font-size:18px;font-weight:800;margin-bottom:8px">이미지 일괄 업로드</h3>
+    <p style="font-size:13px;color:#64748b;line-height:1.5">파일 이름에서 확장자를 뺀 값이 상품번호와 같으면 썸네일입니다. 상품번호_2, 상품번호_3 은 상세 이미지로 붙습니다.</p>
+    <div style="margin-top:12px"><input type="file" accept="image/*" multiple onchange="readBulkImageFiles(this)"></div>
+    <div id="bulk-image-result" style="margin-top:12px;font-size:13px;color:#334155"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-outline" style="flex:1" type="button" onclick="closeModal()">닫기</button>
+      <button class="btn btn-primary" style="flex:1" type="button" onclick="runBulkImageUpload()">업로드</button>
+    </div>
+  `);
+}
+
+function readBulkImageFiles(input) {
+  window.__bulkImageFiles = input.files ? Array.from(input.files) : [];
+  const box = document.getElementById('bulk-image-result');
+  if (box) box.textContent = window.__bulkImageFiles.length + '개 이미지를 선택했습니다.';
+}
+
+function readImageFile(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('이미지를 읽지 못했습니다'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function productWriteBody(product, patch) {
+  const discount = product.discount_type
+    ? { type: product.discount_type, value: product.discount_value || 0 }
+    : ProductCatalog.inferDiscount(product.original_price, product.vip_discount_price);
+  return Object.assign({
+    name: product.name,
+    brand_id: product.brand_id,
+    category: ProductCatalog.normalizeCategory(product) || product.category,
+    supply_price: product.supply_price || 0,
+    original_price: product.original_price,
+    discount_type: discount.type,
+    discount_value: discount.value,
+    vip_discount_price: product.vip_discount_price,
+    stock_quantity: product.stock_quantity >= ProductCatalog.UNLIMITED_STOCK ? '' : product.stock_quantity,
+    min_order_quantity: product.min_order_quantity || 1,
+    purchase_unit: product.purchase_unit || 1,
+    max_purchase_quantity: product.max_purchase_quantity,
+    earn_points_rate: product.earn_points_rate || 0,
+    point_use_disabled: product.point_use_disabled,
+    sale_period: product.sale_start_at || product.sale_end_at ? 'CUSTOM' : 'ALL',
+    sale_start_at: product.sale_start_at || '',
+    sale_end_at: product.sale_end_at || '',
+    sale_status: product.sale_status || 'SELLING',
+    image_url: product.image_url || '',
+    detail_image_urls: Array.isArray(product.detail_image_urls) ? product.detail_image_urls.slice() : [],
+    description: product.description || '',
+    options: product.options || [],
+  }, patch || {});
+}
+
+async function runBulkImageUpload() {
+  const files = window.__bulkImageFiles || [];
+  const box = document.getElementById('bulk-image-result');
+  if (!files.length) { if (box) box.textContent = '이미지를 먼저 선택해 주세요.'; return; }
+  const groups = {};
+  files.forEach((file) => {
+    const base = file.name.replace(/\.[^.]+$/, '');
+    const detail = base.match(/^(.*)_(\d+)$/);
+    const number = detail && Number(detail[2]) >= 2 ? detail[1] : base;
+    const order = detail && Number(detail[2]) >= 2 ? Number(detail[2]) : 1;
+    if (!groups[number]) groups[number] = [];
+    groups[number].push({ file: file, detail: !!(detail && Number(detail[2]) >= 2), order: order });
+  });
+  let ok = 0;
+  const errors = [];
+  const numbers = Object.keys(groups);
+  for (let i = 0; i < numbers.length; i++) {
+    const number = numbers[i];
+    const product = (adminState.products || []).find((item) => productNumber(item) === number && !item.deleted_at);
+    if (!product) { errors.push(number + ': 상품번호 없음'); continue; }
+    const images = groups[number].slice().sort((a, b) => a.order - b.order);
+    let thumb = product.image_url || '';
+    const details = Array.isArray(product.detail_image_urls) ? product.detail_image_urls.slice() : [];
+    for (let j = 0; j < images.length; j++) {
+      const url = await readImageFile(images[j].file);
+      if (images[j].detail) details.push(url);
+      else thumb = url;
+    }
+    const res = await api('/api/products/' + product.id, 'PUT', productWriteBody(product, {
+      image_url: thumb,
+      detail_image_urls: details.slice(0, 8),
+    }));
+    if (res.success) ok += 1;
+    else errors.push(number + ': ' + (res.error || '실패'));
+  }
+  if (box) box.textContent = ok + '개 상품에 이미지를 넣었습니다' + (errors.length ? ' · ' + errors.slice(0, 5).join(' / ') : '');
+  await loadPageData('products');
 }
 
 // ============================================================
@@ -1348,7 +1753,7 @@ async function loadPageData(page) {
       break;
     case 'products':
       await Promise.all([
-        api('/api/products').then(r => { if (r.success) adminState.products = r.data; }),
+        api('/api/products?admin=1').then(r => { if (r.success) adminState.products = r.data; }),
         api('/api/brands').then(r => { if (r.success) adminState.brands = r.data; }),
       ]);
       break;

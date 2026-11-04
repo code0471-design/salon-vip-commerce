@@ -15,6 +15,12 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
   }
 
+  function applyProductListing(product) {
+    const status = product.sale_status || 'SELLING';
+    product.is_active = product.deleted_at || status === 'STOP' || status === 'WAITING' ? 0 : 1;
+    if (!product.product_number) product.product_number = String(100000 + Number(product.id || 0));
+  }
+
   function nextId(list) {
     return list.reduce((max, item) => Math.max(max, item.id || 0), 0) + 1;
   }
@@ -254,9 +260,10 @@
     ['POST', /^\/api\/seed-db$/, () => ({ data: { seeded: true } })],
     ['GET', /^\/api\/products$/, (req) => {
       const best = req.query.get('best') === '1';
-      let products = db.products.filter((p) => p.is_active);
+      const admin = req.query.get('admin') === '1';
+      let products = admin ? db.products.slice() : db.products.filter((p) => p.is_active && !p.deleted_at);
       if (best) products = products.filter((p) => p.is_best);
-      products = visibleProducts(products, req.query.get('salon_id'));
+      if (!admin) products = visibleProducts(products, req.query.get('salon_id'));
       return { data: products };
     }],
     ['POST', /^\/api\/products$/, (req) => {
@@ -265,14 +272,24 @@
       const product = {
         id: nextId(db.products),
         ...parsed.fields,
-        is_active: 1,
         is_best: 0,
         rating: 0,
         review_count: 0,
+        deleted_at: '',
         created_at: nowStamp(),
       };
+      applyProductListing(product);
       db.products.push(product);
       ProductCatalog.syncPointBlock(db, product);
+      save();
+      return { data: product };
+    }],
+    ['POST', /^\/api\/products\/(\d+)\/restore$/, (req, id) => {
+      const product = db.products.find((p) => p.id === Number(id));
+      if (!product) return { status: 404, error: '상품을 찾을 수 없습니다' };
+      product.deleted_at = '';
+      if (!product.sale_status || product.sale_status === 'STOP') product.sale_status = 'SELLING';
+      applyProductListing(product);
       save();
       return { data: product };
     }],
@@ -282,6 +299,7 @@
       const parsed = ProductCatalog.readProductBody(req.body || {});
       if (parsed.error) return { status: 400, error: parsed.error };
       Object.assign(product, parsed.fields);
+      applyProductListing(product);
       ProductCatalog.syncPointBlock(db, product);
       save();
       return { data: product };
@@ -289,9 +307,10 @@
     ['DELETE', /^\/api\/products\/(\d+)$/, (req, id) => {
       const product = db.products.find((p) => p.id === Number(id));
       if (!product) return { status: 404, error: '상품을 찾을 수 없습니다' };
+      product.deleted_at = nowStamp();
       product.is_active = 0;
       save();
-      return { data: { id: product.id, is_active: 0 } };
+      return { data: { id: product.id, deleted_at: product.deleted_at } };
     }],
     ['GET', /^\/api\/salons$/, () => ({ data: db.salons.map(publicSalon) })],
     ['POST', /^\/api\/salons$/, (req) => {

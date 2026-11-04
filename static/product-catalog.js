@@ -77,6 +77,11 @@
       product.discount_type = discount.type;
       product.discount_value = discount.value;
     }
+    if (!product.product_number && product.id) product.product_number = String(100000 + Number(product.id));
+    if (product.deleted_at == null) product.deleted_at = '';
+    if (!product.sale_status) {
+      product.sale_status = !product.is_active ? 'STOP' : (Number(product.stock_quantity) === 0 ? 'SOLDOUT' : 'SELLING');
+    }
     return product;
   }
 
@@ -87,10 +92,12 @@
     const selling = Number(body && body.vip_discount_price);
     const supply = Number(body && body.supply_price);
     const category = canonicalCategory(body && body.category);
+    const statuses = ['WAITING', 'SELLING', 'SOLDOUT', 'STOP'];
+    const saleStatus = statuses.indexOf(body && body.sale_status) >= 0 ? body.sale_status : 'SELLING';
     if (!name) return { error: '상품명을 입력하세요' };
     if (!brandId) return { error: '브랜드를 선택하세요' };
     if (!category || CATEGORIES.indexOf(category) < 0) return { error: '카테고리를 선택하세요' };
-    if (!supply) return { error: '공급가를 입력하세요' };
+    if (body.supply_price === '' || body.supply_price == null || Number.isNaN(supply)) return { error: '공급가를 입력하세요' };
     if (!normal) return { error: '정가를 입력하세요' };
     if (!body || body.vip_discount_price === '' || body.vip_discount_price == null || Number.isNaN(selling)) {
       return { error: '판매가를 확인하세요' };
@@ -139,6 +146,7 @@
         detail_image_urls: (Array.isArray(body.detail_image_urls) ? body.detail_image_urls : []).filter(Boolean).slice(0, 8),
         description: body.description || '',
         options: options,
+        sale_status: saleStatus,
       },
     };
   }

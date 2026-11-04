@@ -461,3 +461,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
   .order-page .order-summary .metric-row { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .form-split section + section { border-left: 0; border-top: 1px solid #f1f5f9; }
 }
+.product-tab { border: 1px solid #e2e8f0; background: #fff; color: #475569; border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.product-tab.on { background: #1e293b; border-color: #1e293b; color: #fff; }
+.status-checks { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: #475569; }
+.status-checks label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.sale-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 600; }
+.sale-badge.selling { background: #dcfce7; color: #15803d; }
+.sale-badge.waiting { background: #fef3c7; color: #b45309; }
+.sale-badge.soldout { background: #fee2e2; color: #b91c1c; }
+.sale-badge.stop { background: #f1f5f9; color: #475569; }
+.sort-head { border: 0; background: none; color: #64748b; font-size: 12px; font-weight: 600; cursor: pointer; padding: 0; }
