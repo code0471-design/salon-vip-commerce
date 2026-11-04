@@ -249,20 +249,68 @@
     return { price: amount };
   }
 
-  function orderStorePayout(order) {
+  function readOrderItems(order) {
     let items = order && order.order_items;
     if (typeof items === 'string') {
       try { items = JSON.parse(items || '[]'); } catch (error) { items = []; }
     }
+    return Array.isArray(items) ? items : [];
+  }
+
+  function orderStorePayout(order) {
+    const items = readOrderItems(order);
     const total = Number(order && order.total_amount) || 0;
-    if (!Array.isArray(items) || !items.length) return Math.round(total * 0.3);
+    if (!items.length) return Math.round(total * 0.3);
+    const sale = items.reduce((sum, item) => sum + (Number(item.price) || 0) * (Number(item.qty) || 0), 0);
     const priced = items.every((item) => item && item.salon_price != null && item.salon_price !== '');
-    if (!priced) return Math.round(total * 0.3);
+    if (!priced) return Math.round((sale || total) * 0.3);
     return items.reduce((sum, item) => {
       const qty = Number(item.qty) || 0;
       const profit = (Number(item.price) || 0) - (Number(item.salon_price) || 0);
       return sum + Math.max(0, profit) * qty;
     }, 0);
+  }
+
+  function orderMoney(order, findProduct) {
+    const items = readOrderItems(order);
+    const coupon = Math.max(0, Number(order && order.coupon_discount) || 0);
+    const points = Math.max(0, Number(order && order.points_used) || 0);
+    const lookup = typeof findProduct === 'function' ? findProduct : function () { return null; };
+    let sale = 0;
+    let supply = 0;
+    let salonFromCatalog = 0;
+    const hasLineSalon = items.length > 0 && items.every((item) => item && item.salon_price != null && item.salon_price !== '');
+    items.forEach((item) => {
+      const qty = Number(item.qty) || 0;
+      const product = lookup(item.product_id) || {};
+      const price = item.price != null && item.price !== '' ? Number(item.price) : hqPrice(product);
+      sale += price * qty;
+      const lineSupply = item.supply_price != null && item.supply_price !== ''
+        ? Number(item.supply_price)
+        : (product.supply_price != null && product.supply_price !== '' ? Number(product.supply_price) : Math.round(price * 0.4));
+      const lineSalon = item.salon_price != null && item.salon_price !== ''
+        ? Number(item.salon_price)
+        : (product.salon_price != null && product.salon_price !== '' ? Number(product.salon_price) : Math.round(price * 0.7));
+      supply += lineSupply * qty;
+      salonFromCatalog += lineSalon * qty;
+    });
+    if (!items.length) {
+      sale = (Number(order && order.total_amount) || 0) + coupon + points;
+      supply = Math.round(sale * 0.4);
+      salonFromCatalog = Math.round(sale * 0.7);
+    }
+    const storePayout = hasLineSalon ? Math.max(0, sale - salonFromCatalog) : orderStorePayout(order);
+    const salonCost = hasLineSalon ? salonFromCatalog : Math.max(0, sale - storePayout);
+    return {
+      sale: sale,
+      coupon: coupon,
+      points: points,
+      paid: Math.max(0, sale - coupon - points),
+      supply: supply,
+      salonCost: salonCost,
+      storePayout: storePayout,
+      hqMargin: salonCost - supply - coupon,
+    };
   }
 
   function syncPointBlock(db, product) {
@@ -291,6 +339,7 @@
     validateDiscountRate: validateDiscountRate,
     validateStorePrice: validateStorePrice,
     orderStorePayout: orderStorePayout,
+    orderMoney: orderMoney,
     syncPointBlock: syncPointBlock,
   };
 });

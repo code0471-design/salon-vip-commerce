@@ -271,9 +271,9 @@ function salonPeriodRow(salon, period) {
   const inMonth = db.orders.filter((order) => order.salon_id === salon.id && String(order.created_at).slice(0, 7) === period);
   const paid = inMonth.filter((order) => order.payment_status === 'PAID');
   const cancelled = inMonth.filter((order) => order.payment_status === 'CANCELLED' || order.payment_status === 'REFUNDED');
-  const sales = paid.reduce((sum, order) => sum + (order.total_amount || 0), 0);
-  const pointsUsed = paid.reduce((sum, order) => sum + (order.points_used || 0), 0);
-  const couponDiscount = paid.reduce((sum, order) => sum + (order.coupon_discount || 0), 0);
+  const findProduct = (id) => db.products.find((product) => product.id === Number(id));
+  const money = paid.map((order) => catalog.orderMoney(order, findProduct));
+  const sumMoney = (key) => money.reduce((sum, row) => sum + (row[key] || 0), 0);
   const shippingFee = paid.reduce((sum, order) => sum + (order.shipping_fee || 0), 0);
   const cancelledAmount = cancelled.reduce((sum, order) => sum + (order.total_amount || 0), 0);
   const id = `S${salon.id}-${period}`;
@@ -284,24 +284,33 @@ function salonPeriodRow(salon, period) {
     owner_name: salon.owner_name,
     period,
     orders: paid.length,
-    sales,
-    paid_amount: Math.max(0, sales - pointsUsed - couponDiscount),
+    sales: sumMoney('sale'),
+    paid_amount: sumMoney('paid'),
     cancelled_amount: cancelledAmount,
-    points_used: pointsUsed,
-    coupon_discount: couponDiscount,
+    points_used: sumMoney('points'),
+    coupon_discount: sumMoney('coupon'),
+    supply_amount: sumMoney('supply'),
+    hq_margin: sumMoney('hqMargin'),
     shipping_fee: shippingFee,
-    payout: paid.reduce((sum, order) => sum + catalog.orderStorePayout(order), 0),
+    payout: sumMoney('storePayout'),
     designer_payout: 0,
     status: settlementStatusFor(id, period),
-    lines: paid.map(publicOrder).map((order) => ({
-      order_id: order.id,
-      created_at: order.created_at,
-      user_name: order.user_name,
-      designer_name: order.designer_name,
-      designer_status: order.designer_status,
-      sales: order.total_amount,
-      designer_payout: 0,
-    })),
+    lines: paid.map(publicOrder).map((order) => {
+      const row = catalog.orderMoney(order, findProduct);
+      return {
+        order_id: order.id,
+        created_at: order.created_at,
+        user_name: order.user_name,
+        designer_name: order.designer_name,
+        designer_status: order.designer_status,
+        sales: row.sale,
+        paid_amount: row.paid,
+        coupon_discount: row.coupon,
+        payout: row.storePayout,
+        hq_margin: row.hqMargin,
+        designer_payout: 0,
+      };
+    }),
   };
 }
 
@@ -314,6 +323,8 @@ function summarizeSettlementRows(rows) {
     cancelled_amount: sum('cancelled_amount'),
     points_used: sum('points_used'),
     coupon_discount: sum('coupon_discount'),
+    supply_amount: sum('supply_amount'),
+    hq_margin: sum('hq_margin'),
     shipping_fee: sum('shipping_fee'),
     payout: sum('payout'),
     designer_payout: 0,
@@ -877,6 +888,7 @@ const routes = [
         qty,
         price,
         salon_price: salonPrice,
+        supply_price: Number(product.supply_price) || 0,
         hq_price: catalog.hqPrice(product),
       });
     }
