@@ -34,6 +34,15 @@ let adminState = {
   productMarginSort: '',
   userQuery: '',
   userSalon: 'ALL',
+  userOrderMin: '',
+  userOrderMax: '',
+  userAmountMin: '',
+  userAmountMax: '',
+  userPointPresence: 'ALL',
+  userPointMin: '',
+  userPointMax: '',
+  userCouponPresence: 'ALL',
+  userCouponId: '',
   pointsSection: 'grant',
   blockedProducts: [],
   loading: false,
@@ -620,34 +629,90 @@ function userOrderStats(userId) {
   };
 }
 
+function userBoundOk(value, minRaw, maxRaw) {
+  const min = String(minRaw == null ? '' : minRaw).trim();
+  const max = String(maxRaw == null ? '' : maxRaw).trim();
+  if (min !== '' && value < Number(min)) return false;
+  if (max !== '' && value > Number(max)) return false;
+  return true;
+}
+
+function userHeldCouponIds(user) {
+  return (Array.isArray(user.coupon_ids) ? user.coupon_ids : []).map(Number).filter((id) => id);
+}
+
 function visibleUsers() {
   const query = (adminState.userQuery || '').trim().toLowerCase();
   const digits = query.replace(/\D/g, '');
   const salon = String(adminState.userSalon || 'ALL');
+  const pointMode = adminState.userPointPresence || 'ALL';
+  const couponMode = adminState.userCouponPresence || 'ALL';
+  const couponId = String(adminState.userCouponId || '');
   return (adminState.users || []).filter((user) => {
     if (salon !== 'ALL' && String(user.current_salon_id) !== salon && String(user.owned_salon_id) !== salon) return false;
-    if (!query) return true;
-    const phone = String(user.phone || '').replace(/\D/g, '');
-    const text = [user.name, user.phone, user.salon_name, user.designer_name].join(' ').toLowerCase();
-    return text.indexOf(query) >= 0 || (digits.length >= 3 && phone.indexOf(digits) >= 0);
+    if (query) {
+      const phone = String(user.phone || '').replace(/\D/g, '');
+      const text = [user.name, user.phone, user.salon_name, user.designer_name].join(' ').toLowerCase();
+      if (text.indexOf(query) < 0 && !(digits.length >= 3 && phone.indexOf(digits) >= 0)) return false;
+    }
+    const stats = userOrderStats(user.id);
+    if (!userBoundOk(stats.count, adminState.userOrderMin, adminState.userOrderMax)) return false;
+    if (!userBoundOk(stats.amount, adminState.userAmountMin, adminState.userAmountMax)) return false;
+    const points = Number(user.points) || 0;
+    if (pointMode === 'HAS' && points <= 0) return false;
+    if (pointMode === 'NONE' && points > 0) return false;
+    if (pointMode !== 'NONE' && !userBoundOk(points, adminState.userPointMin, adminState.userPointMax)) return false;
+    const held = userHeldCouponIds(user);
+    if (couponMode === 'HAS' && !held.length) return false;
+    if (couponMode === 'NONE' && held.length) return false;
+    if (couponMode !== 'NONE' && couponId && held.map(String).indexOf(couponId) < 0) return false;
+    return true;
   });
 }
 
-function setUserFilter(key, value) {
+function setUserFilter(key, value, inputId) {
   adminState[key] = value;
-  const pos = key === 'userQuery' ? String(value).length : 0;
+  const id = inputId || (key === 'userQuery' ? 'user-query' : '');
   renderAdmin();
-  if (key === 'userQuery') {
-    const input = document.getElementById('user-query');
-    if (input) { input.focus(); input.setSelectionRange(pos, input.value.length); }
+  if (id) {
+    const input = document.getElementById(id);
+    if (input) {
+      input.focus();
+      const pos = String(value).length;
+      if (input.setSelectionRange) input.setSelectionRange(pos, pos);
+    }
   }
+}
+
+function setUserNumber(key, value, inputId) {
+  setUserFilter(key, String(value).replace(/[^\d]/g, ''), inputId);
+}
+
+function resetUserConditions() {
+  adminState.userOrderMin = '';
+  adminState.userOrderMax = '';
+  adminState.userAmountMin = '';
+  adminState.userAmountMax = '';
+  adminState.userPointPresence = 'ALL';
+  adminState.userPointMin = '';
+  adminState.userPointMax = '';
+  adminState.userCouponPresence = 'ALL';
+  adminState.userCouponId = '';
+  renderAdmin();
 }
 
 function renderUsers() {
   const users = visibleUsers();
+  const pointMode = adminState.userPointPresence || 'ALL';
+  const couponMode = adminState.userCouponPresence || 'ALL';
+  const coupons = (adminState.coupons || []).filter((coupon) => coupon.status !== 'STOPPED');
+  const presence = (key, current) => ['ALL', 'HAS', 'NONE'].map((value) => {
+    const label = value === 'ALL' ? '전체' : value === 'HAS' ? '있음' : '없음';
+    return `<button type="button" class="presence-chip ${current === value ? 'on' : ''}" onclick="setUserFilter('${key}', '${value}')">${label}</button>`;
+  }).join('');
   return `
     <div class="page-kicker">고객 관리</div>
-    <p class="page-sub">이름, 연락처, 매장, 담당 디자이너로 찾고 주문 건수와 금액을 봅니다.</p>
+    <p class="page-sub">이름과 매장, 주문 건수·금액, 포인트, 쿠폰으로 고객을 찾습니다.</p>
     <div class="filter-card">
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
         <div style="flex:1;min-width:220px">
@@ -661,7 +726,53 @@ function renderUsers() {
             ${adminState.salons.map((salon) => `<option value="${salon.id}" ${String(adminState.userSalon) === String(salon.id) ? 'selected' : ''}>${escAttr(salon.salon_name)}</option>`).join('')}
           </select>
         </div>
+        <button type="button" class="ghost-btn" onclick="resetUserConditions()">초기화</button>
         <span style="margin-left:auto;font-size:12px;color:#94a3b8;padding-bottom:10px">조회 ${users.length}명</span>
+      </div>
+      <div class="range-line">
+        <span class="range-label">총 주문건수</span>
+        <span class="range-box">
+          <input id="user-order-min" inputmode="numeric" value="${escAttr(adminState.userOrderMin)}" placeholder="0" oninput="setUserNumber('userOrderMin', this.value, 'user-order-min')">
+          <span>~</span>
+          <input id="user-order-max" inputmode="numeric" value="${escAttr(adminState.userOrderMax)}" placeholder="제한없음" oninput="setUserNumber('userOrderMax', this.value, 'user-order-max')">
+          <span>건</span>
+        </span>
+        <span class="range-split"></span>
+        <span class="range-label">총 주문금액</span>
+        <span class="range-box">
+          <input id="user-amount-min" inputmode="numeric" value="${escAttr(adminState.userAmountMin)}" placeholder="0" oninput="setUserNumber('userAmountMin', this.value, 'user-amount-min')">
+          <span>~</span>
+          <input id="user-amount-max" inputmode="numeric" value="${escAttr(adminState.userAmountMax)}" placeholder="제한없음" oninput="setUserNumber('userAmountMax', this.value, 'user-amount-max')">
+          <span>원</span>
+        </span>
+      </div>
+      <div class="presence-row">
+        <div class="presence-card">
+          <div class="field-label">포인트</div>
+          <div class="presence-tools">
+            ${presence('userPointPresence', pointMode)}
+            <span class="range-box ${pointMode === 'NONE' ? 'is-off' : ''}">
+              <input id="user-point-min" inputmode="numeric" value="${escAttr(adminState.userPointMin)}" placeholder="0" ${pointMode === 'NONE' ? 'disabled' : ''} oninput="setUserNumber('userPointMin', this.value, 'user-point-min')">
+              <span>이상</span>
+              <span class="range-split"></span>
+              <input id="user-point-max" inputmode="numeric" value="${escAttr(adminState.userPointMax)}" placeholder="제한없음" ${pointMode === 'NONE' ? 'disabled' : ''} oninput="setUserNumber('userPointMax', this.value, 'user-point-max')">
+              <span>이하</span>
+            </span>
+          </div>
+        </div>
+        <div class="presence-card">
+          <div class="field-label">쿠폰</div>
+          <div class="presence-tools">
+            ${presence('userCouponPresence', couponMode)}
+            <span class="range-box ${couponMode === 'NONE' ? 'is-off' : ''}">
+              <select id="user-coupon" ${couponMode === 'NONE' ? 'disabled' : ''} onchange="setUserFilter('userCouponId', this.value)">
+                <option value="">발행 쿠폰</option>
+                ${coupons.map((coupon) => `<option value="${coupon.id}" ${String(adminState.userCouponId) === String(coupon.id) ? 'selected' : ''}>${escAttr(coupon.name)} (${escAttr(coupon.code || '')})</option>`).join('')}
+              </select>
+              <span style="color:#94a3b8;font-size:12px">${adminState.userCouponId ? '선택됨' : '선택'}</span>
+            </span>
+          </div>
+        </div>
       </div>
     </div>
     <div class="panel" style="overflow-x:auto">
@@ -1777,6 +1888,7 @@ async function loadPageData(page) {
         api('/api/users').then(r => { if (r.success) adminState.users = r.data; }),
         api('/api/salons').then(r => { if (r.success) adminState.salons = r.data; }),
         api('/api/orders').then(r => { if (r.success) adminState.orders = r.data; }),
+        api('/api/coupons').then(r => { if (r.success) adminState.coupons = r.data; }),
       ]);
       break;
     case 'products':
