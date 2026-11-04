@@ -897,8 +897,10 @@ body {
 .home-category-grid {
   display: flex;
   flex-wrap: nowrap;
-  gap: 4px;
-  padding: 12px 12px;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  padding: 14px 10px;
   overflow-x: auto;
   scrollbar-width: none;
   background: var(--white);
@@ -912,13 +914,14 @@ body {
   border: 0;
   background: none;
   cursor: pointer;
-  padding: 6px 2px;
+  padding: 4px 0;
   font-family: var(--font);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text);
   white-space: nowrap;
   line-height: 1;
+  letter-spacing: -0.3px;
 }
 
 /* ═══════════════════════════════════════════
