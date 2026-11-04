@@ -61,6 +61,9 @@
     if (!product.brand_id) product.brand_id = 1;
     if (!Array.isArray(product.options)) product.options = [];
     if (product.supply_price == null) product.supply_price = 0;
+    if (product.salon_price == null || product.salon_price === '') {
+      product.salon_price = Math.round((Number(product.vip_discount_price) || 0) * 0.7);
+    }
     if (product.min_order_quantity == null) product.min_order_quantity = 1;
     if (product.purchase_unit == null) product.purchase_unit = 1;
     if (product.max_purchase_quantity === undefined) product.max_purchase_quantity = null;
@@ -91,6 +94,7 @@
     const normal = Number(body && body.original_price);
     const selling = Number(body && body.vip_discount_price);
     const supply = Number(body && body.supply_price);
+    const salon = Number(body && body.salon_price);
     const category = canonicalCategory(body && body.category);
     const statuses = ['WAITING', 'SELLING', 'SOLDOUT', 'STOP'];
     const saleStatus = statuses.indexOf(body && body.sale_status) >= 0 ? body.sale_status : 'SELLING';
@@ -98,6 +102,7 @@
     if (!brandId) return { error: '브랜드를 선택하세요' };
     if (!category || CATEGORIES.indexOf(category) < 0) return { error: '카테고리를 선택하세요' };
     if (body.supply_price === '' || body.supply_price == null || Number.isNaN(supply)) return { error: '공급가를 입력하세요' };
+    if (body.salon_price === '' || body.salon_price == null || Number.isNaN(salon)) return { error: '살롱가를 입력하세요' };
     if (!normal) return { error: '정가를 입력하세요' };
     if (!body || body.vip_discount_price === '' || body.vip_discount_price == null || Number.isNaN(selling)) {
       return { error: '판매가를 확인하세요' };
@@ -130,6 +135,7 @@
         category_sub: '',
         category: category,
         supply_price: supply,
+        salon_price: salon,
         original_price: normal,
         discount_type: body.discount_type || 'NONE',
         discount_value: Number(body.discount_value || 0),
