@@ -788,6 +788,7 @@ function settlementSummary() {
     cancelled_amount: sum('cancelled_amount'),
     points_used: sum('points_used'),
     coupon_discount: sum('coupon_discount'),
+    hq_margin: sum('hq_margin'),
     shipping_fee: sum('shipping_fee'),
     payout: sum('payout'),
   };
@@ -825,7 +826,7 @@ function renderStoreSettlements() {
   const feeText = (value) => value ? money(value) : '무료';
   return `
     <div class="page-kicker">매출/정산</div>
-    <p class="page-sub">매장별 기간 매출 및 정산 내역을 확인합니다. 정산액은 매장 판매가에서 살롱가를 뺀 금액이고, 원장에게 지급합니다.</p>
+    <p class="page-sub">매장 정산은 판매가에서 살롱가를 뺀 금액입니다. 쿠폰은 본사 마진에서 빠지고, 고객 결제액은 판매가에서 쿠폰을 뺀 금액입니다.</p>
     <div class="filter-card">
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
         <div style="flex:1;min-width:240px">
@@ -862,8 +863,8 @@ function renderStoreSettlements() {
       <div class="summary-card sales">
         <div class="summary-title">매출</div>
         <div class="metric-row">
-          <div class="metric-tile"><i class="fas fa-won-sign"></i><strong>${money(summary.sales)}</strong><span>총 매출액</span></div>
-          <div class="metric-tile"><i class="fas fa-credit-card"></i><strong>${money(summary.paid_amount)}</strong><span>실 결제액</span></div>
+          <div class="metric-tile"><i class="fas fa-won-sign"></i><strong>${money(summary.sales)}</strong><span>판매가</span></div>
+          <div class="metric-tile"><i class="fas fa-credit-card"></i><strong>${money(summary.paid_amount)}</strong><span>고객 결제</span></div>
           <div class="metric-tile"><i class="fas fa-times-circle"></i><strong>${money(summary.cancelled_amount)}</strong><span>취소금액</span></div>
           <div class="metric-tile"><i class="fas fa-coins"></i><strong>${money(summary.points_used)}</strong><span>포인트 사용</span></div>
           <div class="metric-tile"><i class="fas fa-ticket-alt"></i><strong>${money(summary.coupon_discount)}</strong><span>쿠폰사용</span></div>
@@ -872,9 +873,9 @@ function renderStoreSettlements() {
       <div class="summary-card payout">
         <div class="summary-title">정산</div>
         <div class="metric-row">
-          <div class="metric-tile pay"><i class="fas fa-store"></i><strong>${money(summary.sales)}</strong><span>판매 매출</span></div>
-          <div class="metric-tile pay"><i class="fas fa-truck"></i><strong>${feeText(summary.shipping_fee)}</strong><span>배송비</span></div>
-          <div class="metric-tile pay"><i class="fas fa-wallet"></i><strong>${money(summary.payout)}</strong><span>정산액</span></div>
+          <div class="metric-tile pay"><i class="fas fa-store"></i><strong>${money(summary.payout)}</strong><span>매장 정산</span></div>
+          <div class="metric-tile pay"><i class="fas fa-ticket-alt"></i><strong>${money(summary.coupon_discount)}</strong><span>쿠폰</span></div>
+          <div class="metric-tile pay"><i class="fas fa-building"></i><strong style="${summary.hq_margin < 0 ? 'color:#e11d48' : ''}">${money(summary.hq_margin)}</strong><span>본사 마진</span></div>
         </div>
       </div>
     </div>
@@ -895,7 +896,7 @@ function renderStoreSettlements() {
           <tr>
             <th><input type="checkbox" ${rows.length && rows.every((row) => selected.has(row.id)) ? 'checked' : ''} onclick="toggleSettlementPage()"></th>
             ${history ? '' : '<th>매장</th>'}
-            <th>정산 기간</th><th>총 매출액</th><th>실 결제액</th><th>배송비</th><th>정산액</th><th>상태</th><th>관리</th>
+            <th>정산 기간</th><th>판매가</th><th>쿠폰</th><th>고객 결제</th><th>매장 정산</th><th>본사 마진</th><th>상태</th><th>관리</th>
           </tr>
         </thead>
         <tbody>
@@ -904,10 +905,11 @@ function renderStoreSettlements() {
               <td><input type="checkbox" ${selected.has(row.id) ? 'checked' : ''} onclick="toggleSettlement('${row.id}')"></td>
               ${history ? '' : `<td><button class="text-link" onclick="changeSettlementSalon('${row.salon_id}')">${row.salon_name}</button></td>`}
               <td style="${row.period === data.month ? 'color:#4f46e5;font-weight:700' : ''}">${row.period}</td>
-              <td>${money(row.sales)}</td>
-              <td>${money(row.paid_amount)}</td>
-              <td>${feeText(row.shipping_fee)}</td>
-              <td>${money(row.payout)}</td>
+              <td style="font-weight:400">${money(row.sales)}</td>
+              <td style="font-weight:400">${money(row.coupon_discount)}</td>
+              <td style="font-weight:400">${money(row.paid_amount)}</td>
+              <td style="font-weight:400">${money(row.payout)}</td>
+              <td style="font-weight:400;${row.hq_margin < 0 ? 'color:#e11d48' : ''}">${money(row.hq_margin)}</td>
               <td>
                 <span class="status-pill ${row.status === 'PAID' ? 'paid' : row.status === 'CONFIRMED' ? 'confirmed' : 'pending'}">${SETTLE_LABEL[row.status]}</span>
                 ${row.status === 'PENDING' ? `<button class="text-link" onclick="bulkSettlement('CONFIRMED', ['${row.id}'])">확정</button>` : ''}
@@ -918,7 +920,7 @@ function renderStoreSettlements() {
                 <button class="text-link" onclick="openSettlementOrders('${row.id}')">목록보기</button>
                 ${history ? '' : `<button class="text-link muted" onclick="changeSettlementSalon('${row.salon_id}')">월별보기</button>`}
               </td>
-            </tr>`).join('') || `<tr><td colspan="9" style="text-align:center;color:#94a3b8;padding:24px">${history ? '해당 매장의 정산 내역이 없습니다.' : '선택한 기간의 정산 내역이 없습니다.'}</td></tr>`}
+            </tr>`).join('') || `<tr><td colspan="10" style="text-align:center;color:#94a3b8;padding:24px">${history ? '해당 매장의 정산 내역이 없습니다.' : '선택한 기간의 정산 내역이 없습니다.'}</td></tr>`}
         </tbody>
       </table>
     </div>
@@ -926,9 +928,9 @@ function renderStoreSettlements() {
       <div class="sheet-card" style="margin-top:12px;overflow:auto">
         <div style="padding:14px 16px;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:700">${detail.salon_name} ${detail.period} 주문</div>
         <table class="data-table">
-          <thead><tr><th>주문</th><th>고객</th><th>디자이너</th><th>매출</th></tr></thead>
+          <thead><tr><th>주문</th><th>고객</th><th>디자이너</th><th>판매가</th><th>쿠폰</th><th>고객 결제</th><th>매장 정산</th><th>본사 마진</th></tr></thead>
           <tbody>
-            ${(detail.lines || []).map((line) => `<tr><td>#${line.order_id}<div style="color:#94a3b8;font-size:12px">${line.created_at}</div></td><td>${line.user_name}</td><td>${line.designer_name || '담당 없음'}${line.designer_status === 'RESIGNED' ? ' <span class="badge badge-resigned">퇴사</span>' : ''}</td><td>${money(line.sales)}</td></tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:24px">이 기간 주문이 없습니다</td></tr>'}
+            ${(detail.lines || []).map((line) => `<tr><td>#${line.order_id}<div style="color:#94a3b8;font-size:12px">${line.created_at}</div></td><td>${line.user_name}</td><td>${line.designer_name || '담당 없음'}${line.designer_status === 'RESIGNED' ? ' <span class="badge badge-resigned">퇴사</span>' : ''}</td><td style="font-weight:400">${money(line.sales)}</td><td style="font-weight:400">${money(line.coupon_discount)}</td><td style="font-weight:400">${money(line.paid_amount)}</td><td style="font-weight:400">${money(line.payout)}</td><td style="font-weight:400;${line.hq_margin < 0 ? 'color:#e11d48' : ''}">${money(line.hq_margin)}</td></tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:#94a3b8;padding:24px">이 기간 주문이 없습니다</td></tr>'}
           </tbody>
         </table>
       </div>` : ''}`;

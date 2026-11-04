@@ -662,7 +662,7 @@ body {
 .settle-kicker { font-size: 12px; color: rgba(255,255,255,0.62); }
 .settle-amount { font-size: 28px; font-weight: 600; letter-spacing: -0.4px; margin: 6px 0 2px; }
 .settle-sub { font-size: 12px; color: rgba(255,255,255,0.62); }
-.settle-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.settle-metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-top: 14px; }
 .settle-metric { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 10px 12px; }
 .settle-metric span { display: block; font-size: 11px; color: rgba(255,255,255,0.55); }
 .settle-metric strong { display: block; margin-top: 3px; font-size: 15px; font-weight: 600; }
