@@ -1032,11 +1032,12 @@ function rememberSalon(salon) {
 
 function priceSettingSummary(salon) {
   const rates = salon.brand_discount_rates || {};
+  const productRates = salon.product_discount_rates || {};
   const prices = salon.product_prices || {};
   const rateCount = Object.keys(rates).filter((key) => Number(rates[key]) > 0).length;
-  const priceCount = Object.keys(prices).length;
+  const priceCount = Object.keys(productRates).length + Object.keys(prices).length;
   if (!rateCount && !priceCount) return '본사 판매가 그대로';
-  return '브랜드 할인 ' + rateCount + '개 · 개별가 ' + priceCount + '개';
+  return '브랜드 할인 ' + rateCount + '개 · 개별 할인 ' + priceCount + '개';
 }
 
 function profitText(profit, price) {
@@ -1060,9 +1061,10 @@ function storePriceProducts(salon) {
 function priceBrandSummary(salon, brand, products) {
   if (brandBlocksStore(brand, salon.id)) return '본사 판매 제한';
   const rates = salon.brand_discount_rates || {};
+  const productRates = salon.product_discount_rates || {};
   const overrides = salon.product_prices || {};
   const rate = Number(rates[String(brand.id)]) || 0;
-  const custom = products.filter((product) => overrides[String(product.id)] != null && overrides[String(product.id)] !== '').length;
+  const custom = products.filter((product) => Object.prototype.hasOwnProperty.call(productRates, String(product.id)) || (overrides[String(product.id)] != null && overrides[String(product.id)] !== '')).length;
   const hidden = (salon.hidden_brand_ids || []).includes(brand.id) ? ' · 미노출' : '';
   const discount = rate ? '할인 ' + rate + '%' : '할인 없음';
   return '상품 ' + products.length + '개 · ' + discount + (custom ? ' · 개별가 ' + custom + '개' : '') + hidden;
@@ -1082,7 +1084,7 @@ function renderPriceBrandList(salon, brands, products) {
   return `
     <div style="padding:20px 16px 28px">
       <button class="store-back" onclick="navigate('store')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>매출</button>
-      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">판매가 설정</h2>
+      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">판매가 할인 설정</h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:14px">${escText(salon.salon_name)}에서 할인할 브랜드를 고르세요.</p>
       ${brands.map((brand) => {
         const blocked = brandBlocksStore(brand, salon.id);
@@ -1099,9 +1101,27 @@ function renderPriceBrandList(salon, brands, products) {
     </div>`;
 }
 
+function discountStepButtons(steps, selected, handler, id) {
+  return `<div class="discount-steps">${steps.map((step) => `<button type="button" class="discount-step${Number(selected) === step ? ' on' : ''}" onclick="${handler}(${id}, ${step})">${step}%</button>`).join('')}</div>`;
+}
+
+function brandDiscountSteps(rows) {
+  const steps = new Set([0]);
+  rows.forEach((product) => ProductCatalog.discountSteps(product).forEach((step) => steps.add(step)));
+  if (steps.size === 1) [5, 10, 15, 20, 25, 30].forEach((step) => steps.add(step));
+  return [...steps].sort((a, b) => a - b);
+}
+
+function productHasOwnDiscount(salon, product) {
+  const rates = (salon && salon.product_discount_rates) || {};
+  const prices = (salon && salon.product_prices) || {};
+  const key = String(product.id);
+  return Object.prototype.hasOwnProperty.call(rates, key) || (prices[key] != null && prices[key] !== '');
+}
+
 function renderPriceBrandDetail(salon, brand, rows) {
   const rates = salon.brand_discount_rates || {};
-  const overrides = salon.product_prices || {};
+  const productRates = salon.product_discount_rates || {};
   const hidden = new Set(salon.hidden_brand_ids || []);
   const rate = Number(rates[String(brand.id)]) || 0;
   return `
@@ -1111,30 +1131,24 @@ function renderPriceBrandDetail(salon, brand, rows) {
       <p style="font-size:13px;color:var(--muted);margin-bottom:14px">이 매장 고객에게만 적용됩니다. 본사 판매가보다 높게, 살롱가보다 낮게는 정할 수 없고, 내린 금액은 이 매장 수익에서 빠집니다.</p>
       <div class="price-brand-box">
         <label>일괄 할인</label>
-        <div class="price-rate-row">
-          <input id="brand-rate" type="number" min="0" max="100" step="0.1" value="${rate || ''}" placeholder="0">
-          <span style="font-size:14px;font-weight:700">%</span>
-          <button class="price-apply" onclick="saveBrandDiscount(${brand.id})">적용</button>
-        </div>
-        <p>본사 판매가에서 이 비율만큼 내립니다. 개별 가격을 저장한 상품은 그대로 둡니다.</p>
+        ${discountStepButtons(brandDiscountSteps(rows), rate, 'saveBrandDiscount', brand.id)}
+        <p>본사 판매가에서 고른 비율만큼 내립니다. 상품에서 따로 고른 할인율은 그대로 둡니다.</p>
       </div>
       ${rows.length ? rows.map((product) => {
         const hq = ProductCatalog.hqPrice(product);
         const floor = ProductCatalog.salonCost(product);
         const store = ProductCatalog.storeSellingPrice(salon, product);
         const profit = Math.max(0, store - floor);
-        const custom = overrides[String(product.id)] != null && overrides[String(product.id)] !== '';
+        const custom = productHasOwnDiscount(salon, product);
+        const own = Object.prototype.hasOwnProperty.call(productRates, String(product.id)) ? Number(productRates[String(product.id)]) || 0 : rate;
         const raw = Math.round(hq * (100 - rate) / 100);
         const held = !custom && raw < floor;
         return `
           <div class="price-row">
-            <div class="price-name">${escText(product.name)}${hidden.has(product.brand_id) ? ' <span class="price-tag">미노출</span>' : ''}${custom ? ' <span class="price-tag">개별가</span>' : ''}</div>
+            <div class="price-name">${escText(product.name)}${hidden.has(product.brand_id) ? ' <span class="price-tag">미노출</span>' : ''}${custom ? ' <span class="price-tag">개별 할인</span>' : ''}</div>
             <div class="price-meta">본사 판매가 ${won(hq)} · 살롱가 ${won(floor)}</div>
-            <div class="price-edit">
-              <input type="number" inputmode="numeric" min="${floor}" max="${hq}" value="${store}" onchange="saveProductPrice(${product.id}, this.value)">
-              <span>원</span>
-            </div>
-            <div class="price-profit">매장 수익 ${profitText(profit, store)}</div>
+            ${discountStepButtons(ProductCatalog.discountSteps(product), own, 'saveProductDiscount', product.id)}
+            <div class="price-profit">우리 매장 판매가 ${won(store)} · 매장 수익 ${profitText(profit, store)}</div>
             ${held ? '<div class="price-hold">살롱가가 최저가라 여기까지입니다.</div>' : ''}
             ${custom ? `<button class="price-link" onclick="clearProductPrice(${product.id})">일괄 할인 따르기</button>` : ''}
           </div>`;
@@ -1154,36 +1168,31 @@ function closePriceBrand() {
   window.scrollTo(0, 0);
 }
 
-async function saveBrandDiscount(brandId) {
+async function saveBrandDiscount(brandId, rate) {
   const salon = ownerSalon();
-  const input = document.getElementById('brand-rate');
-  if (!salon || !input) return;
-  const rate = input.value.trim() === '' ? 0 : Number(input.value);
-  if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
-    showToast('할인율은 0에서 100 사이로 입력하세요', 'error');
-    return;
-  }
-  const res = await api('/api/salons/' + salon.id + '/prices', 'POST', { brand_id: brandId, discount_rate: rate });
+  if (!salon) return;
+  const value = Number(rate) || 0;
+  const res = await api('/api/salons/' + salon.id + '/prices', 'POST', { brand_id: brandId, discount_rate: value });
   if (!res.success) { showToast(res.error || '저장하지 못했습니다', 'error'); return; }
   rememberSalon(res.data);
   render();
-  showToast(rate ? '브랜드 할인을 적용했습니다' : '브랜드 할인을 해제했습니다', 'success');
+  showToast(value ? '브랜드 할인 ' + value + '%를 적용했습니다' : '브랜드 할인을 해제했습니다', 'success');
 }
 
-async function saveProductPrice(productId, raw) {
+async function saveProductDiscount(productId, rate) {
   const salon = ownerSalon();
-  if (!salon) return;
-  const text = String(raw ?? '').trim();
-  const body = text === '' ? { product_id: productId, clear: true } : { product_id: productId, price: Number(text) };
+  const product = (state.allProducts || []).find((item) => item.id === productId);
+  if (!salon || !product) return;
+  const brandRate = Number((salon.brand_discount_rates || {})[String(product.brand_id)]) || 0;
+  const value = Number(rate) || 0;
+  const body = value === brandRate
+    ? { product_id: productId, clear: true }
+    : { product_id: productId, discount_rate: value };
   const res = await api('/api/salons/' + salon.id + '/prices', 'POST', body);
-  if (!res.success) {
-    showToast(res.error || '저장하지 못했습니다', 'error');
-    render();
-    return;
-  }
+  if (!res.success) { showToast(res.error || '저장하지 못했습니다', 'error'); return; }
   rememberSalon(res.data);
   render();
-  showToast('우리 매장 판매가를 저장했습니다', 'success');
+  showToast(value ? value + '% 할인을 적용했습니다' : '할인을 해제했습니다', 'success');
 }
 
 async function clearProductPrice(productId) {
@@ -1278,7 +1287,7 @@ function renderStore() {
       <p style="font-size:13px;color:var(--muted);margin-bottom:14px">${salon.salon_name}</p>
       <button class="store-menu" onclick="openStorePrices()">
         <span>
-          <strong>판매가 설정</strong>
+          <strong>판매가 할인 설정</strong>
           <small>${priceSettingSummary(salon)}</small>
         </span>
         <i class="fas fa-chevron-right"></i>
