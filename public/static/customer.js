@@ -811,11 +811,11 @@ function openOrderDetail(id) {
       </div>
       ${state.user && state.user.is_owner
         ? (o.payment_status === 'PAID' ? `<div class="rev-breakdown">
-            <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">매장 정산</div>
+            <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">정산액</div>
             <div style="font-size:16px;font-weight:700;color:var(--text)">${won(money.storePayout)}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">판매가 ${won(money.sale)}에서 살롱가를 뺀 금액</div>
-            <div style="font-size:12px;color:var(--text);margin-top:8px">고객 결제 ${won(money.paid)}</div>
-            ${money.coupon ? `<div style="font-size:12px;color:var(--muted);margin-top:2px">본사 쿠폰 ${won(money.coupon)} · 고객 결제에서만 빠집니다</div>` : ''}
+            <div style="font-size:12px;color:var(--text);margin-top:8px">총매출 ${won(money.sale)} · 실 고객결제액 ${won(Math.max(0, money.sale - money.coupon))}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">쿠폰사용 ${won(money.coupon)} · 총 살롱가 ${won(Math.max(0, money.sale - money.storePayout))}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">정산액 = 총매출 − 총 살롱가</div>
           </div>` : '')
         : `<div class="rev-breakdown">
         <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">수익 배분 내역</div>
@@ -967,6 +967,35 @@ function won(amount) {
 function currentPeriod() {
   const now = new Date();
   return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+}
+
+function settleView(row) {
+  const sale = Number(row && row.sales) || 0;
+  const coupon = Number(row && row.coupon_discount) || 0;
+  const payout = Number(row && row.payout) || 0;
+  return {
+    count: Number(row && row.orders) || 0,
+    sale,
+    paid: Math.max(0, sale - coupon),
+    coupon,
+    salon: Math.max(0, sale - payout),
+    payout,
+  };
+}
+
+function renderSettleMetrics(row) {
+  const view = settleView(row);
+  const tile = (label, value, emph) => `<div class="settle-metric${emph ? ' emph' : ''}"><span>${label}</span><strong>${value}</strong></div>`;
+  return `
+    <div class="settle-metrics">
+      ${tile('총건수', view.count + '건')}
+      ${tile('총매출', won(view.sale))}
+      ${tile('실 고객결제액', won(view.paid))}
+      ${tile('쿠폰사용', won(view.coupon))}
+      ${tile('총 살롱가', won(view.salon))}
+      ${tile('정산액', won(view.payout), true)}
+    </div>
+    <div class="settle-formula">총매출 = 실 고객결제액 + 쿠폰사용<br>정산액 = 총매출 − 총 살롱가</div>`;
 }
 
 function monthLabel(period) {
@@ -1252,23 +1281,23 @@ function renderStaffFilters(sales) {
     if (order.payment_status !== 'PAID') return;
     const name = order.designer_name || '담당 없음';
     const money = orderMoney(order);
-    const row = totals.get(name) || { name, count: 0, paid: 0, coupon: 0, payout: 0 };
+    const row = totals.get(name) || { name, count: 0, sale: 0, coupon: 0, payout: 0 };
     row.count += 1;
-    row.paid += money.paid;
+    row.sale += money.sale;
     row.coupon += money.coupon;
     row.payout += money.storePayout;
     totals.set(name, row);
   });
-  const people = [...totals.values()].sort((a, b) => b.paid - a.paid);
-  const allPaid = people.reduce((sum, row) => sum + row.paid, 0);
+  const people = [...totals.values()].sort((a, b) => b.sale - a.sale);
+  const allSale = people.reduce((sum, row) => sum + row.sale, 0);
   const selected = state.salesStaff || '';
   const picked = people.find((row) => row.name === selected);
   const chip = (name, title, sub) => `<button type="button" class="staff-chip${selected === name ? ' on' : ''}" data-staff="${encodeURIComponent(name)}" onclick="setSalesStaff(decodeURIComponent(this.dataset.staff))"><span>${title}</span><small>${sub}</small></button>`;
   return `<div class="staff-row">
-      ${chip('', '전체', won(allPaid))}
-      ${people.map((row) => chip(row.name, row.name, row.count + '건 · ' + won(row.paid))).join('')}
+      ${chip('', '전체', won(allSale))}
+      ${people.map((row) => chip(row.name, row.name, row.count + '건 · ' + won(row.sale))).join('')}
     </div>
-    ${picked ? `<p style="font-size:12px;color:var(--muted);margin:-2px 0 10px">${picked.name} · 고객 결제 ${won(picked.paid)}${picked.coupon ? ' · 본사 쿠폰 ' + won(picked.coupon) : ''} · 정산 ${won(picked.payout)}</p>` : ''}`;
+    ${picked ? `<p style="font-size:12px;color:var(--muted);margin:-2px 0 10px">${picked.name} · 총매출 ${won(picked.sale)} · 실결제 ${won(Math.max(0, picked.sale - picked.coupon))} · 쿠폰 ${won(picked.coupon)} · 정산 ${won(picked.payout)}</p>` : ''}`;
 }
 
 function setSalesStaff(name) {
@@ -1311,13 +1340,7 @@ function renderStore() {
       </button>
       <div class="settle-card">
         <div class="settle-kicker">${monthLabel(current.period)} 정산 · ${statusLabel[current.status] || '정산예정'}</div>
-        <div class="settle-amount">${won(current.payout)}</div>
-        <div class="settle-sub">정산은 판매가에서 살롱가를 뺀 금액입니다. 본사 쿠폰은 고객 결제액에서만 빠집니다.</div>
-        <div class="settle-metrics">
-          <div class="settle-metric"><span>고객 결제</span><strong>${won(current.paid_amount)}</strong></div>
-          <div class="settle-metric"><span>본사 쿠폰</span><strong>${won(current.coupon_discount)}</strong></div>
-          <div class="settle-metric"><span>결제 건수</span><strong>${current.orders || 0}건</strong></div>
-        </div>
+        ${renderSettleMetrics(current)}
       </div>
       ${past.length ? `
         <div class="section-label">지난 정산</div>
@@ -1325,7 +1348,7 @@ function renderStore() {
           <div class="past-settle">
             <div>
               <div style="font-weight:700">${monthLabel(row.period)}</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px">판매 ${row.orders}건 · 고객 결제 ${won(row.paid_amount)}${row.coupon_discount ? ' · 본사 쿠폰 ' + won(row.coupon_discount) : ''}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">${row.orders}건 · 총매출 ${won(row.sales)} · 실결제 ${won(Math.max(0, (row.sales || 0) - (row.coupon_discount || 0)))}</div>
             </div>
             <div style="text-align:right">
               <div style="font-weight:700">${won(row.payout)}</div>
@@ -1352,8 +1375,8 @@ function renderStore() {
                   <div class="order-salon">${items.slice(0, 2).map((item) => item.name).join(' · ') || '상품'}</div>
                   <div class="order-designer"><i class="fas fa-user-tie" style="margin-right:4px;opacity:0.5"></i>${order.designer_name || '담당 없음'}</div>
                   <div class="order-footer">
-                    <span style="font-size:12px;color:var(--muted)">${paid ? '정산 ' + won(money.storePayout) + (money.coupon ? ' · 본사 쿠폰 ' + won(money.coupon) : '') : ''}</span>
-                    <span class="order-amount">${won(money.paid)}</span>
+                    <span style="font-size:12px;color:var(--muted)">${paid ? '정산 ' + won(money.storePayout) + (money.coupon ? ' · 실결제 ' + won(Math.max(0, money.sale - money.coupon)) + ' · 쿠폰 ' + won(money.coupon) : '') : ''}</span>
+                    <span class="order-amount">${won(money.sale)}</span>
                   </div>
                 </div>`;
             }).join('')}
