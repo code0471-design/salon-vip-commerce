@@ -60,9 +60,12 @@
   function fillProductDefaults(product) {
     if (!product.brand_id) product.brand_id = 1;
     if (!Array.isArray(product.options)) product.options = [];
-    if (product.supply_price == null) product.supply_price = 0;
+    const selling = Number(product.vip_discount_price) || 0;
+    if (product.supply_price == null || Number(product.supply_price) === 0) {
+      product.supply_price = Math.round(selling * 0.4);
+    }
     if (product.salon_price == null || product.salon_price === '') {
-      product.salon_price = Math.round((Number(product.vip_discount_price) || 0) * 0.7);
+      product.salon_price = Math.round(selling * 0.7);
     }
     if (product.min_order_quantity == null) product.min_order_quantity = 1;
     if (product.purchase_unit == null) product.purchase_unit = 1;
