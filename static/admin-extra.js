@@ -83,7 +83,7 @@ function orderSupply(order) {
 
 function orderPayout(order) {
   if (order.payment_status !== 'PAID') return 0;
-  return Math.round((order.total_amount || 0) * 0.3);
+  return ProductCatalog.orderStorePayout(order);
 }
 
 function feeText(value) {
@@ -120,7 +120,7 @@ function renderShippingOrders() {
   return `
     <div class="order-page">
     <div class="page-kicker">주문/배송</div>
-    <p class="page-sub">날짜와 브랜드로 주문을 보고, 쿠폰·포인트·공급가·배송비·매장 정산액을 확인합니다. 정산액은 결제 매출의 30%입니다.</p>
+    <p class="page-sub">날짜와 브랜드로 주문을 보고, 쿠폰·포인트·공급가·배송비·매장 정산액을 확인합니다. 정산액은 매장 판매가에서 살롱가를 뺀 금액입니다.</p>
     <div class="filter-card">
       <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
         <div style="flex:1;min-width:220px">
@@ -160,7 +160,7 @@ function renderShippingOrders() {
           <div class="metric-tile"><strong style="font-weight:400">${money(summary.coupon)}</strong><span>쿠폰</span></div>
           <div class="metric-tile"><strong style="font-weight:400">${money(summary.supply)}</strong><span>공급가</span></div>
           <div class="metric-tile"><strong style="font-weight:400">${feeText(summary.shipping)}</strong><span>배송비</span></div>
-          <div class="metric-tile"><strong style="font-weight:400">${money(summary.payout)}</strong><span>정산액 30%</span></div>
+          <div class="metric-tile"><strong style="font-weight:400">${money(summary.payout)}</strong><span>정산액</span></div>
         </div>
       </div>
     </div>
@@ -825,7 +825,7 @@ function renderStoreSettlements() {
   const feeText = (value) => value ? money(value) : '무료';
   return `
     <div class="page-kicker">매출/정산</div>
-    <p class="page-sub">매장별 기간 매출 및 정산 내역을 확인합니다. 정산액은 판매 매출의 30%이고, 원장에게 지급합니다.</p>
+    <p class="page-sub">매장별 기간 매출 및 정산 내역을 확인합니다. 정산액은 매장 판매가에서 살롱가를 뺀 금액이고, 원장에게 지급합니다.</p>
     <div class="filter-card">
       <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end">
         <div style="flex:1;min-width:240px">
@@ -874,7 +874,7 @@ function renderStoreSettlements() {
         <div class="metric-row">
           <div class="metric-tile pay"><i class="fas fa-store"></i><strong>${money(summary.sales)}</strong><span>판매 매출</span></div>
           <div class="metric-tile pay"><i class="fas fa-truck"></i><strong>${feeText(summary.shipping_fee)}</strong><span>배송비</span></div>
-          <div class="metric-tile pay"><i class="fas fa-wallet"></i><strong>${money(summary.payout)}</strong><span>정산액 30%</span></div>
+          <div class="metric-tile pay"><i class="fas fa-wallet"></i><strong>${money(summary.payout)}</strong><span>정산액</span></div>
         </div>
       </div>
     </div>

@@ -19,6 +19,7 @@ let state = {
   storeOrders: [],
   storeSettlement: null,
   storeView: '',
+  priceBrand: 0,
   salesStaff: '',
   scanResult: null,
   switchInfo: null,
@@ -71,8 +72,15 @@ function openStoreBrands() {
   window.scrollTo(0, 0);
 }
 
+function openStorePrices() {
+  state.storeView = 'prices';
+  render();
+  window.scrollTo(0, 0);
+}
+
 // ---- Render Main ----
 function render() {
+  syncCartPrices();
   const app = document.getElementById('app');
   app.innerHTML = renderShell();
   attachListeners();
@@ -209,7 +217,8 @@ function goShopCategory(cat) {
 }
 
 function renderBestCard(p) {
-  const disc = Math.round((1 - p.vip_discount_price / p.original_price) * 100);
+  const price = sellingPrice(p);
+  const disc = Math.round((1 - price / p.original_price) * 100);
   const stars = renderStars(p.rating || 4.8);
   return `
     <div class="best-card" onclick="openProductDetail(${p.id})">
@@ -227,7 +236,7 @@ function renderBestCard(p) {
           <span class="best-original">${(p.original_price||0).toLocaleString()}</span>
           <span class="best-discount">${disc}%</span>
         </div>
-        <div class="best-vip">${(p.vip_discount_price||0).toLocaleString()}<span style="font-size:11px;font-weight:500">원</span></div>
+        <div class="best-vip">${price.toLocaleString()}<span style="font-size:11px;font-weight:500">원</span></div>
         <div class="best-rating">
           <span class="best-stars">${stars}</span>
           <span class="best-rating-val">${p.rating || '4.8'}</span>
@@ -524,7 +533,8 @@ function renderShop() {
 }
 
 function renderProductCard(p) {
-  const disc = Math.round((1 - p.vip_discount_price / p.original_price) * 100);
+  const price = sellingPrice(p);
+  const disc = Math.round((1 - price / p.original_price) * 100);
   const stars = renderStars(p.rating || 4.8);
   const inCart = state.cart.find(i => i.product_id === p.id);
   return `
@@ -544,7 +554,7 @@ function renderProductCard(p) {
           <span class="pc-original">${(p.original_price||0).toLocaleString()}</span>
           <span class="pc-discount-badge">${disc}%</span>
         </div>
-        <div class="pc-vip">${(p.vip_discount_price||0).toLocaleString()}<span style="font-size:11px;font-weight:500">원</span></div>
+        <div class="pc-vip">${price.toLocaleString()}<span style="font-size:11px;font-weight:500">원</span></div>
         <div class="pc-rating">
           <span class="pc-stars">${stars}</span>
           <span class="pc-rating-val">${p.rating || '4.8'}</span>
@@ -564,7 +574,8 @@ function openProductDetail(id) {
   const p = state.products.find(x => x.id === id);
   if (!p) return;
   const qty = state.cart.find(i => i.product_id === id)?.qty || 0;
-  const disc = Math.round((1 - p.vip_discount_price / p.original_price) * 100);
+  const price = sellingPrice(p);
+  const disc = Math.round((1 - price / p.original_price) * 100);
   const stars = renderStars(p.rating || 4.8);
 
   const modal = document.createElement('div');
@@ -586,7 +597,7 @@ function openProductDetail(id) {
           ${p.is_best ? `<span class="p-best-badge" style="position:static;font-size:10px;padding:2px 6px">BEST</span>` : ''}
         </div>
         <div style="display:flex;align-items:baseline;gap:10px;margin:10px 0 6px">
-          <span class="detail-vip-price">${(p.vip_discount_price||0).toLocaleString()}원</span>
+          <span class="detail-vip-price">${price.toLocaleString()}원</span>
           <span style="font-size:13px;color:var(--muted);text-decoration:line-through">${(p.original_price||0).toLocaleString()}원</span>
           <span style="font-size:13px;font-weight:700;color:var(--rose)">-${disc}%</span>
         </div>
@@ -628,7 +639,7 @@ function addToCart(productId) {
   if (!p) return;
   const existing = state.cart.find(i => i.product_id === productId);
   if (existing) { existing.qty++; }
-  else { state.cart.push({ product_id: p.id, name: p.name, price: p.vip_discount_price, qty: 1 }); }
+  else { state.cart.push({ product_id: p.id, name: p.name, price: sellingPrice(p), qty: 1 }); }
   render();
   showToast('장바구니에 담겼습니다 🛒', 'success');
 }
@@ -655,6 +666,7 @@ function openCart() {
   }
   const total = state.cart.reduce((s, i) => s + i.price * i.qty, 0);
   const salonAmt = Math.round(total * 0.3);
+  const ownerProfit = cartStoreProfit();
 
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
@@ -682,7 +694,11 @@ function openCart() {
         <span>합계</span>
         <span class="cart-total-val">${total.toLocaleString()}원</span>
       </div>
-      ${state.user && state.user.is_owner ? '' : `<div class="rev-breakdown">
+      ${state.user && state.user.is_owner ? `<div class="rev-breakdown">
+        <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">매장 수익</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text)">${won(ownerProfit)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">우리 매장 판매가 − 살롱가</div>
+      </div>` : `<div class="rev-breakdown">
         <div style="font-size:11px;font-weight:700;color:#16a34a;margin-bottom:8px">💰 수익 배분</div>
         <div class="rev-grid">
           <div class="rev-item"><div style="font-size:10px;color:var(--muted)">플랫폼</div><div style="font-size:13px;font-weight:700">${Math.round(total*0.4).toLocaleString()}원</div><div style="font-size:10px;color:var(--muted)">40%</div></div>
@@ -711,6 +727,7 @@ async function placeOrder() {
   if (res.success) {
     state.cart = [];
     await loadUserOrders();
+    if (ownerSalon()) await loadStoreLedger();
     render();
     showToast('주문이 완료되었습니다! 🎉', 'success');
     setTimeout(() => navigate('orders'), 1500);
@@ -793,8 +810,8 @@ function openOrderDetail(id) {
       ${state.user && state.user.is_owner
         ? (o.payment_status === 'PAID' ? `<div class="rev-breakdown">
             <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">매장 정산</div>
-            <div style="font-size:16px;font-weight:700;color:var(--text)">${Math.round((o.total_amount || 0) * 0.3).toLocaleString()}원</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">판매 금액의 30%</div>
+            <div style="font-size:16px;font-weight:700;color:var(--text)">${won(ProductCatalog.orderStorePayout(o))}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px">우리 매장 판매가 − 살롱가</div>
           </div>` : '')
         : `<div class="rev-breakdown">
         <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">수익 배분 내역</div>
@@ -978,6 +995,172 @@ function brandBlocksStore(brand, salonId) {
   return (brand.blocked_salon_ids || []).map(Number).includes(Number(salonId));
 }
 
+function activeSalon() {
+  const id = catalogSalonId();
+  return state.salons.find((salon) => Number(salon.id) === Number(id)) || null;
+}
+
+function findCatalogProduct(id) {
+  return state.products.find((product) => product.id === id) || (state.allProducts || []).find((product) => product.id === id);
+}
+
+function sellingPrice(product) {
+  return ProductCatalog.storeSellingPrice(activeSalon(), product);
+}
+
+function syncCartPrices() {
+  state.cart.forEach((item) => {
+    const product = findCatalogProduct(item.product_id);
+    if (product) item.price = sellingPrice(product);
+  });
+}
+
+function cartStoreProfit() {
+  return state.cart.reduce((sum, item) => {
+    const product = findCatalogProduct(item.product_id);
+    const cost = product ? ProductCatalog.salonCost(product) : Math.round(item.price * 0.7);
+    return sum + Math.max(0, item.price - cost) * item.qty;
+  }, 0);
+}
+
+function rememberSalon(salon) {
+  const index = state.salons.findIndex((item) => item.id === salon.id);
+  if (index >= 0) state.salons[index] = salon;
+  else state.salons.push(salon);
+}
+
+function priceSettingSummary(salon) {
+  const rates = salon.brand_discount_rates || {};
+  const prices = salon.product_prices || {};
+  const rateCount = Object.keys(rates).filter((key) => Number(rates[key]) > 0).length;
+  const priceCount = Object.keys(prices).length;
+  if (!rateCount && !priceCount) return '본사 판매가 그대로';
+  return '브랜드 할인 ' + rateCount + '개 · 개별가 ' + priceCount + '개';
+}
+
+function profitText(profit, price) {
+  const base = Number(price) || 0;
+  const rate = base ? Math.round(profit / base * 1000) / 10 : 0;
+  const label = Number.isInteger(rate) ? String(rate) : rate.toFixed(1);
+  return won(profit) + ' (' + label + '%)';
+}
+
+function escText(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+
+function storePriceProducts(salon) {
+  return (state.allProducts || []).filter((product) => {
+    const brand = (state.brands || []).find((item) => item.id === product.brand_id);
+    return !brandBlocksStore(brand, salon.id);
+  });
+}
+
+function renderStorePrices() {
+  const salon = ownerSalon();
+  if (!salon) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
+  const products = storePriceProducts(salon);
+  const brandIds = [...new Set(products.map((product) => product.brand_id))];
+  const brands = brandIds
+    .map((id) => (state.brands || []).find((brand) => brand.id === id))
+    .filter(Boolean)
+    .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  if (!brands.some((brand) => brand.id === state.priceBrand)) state.priceBrand = brands[0] ? brands[0].id : 0;
+  const brand = brands.find((item) => item.id === state.priceBrand) || null;
+  const rates = salon.brand_discount_rates || {};
+  const overrides = salon.product_prices || {};
+  const hidden = new Set(salon.hidden_brand_ids || []);
+  const rate = brand ? (Number(rates[String(brand.id)]) || 0) : 0;
+  const rows = products.filter((product) => !brand || product.brand_id === brand.id);
+  return `
+    <div style="padding:20px 16px 28px">
+      <button class="store-back" onclick="navigate('store')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>매출</button>
+      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">판매가 설정</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">${escText(salon.salon_name)} 고객에게만 적용됩니다. 본사 판매가보다 높게, 살롱가보다 낮게는 정할 수 없고, 내린 금액은 이 매장 수익에서 빠집니다.</p>
+      ${brands.length > 1 ? `<div class="staff-row">
+        ${brands.map((item) => `<button type="button" class="staff-chip${item.id === state.priceBrand ? ' on' : ''}" onclick="setPriceBrand(${item.id})"><span>${escText(item.name)}</span></button>`).join('')}
+      </div>` : ''}
+      ${brand ? `
+        <div class="price-brand-box">
+          <label>${escText(brand.name)} 일괄 할인</label>
+          <div class="price-rate-row">
+            <input id="brand-rate" type="number" min="0" max="100" step="0.1" value="${rate || ''}" placeholder="0">
+            <span style="font-size:14px;font-weight:700">%</span>
+            <button class="price-apply" onclick="saveBrandDiscount(${brand.id})">적용</button>
+          </div>
+          <p>본사 판매가에서 이 비율만큼 내립니다. 개별 가격을 저장한 상품은 그대로 둡니다.</p>
+        </div>` : '<p style="font-size:13px;color:var(--muted)">판매할 상품이 없습니다.</p>'}
+      ${rows.map((product) => {
+        const hq = ProductCatalog.hqPrice(product);
+        const floor = ProductCatalog.salonCost(product);
+        const store = ProductCatalog.storeSellingPrice(salon, product);
+        const profit = Math.max(0, store - floor);
+        const custom = overrides[String(product.id)] != null && overrides[String(product.id)] !== '';
+        const raw = Math.round(hq * (100 - rate) / 100);
+        const held = !custom && raw < floor;
+        return `
+          <div class="price-row">
+            <div class="price-name">${escText(product.name)}${hidden.has(product.brand_id) ? ' <span class="price-tag">미노출</span>' : ''}${custom ? ' <span class="price-tag">개별가</span>' : ''}</div>
+            <div class="price-meta">본사 판매가 ${won(hq)} · 살롱가 ${won(floor)}</div>
+            <div class="price-edit">
+              <input type="number" inputmode="numeric" min="${floor}" max="${hq}" value="${store}" onchange="saveProductPrice(${product.id}, this.value)">
+              <span>원</span>
+            </div>
+            <div class="price-profit">매장 수익 ${profitText(profit, store)}</div>
+            ${held ? '<div class="price-hold">살롱가가 최저가라 여기까지입니다.</div>' : ''}
+            ${custom ? `<button class="price-link" onclick="clearProductPrice(${product.id})">일괄 할인 따르기</button>` : ''}
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function setPriceBrand(id) {
+  state.priceBrand = id;
+  render();
+}
+
+async function saveBrandDiscount(brandId) {
+  const salon = ownerSalon();
+  const input = document.getElementById('brand-rate');
+  if (!salon || !input) return;
+  const rate = input.value.trim() === '' ? 0 : Number(input.value);
+  if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+    showToast('할인율은 0에서 100 사이로 입력하세요', 'error');
+    return;
+  }
+  const res = await api('/api/salons/' + salon.id + '/prices', 'POST', { brand_id: brandId, discount_rate: rate });
+  if (!res.success) { showToast(res.error || '저장하지 못했습니다', 'error'); return; }
+  rememberSalon(res.data);
+  render();
+  showToast(rate ? '브랜드 할인을 적용했습니다' : '브랜드 할인을 해제했습니다', 'success');
+}
+
+async function saveProductPrice(productId, raw) {
+  const salon = ownerSalon();
+  if (!salon) return;
+  const text = String(raw ?? '').trim();
+  const body = text === '' ? { product_id: productId, clear: true } : { product_id: productId, price: Number(text) };
+  const res = await api('/api/salons/' + salon.id + '/prices', 'POST', body);
+  if (!res.success) {
+    showToast(res.error || '저장하지 못했습니다', 'error');
+    render();
+    return;
+  }
+  rememberSalon(res.data);
+  render();
+  showToast('우리 매장 판매가를 저장했습니다', 'success');
+}
+
+async function clearProductPrice(productId) {
+  const salon = ownerSalon();
+  if (!salon) return;
+  const res = await api('/api/salons/' + salon.id + '/prices', 'POST', { product_id: productId, clear: true });
+  if (!res.success) { showToast(res.error || '저장하지 못했습니다', 'error'); return; }
+  rememberSalon(res.data);
+  render();
+  showToast('일괄 할인 가격으로 돌렸습니다', 'success');
+}
+
 function brandFeeLabel(brand) {
   const rate = Number(brand.commission_rate);
   if (!Number.isFinite(rate)) return '수수료 -';
@@ -1031,7 +1214,7 @@ function renderStaffFilters(sales) {
       ${chip('', '전체', won(allSales))}
       ${people.map((row) => chip(row.name, row.name, row.count + '건 · ' + won(row.sales))).join('')}
     </div>
-    ${picked ? `<p style="font-size:12px;color:var(--muted);margin:-2px 0 10px">${picked.name} · 판매 ${picked.count}건 · 정산 ${won(Math.round(picked.sales * 0.3))}</p>` : ''}`;
+    ${picked ? `<p style="font-size:12px;color:var(--muted);margin:-2px 0 10px">${picked.name} · 판매 ${picked.count}건 · 정산 ${won(sales.filter((order) => order.payment_status === 'PAID' && (order.designer_name || '담당 없음') === picked.name).reduce((sum, order) => sum + ProductCatalog.orderStorePayout(order), 0))}</p>` : ''}`;
 }
 
 function setSalesStaff(name) {
@@ -1043,6 +1226,7 @@ function renderStore() {
   const salon = ownerSalon();
   if (!salon) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
   if (state.storeView === 'brands') return renderStoreBrands();
+  if (state.storeView === 'prices') return renderStorePrices();
   const hidden = new Set(salon.hidden_brand_ids || []);
   const brands = state.brands || [];
   const blockedCount = brands.filter((brand) => brandBlocksStore(brand, salon.id)).length;
@@ -1057,6 +1241,13 @@ function renderStore() {
     <div style="padding:20px 16px 28px">
       <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">매출</h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:14px">${salon.salon_name}</p>
+      <button class="store-menu" onclick="openStorePrices()">
+        <span>
+          <strong>판매가 설정</strong>
+          <small>${priceSettingSummary(salon)}</small>
+        </span>
+        <i class="fas fa-chevron-right"></i>
+      </button>
       <button class="store-menu" onclick="openStoreBrands()">
         <span>
           <strong>브랜드 판매 노출</strong>
@@ -1067,7 +1258,7 @@ function renderStore() {
       <div class="settle-card">
         <div class="settle-kicker">${monthLabel(current.period)} 정산 · ${statusLabel[current.status] || '정산예정'}</div>
         <div class="settle-amount">${won(current.payout)}</div>
-        <div class="settle-sub">결제된 판매 매출의 30%</div>
+        <div class="settle-sub">우리 매장 판매가에서 살롱가를 뺀 금액</div>
         <div class="settle-metrics">
           <div class="settle-metric"><span>판매 매출</span><strong>${won(current.sales)}</strong></div>
           <div class="settle-metric"><span>결제 건수</span><strong>${current.orders || 0}건</strong></div>
@@ -1105,7 +1296,7 @@ function renderStore() {
                   <div class="order-salon">${items.slice(0, 2).map((item) => item.name).join(' · ') || '상품'}</div>
                   <div class="order-designer"><i class="fas fa-user-tie" style="margin-right:4px;opacity:0.5"></i>${order.designer_name || '담당 없음'}</div>
                   <div class="order-footer">
-                    <span style="font-size:12px;color:var(--muted)">${paid ? '정산 ' + won(Math.round((order.total_amount || 0) * 0.3)) : ''}</span>
+                    <span style="font-size:12px;color:var(--muted)">${paid ? '정산 ' + won(ProductCatalog.orderStorePayout(order)) : ''}</span>
                     <span class="order-amount">${won(order.total_amount)}</span>
                   </div>
                 </div>`;
