@@ -160,6 +160,76 @@
     };
   }
 
+  function wonText(amount) {
+    return Math.round(Number(amount) || 0).toLocaleString('ko-KR') + '원';
+  }
+
+  function ensureSalonPricing(salon) {
+    if (!salon) return salon;
+    if (!salon.brand_discount_rates || typeof salon.brand_discount_rates !== 'object' || Array.isArray(salon.brand_discount_rates)) {
+      salon.brand_discount_rates = {};
+    }
+    if (!salon.product_prices || typeof salon.product_prices !== 'object' || Array.isArray(salon.product_prices)) {
+      salon.product_prices = {};
+    }
+    return salon;
+  }
+
+  function hqPrice(product) {
+    return Math.round(Number(product && product.vip_discount_price) || 0);
+  }
+
+  function salonCost(product) {
+    const selling = hqPrice(product);
+    if (!product || product.salon_price == null || product.salon_price === '') return Math.round(selling * 0.7);
+    return Math.round(Number(product.salon_price) || 0);
+  }
+
+  function clampPrice(value, floor, ceiling) {
+    let next = Math.round(Number(value) || 0);
+    if (next < floor) next = floor;
+    if (next > ceiling) next = ceiling;
+    return next;
+  }
+
+  function storeSellingPrice(salon, product) {
+    const hq = hqPrice(product);
+    const floor = salonCost(product);
+    const ceiling = Math.max(hq, floor);
+    const prices = (salon && salon.product_prices) || {};
+    const raw = prices[String(product && product.id)];
+    if (raw != null && raw !== '') return clampPrice(raw, floor, ceiling);
+    const rates = (salon && salon.brand_discount_rates) || {};
+    const rate = Math.min(100, Math.max(0, Number(rates[String(product && product.brand_id)]) || 0));
+    return clampPrice(Math.round(hq * (100 - rate) / 100), floor, ceiling);
+  }
+
+  function validateStorePrice(product, price) {
+    const hq = hqPrice(product);
+    const floor = salonCost(product);
+    const amount = Math.round(Number(price));
+    if (!Number.isFinite(amount)) return { error: '판매가를 입력하세요' };
+    if (amount < floor) return { error: '살롱가 ' + wonText(floor) + '보다 낮게 정할 수 없습니다' };
+    if (amount > hq) return { error: '본사 판매가 ' + wonText(hq) + '보다 높게 정할 수 없습니다' };
+    return { price: amount };
+  }
+
+  function orderStorePayout(order) {
+    let items = order && order.order_items;
+    if (typeof items === 'string') {
+      try { items = JSON.parse(items || '[]'); } catch (error) { items = []; }
+    }
+    const total = Number(order && order.total_amount) || 0;
+    if (!Array.isArray(items) || !items.length) return Math.round(total * 0.3);
+    const priced = items.every((item) => item && item.salon_price != null && item.salon_price !== '');
+    if (!priced) return Math.round(total * 0.3);
+    return items.reduce((sum, item) => {
+      const qty = Number(item.qty) || 0;
+      const profit = (Number(item.price) || 0) - (Number(item.salon_price) || 0);
+      return sum + Math.max(0, profit) * qty;
+    }, 0);
+  }
+
   function syncPointBlock(db, product) {
     db.point_blocked_ids = db.point_blocked_ids || [];
     if (product.point_use_disabled) {
@@ -178,6 +248,12 @@
     inferDiscount: inferDiscount,
     fillProductDefaults: fillProductDefaults,
     readProductBody: readProductBody,
+    ensureSalonPricing: ensureSalonPricing,
+    hqPrice: hqPrice,
+    salonCost: salonCost,
+    storeSellingPrice: storeSellingPrice,
+    validateStorePrice: validateStorePrice,
+    orderStorePayout: orderStorePayout,
     syncPointBlock: syncPointBlock,
   };
 });

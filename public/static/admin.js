@@ -213,7 +213,7 @@ function renderDashboard() {
       <div class="stat-card gold">
         <div class="stat-icon gold"><i class="fas fa-store"></i></div>
         <div class="stat-value">${(salonComm/10000).toFixed(1)}만</div>
-        <div class="stat-label">원장 지급 (30%)</div>
+        <div class="stat-label">매장 정산</div>
       </div>
     </div>
 
@@ -252,7 +252,7 @@ function renderDashboard() {
             <tr>
               <th>살롱명</th>
               <th>총 매출</th>
-              <th>원장 지급 30%</th>
+              <th>매장 정산</th>
               <th>비중</th>
               <th>관리</th>
             </tr>
@@ -1753,7 +1753,7 @@ function renderOrderRows(orders) {
       <td style="font-size:13px">${o.salon_name}</td>
       <td>${o.designer_name || '<span style="color:#9ca3af;font-size:12px">없음</span>'}</td>
       <td style="font-weight:700;color:#e94560">${o.total_amount.toLocaleString()}원</td>
-      <td style="color:#d4af37;font-weight:600">${Math.round((o.total_amount || 0) * 0.3).toLocaleString()}원</td>
+      <td style="color:#d4af37;font-weight:400">${ProductCatalog.orderStorePayout(o).toLocaleString()}원</td>
       <td><span class="badge badge-${o.payment_status.toLowerCase()}">${{PAID:'결제완료',PENDING:'대기',CANCELLED:'취소',REFUNDED:'환불'}[o.payment_status]}</span></td>
       <td style="color:#9ca3af;font-size:12px">${new Date(o.created_at).toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'})}</td>
     </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">주문 없음</td></tr>';
@@ -1795,7 +1795,7 @@ function renderRevenue() {
       <div class="stat-card gold">
         <div class="stat-icon gold"><i class="fas fa-handshake"></i></div>
         <div class="stat-value">${(salonComm/10000).toFixed(1)}만원</div>
-        <div class="stat-label">원장 지급 합계 (30%)</div>
+        <div class="stat-label">매장 정산 합계</div>
       </div>
     </div>
 

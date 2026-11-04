@@ -24,6 +24,7 @@ function ensureExtras(data, seed) {
   });
   data.salons.forEach((salon) => {
     if (!Array.isArray(salon.hidden_brand_ids)) salon.hidden_brand_ids = [];
+    catalog.ensureSalonPricing(salon);
   });
   data.coupons = data.coupons || seed.coupons || [];
   data.point_grants = data.point_grants || seed.point_grants || [];
@@ -214,12 +215,11 @@ function orderStats() {
     };
     row.orders += 1;
     row.revenue += amount;
+    row.commission += catalog.orderStorePayout(order);
     bySalon.set(order.salon_id, row);
     gmv += amount;
   }
-  const salonBreakdown = [...bySalon.values()]
-    .map((row) => ({ ...row, commission: Math.round(row.revenue * STORE_PAYOUT_RATE) }))
-    .sort((a, b) => b.revenue - a.revenue);
+  const salonBreakdown = [...bySalon.values()].sort((a, b) => b.revenue - a.revenue);
   return {
     total_orders: db.orders.length,
     paid_orders: paid.length,
@@ -290,7 +290,7 @@ function salonPeriodRow(salon, period) {
     points_used: pointsUsed,
     coupon_discount: couponDiscount,
     shipping_fee: shippingFee,
-    payout: Math.round(sales * STORE_PAYOUT_RATE),
+    payout: paid.reduce((sum, order) => sum + catalog.orderStorePayout(order), 0),
     designer_payout: 0,
     status: settlementStatusFor(id, period),
     lines: paid.map(publicOrder).map((order) => ({
@@ -393,6 +393,8 @@ const routes = [
       owner_phone: body.owner_phone,
       bank_account: body.bank_account || '',
       hidden_brand_ids: [],
+      brand_discount_rates: {},
+      product_prices: {},
       created_at: nowStamp(),
     };
     db.salons.push(salon);
@@ -424,6 +426,40 @@ const routes = [
     }
     save();
     return { data: publicSalon(salon) };
+  }],
+  ['POST', /^\/api\/salons\/(\d+)\/prices$/, (req, id) => {
+    const salon = findSalon(id);
+    if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
+    catalog.ensureSalonPricing(salon);
+    const body = req.body || {};
+    if (body.brand_id != null && body.brand_id !== '') {
+      const brandId = Number(body.brand_id);
+      const brand = db.brands.find((item) => item.id === brandId);
+      if (!brand) return { status: 400, error: '브랜드를 찾을 수 없습니다' };
+      const rate = Number(body.discount_rate);
+      if (!Number.isFinite(rate) || rate < 0 || rate > 100) return { status: 400, error: '할인율은 0에서 100 사이입니다' };
+      const key = String(brandId);
+      if (rate === 0) delete salon.brand_discount_rates[key];
+      else salon.brand_discount_rates[key] = Math.round(rate * 10) / 10;
+      save();
+      return { data: publicSalon(salon) };
+    }
+    if (body.product_id != null && body.product_id !== '') {
+      const product = db.products.find((item) => item.id === Number(body.product_id));
+      if (!product) return { status: 400, error: '상품을 찾을 수 없습니다' };
+      const key = String(product.id);
+      if (body.clear) {
+        delete salon.product_prices[key];
+        save();
+        return { data: publicSalon(salon) };
+      }
+      const checked = catalog.validateStorePrice(product, body.price);
+      if (checked.error) return { status: 400, error: checked.error };
+      salon.product_prices[key] = checked.price;
+      save();
+      return { data: publicSalon(salon) };
+    }
+    return { status: 400, error: '저장할 가격이 없습니다' };
   }],
   ['GET', /^\/api\/salons\/(\d+)\/qr$/, (req, id) => {
     const salon = findSalon(id);
@@ -823,13 +859,23 @@ const routes = [
       if (block) return { status: 400, error: `${product.name}은 ${block}` };
       const qty = Number(item.qty || 1);
       if (product.stock_quantity < qty) return { status: 400, error: `${product.name} 재고가 부족합니다` };
-      items.push({ product_id: product.id, name: product.name, qty, price: product.vip_discount_price });
+      const price = catalog.storeSellingPrice(salon, product);
+      const salonPrice = catalog.salonCost(product);
+      items.push({
+        product_id: product.id,
+        name: product.name,
+        qty,
+        price,
+        salon_price: salonPrice,
+        hq_price: catalog.hqPrice(product),
+      });
     }
     if (!items.length) return { status: 400, error: '주문 상품이 없습니다' };
     const designer = db.designers.find((d) =>
       d.id === Number(body.designer_id) && d.salon_id === salon.id && d.status === 'ACTIVE');
     const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
     const split = splitAmount(total, Boolean(designer));
+    const storePayout = items.reduce((sum, item) => sum + (item.price - item.salon_price) * item.qty, 0);
     items.forEach((item) => {
       const product = db.products.find((p) => p.id === item.product_id);
       product.stock_quantity -= item.qty;
@@ -841,7 +887,7 @@ const routes = [
       designer_id: designer ? designer.id : null,
       total_amount: total,
       platform_amount: split.platform,
-      salon_commission_amount: split.salon,
+      salon_commission_amount: storePayout,
       designer_commission_amount: split.designer,
       payment_status: 'PAID',
       shipping_status: 'READY',
