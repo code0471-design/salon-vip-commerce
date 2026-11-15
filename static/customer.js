@@ -950,15 +950,19 @@ function renderEntryGate() {
         <div class="onboard-icon"><i class="fas fa-door-open"></i></div>
         <h2>${unaffiliated ? '소속이 없습니다' : '살롱 VIP 입장하기'}</h2>
         <p>${unaffiliated
-          ? (hasInvites
-            ? '위에서 담당자 초대를 승인하거나, 내 매장을 개설할 수 있어요. 고객 입장은 방문한 매장의 6자리 코드가 있을 때만 가능합니다.'
-            : '고객 입장은 매장에서 받은 6자리 코드(또는 QR)가 있어야 합니다. 코드가 없으면 입장할 수 없고, 원장이면 아래에서 매장을 개설하세요.')
-          : '고객은 매장에서 받은 6자리 코드로 입장하고, 원장님은 관리자로 매장을 개설할 수 있어요.'}</p>
+          ? '아래 셋 중 하나로 이어가면 됩니다.'
+          : '고객은 매장 코드로 입장하고, 원장님은 관리자로 매장을 개설할 수 있어요.'}</p>
+        ${unaffiliated ? `
+        <ul class="entry-path-list">
+          <li><strong>1. 담당자 초대 승인</strong> — 위에서 초대를 승인하면 그 매장 담당자로 등록${hasInvites ? '' : ' (대기 중인 초대가 있으면 표시됩니다)'}</li>
+          <li><strong>2. 관리자(원장) 매장 개설</strong> — 내 매장을 새로 만듭니다</li>
+          <li><strong>3. 다른 매장 일반 고객</strong> — 방문·QR로 받은 6자리 코드가 있을 때만 가능</li>
+        </ul>` : ''}
         <button class="btn-primary" onclick="navigate('scan')">
-          <i class="fas fa-key"></i> 매장 코드로 고객 입장
+          <i class="fas fa-key"></i> 다른 매장 일반 고객으로 입장
         </button>
-        <p class="entry-code-hint">방문·QR로 받은 코드가 없으면 고객 입장이 되지 않습니다.</p>
-        <button type="button" class="entry-admin-link" onclick="openAdminSetup()">관리자 입장 · 매장 개설</button>
+        <p class="entry-code-hint">매장 코드가 없으면 고객 입장이 되지 않습니다.</p>
+        <button type="button" class="entry-admin-link" onclick="openAdminSetup()">관리자(원장) · 매장 개설</button>
         <button type="button" class="entry-logout-link" onclick="handleLogout()">로그아웃</button>
       </div>
     </div>
