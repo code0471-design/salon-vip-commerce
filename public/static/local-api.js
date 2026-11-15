@@ -207,6 +207,39 @@
     return db.salons.find((salon) => phoneKey(salon.owner_phone) === phone) || null;
   }
 
+  function ensureDemoOwnerUsers() {
+    (db.salons || []).forEach((salon) => {
+      if (!salon || !salon.owner_phone) return;
+      let user = (db.users || []).find((u) => phoneKey(u.phone) && phoneKey(u.phone) === phoneKey(salon.owner_phone));
+      if (!user) {
+        db.users.push({
+          id: nextId(db.users),
+          kakao_id: 'kakao_owner_' + salon.id,
+          auth_provider: 'kakao',
+          name: salon.owner_name || '원장',
+          phone: salon.owner_phone,
+          phone_verified: true,
+          shipping_address: '(06236) 서울 강남구 테헤란로 152 801호',
+          current_salon_id: salon.id,
+          mapped_designer_id: null,
+          points: 0,
+          coupon_ids: [],
+          created_at: nowStamp(),
+        });
+        return;
+      }
+      user.kakao_id = user.kakao_id || ('kakao_owner_' + salon.id);
+      user.auth_provider = user.auth_provider || 'kakao';
+      user.name = salon.owner_name || user.name || '원장';
+      user.phone = salon.owner_phone;
+      user.phone_verified = true;
+      user.current_salon_id = salon.id;
+      if (!user.shipping_address) {
+        user.shipping_address = '(06236) 서울 강남구 테헤란로 152 801호';
+      }
+    });
+  }
+
   function hiddenBrandIds(salon) {
     return new Set((salon && salon.hidden_brand_ids) || []);
   }
@@ -874,7 +907,11 @@
       return { data: { phone: phoneDigits(body.phone), verified: true }, extra: { message: '휴대폰 인증이 완료되었습니다' } };
     }],
     ['POST', /^\/api\/auth\/demo-owner$/, () => {
+      ensureDemoOwnerUsers();
+      const preferred = findSalon(1) || (db.salons || [])[0] || null;
       const ranked = (db.salons || []).slice().sort((a, b) => {
+        if (preferred && Number(a.id) === Number(preferred.id)) return -1;
+        if (preferred && Number(b.id) === Number(preferred.id)) return 1;
         const ta = String(a.created_at || '');
         const tb = String(b.created_at || '');
         if (ta !== tb) return tb.localeCompare(ta);
@@ -889,7 +926,14 @@
         const user = byPhone || byOwned;
         if (!user) continue;
         user.auth_provider = user.auth_provider || 'kakao';
-        if (!user.current_salon_id) user.current_salon_id = salon.id;
+        if (!user.kakao_id) user.kakao_id = 'kakao_owner_' + salon.id;
+        user.current_salon_id = salon.id;
+        user.phone = salon.owner_phone || user.phone;
+        user.name = salon.owner_name || user.name || '원장';
+        user.phone_verified = true;
+        if (!user.shipping_address) {
+          user.shipping_address = '(06236) 서울 강남구 테헤란로 152 801호';
+        }
         save();
         return {
           data: publicUser(user),
@@ -1424,6 +1468,7 @@
     (db.users || []).forEach((user) => {
       if (user.points == null) user.points = 0;
     });
+    ensureDemoOwnerUsers();
     // 시드 디자이너 휴대폰·상태 보강
     (function ensureDesignerSeedFields() {
       (seed.designers || []).forEach((seedDesigner) => {
