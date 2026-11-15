@@ -54,16 +54,13 @@ let adminState = {
 
 // ---- API Helpers ----
 async function api(path, method = 'GET', body = null) {
-  if (location.hostname.endsWith('github.io') && !API) {
-    return { success: false, error: '실서버 API가 연결되지 않았습니다. config.js의 apiBase를 설정하세요.' };
-  }
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
   try {
     const res = await fetch(API + path, opts);
     return await res.json();
   } catch (e) {
-    return { success: false, error: '실서버에 연결할 수 없습니다' };
+    return { success: false, error: '서버에 연결할 수 없습니다' };
   }
 }
 
@@ -86,15 +83,15 @@ function renderDataSourceBanner() {
   }
   if (location.hostname.endsWith('github.io')) {
     return `
-      <div class="data-source-banner local">
-        <i class="fas fa-exclamation-triangle"></i>
-        <span>실서버가 아직 연결되지 않았습니다. <code>static/config.js</code>에 <strong>apiBase</strong>를 넣어 주세요. 브라우저 로컬 DB는 더 이상 쓰지 않습니다.</span>
+      <div class="data-source-banner pages">
+        <i class="fas fa-info-circle"></i>
+        <span>지금은 GitHub Pages 데모입니다. 이 브라우저에서 고객 앱·어드민이 같은 데이터를 공유합니다. 앱스토어 배포 때 실서버로 전환합니다.</span>
       </div>`;
   }
   return `
     <div class="data-source-banner pages">
       <i class="fas fa-server"></i>
-      <span>이 서버의 공유 DB를 사용합니다. 개설한 매장은 고객 앱·어드민에 같이 보입니다.</span>
+      <span>이 서버 DB를 사용합니다. 개설한 매장은 고객 앱·어드민에 같이 보입니다.</span>
     </div>`;
 }
 
