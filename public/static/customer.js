@@ -112,16 +112,13 @@ function clearSessionOnly() {
 
 // ---- API Helpers ----
 async function api(path, method = 'GET', body = null) {
-  if (location.hostname.endsWith('github.io') && !API) {
-    return { success: false, error: '실서버 API가 연결되지 않았습니다. config.js의 apiBase를 설정하세요.' };
-  }
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
   try {
     const res = await fetch(API + path, opts);
     return await res.json();
   } catch (e) {
-    return { success: false, error: '실서버에 연결할 수 없습니다' };
+    return { success: false, error: '서버에 연결할 수 없습니다' };
   }
 }
 

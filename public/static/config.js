@@ -1,7 +1,7 @@
-// 살롱 VIP — 실서버 전용 설정 (브라우저 localStorage / local-api 사용 안 함)
-// apiBase가 비어 있으면 같은 origin의 /api 를 쓴다 (Node server.js가 HTML+API 함께 제공).
-// GitHub Pages 등 정적 호스팅만 쓸 때는 아래에 실서버 URL을 넣는다.
+// 살롱 VIP 설정
+// - 지금은 GitHub Pages로 검증 (github.io에서는 local-api가 브라우저 공유 DB로 /api 응답)
+// - 나중에 앱스토어·실서버 붙일 때 apiBase에 서버 URL만 넣으면 됨
 window.__SALON_CONFIG__ = {
   apiBase: '',
-  // 예: apiBase: 'https://salon-vip.example.com',
+  // 앱스토어/실서버 예: apiBase: 'https://api.salon-vip.example.com',
 };
