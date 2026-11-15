@@ -30,6 +30,7 @@ let state = {
   priceBreakdownOpen: true,
   // 상품 상세 할인 선택: 기본 전체 적용, 고객이 해제/변경 가능
   dealPrefs: null, // { productId, useCoupon, couponId, usePoints, pointsUse }
+  menuOpen: false,
   orders: [],
   storeOrders: [],
   storeSettlement: null,
@@ -201,6 +202,61 @@ function render() {
   attachListeners();
 }
 
+function openHeaderMenu() {
+  state.menuOpen = true;
+  render();
+}
+
+function closeHeaderMenu() {
+  state.menuOpen = false;
+  render();
+}
+
+function pickMenuCategory(cat) {
+  state.menuOpen = false;
+  goShopCategory(cat);
+}
+
+function pickMenuBrand(brandId) {
+  state.menuOpen = false;
+  goShopBrand(brandId);
+}
+
+function renderHeaderMenu() {
+  if (!state.menuOpen) return '';
+  const categories = ['전체', '샴푸', '컨디셔너', '트리트먼트', '오일/세럼', '스프레이', '컬크림', '왁스/젤'];
+  const brands = (state.brands || []).slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ko'));
+  return `
+    <div class="header-menu-overlay" onclick="closeHeaderMenu()">
+      <aside class="header-menu-panel" onclick="event.stopPropagation()">
+        <div class="header-menu-top">
+          <div class="header-menu-title">메뉴</div>
+          <button type="button" class="header-menu-close" onclick="closeHeaderMenu()" aria-label="닫기">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        <div class="header-menu-section">
+          <div class="header-menu-label">카테고리</div>
+          <div class="header-menu-list">
+            ${categories.map((name) => `
+              <button type="button" class="header-menu-item" onclick="pickMenuCategory('${name}')">${name}</button>
+            `).join('')}
+          </div>
+        </div>
+        <div class="header-menu-section">
+          <div class="header-menu-label">브랜드</div>
+          <div class="header-menu-list">
+            <button type="button" class="header-menu-item" onclick="pickMenuBrand(0)">전체 브랜드</button>
+            ${brands.map((brand) => `
+              <button type="button" class="header-menu-item" onclick="pickMenuBrand(${brand.id})">${escText(brand.name)}</button>
+            `).join('')}
+          </div>
+        </div>
+      </aside>
+    </div>
+  `;
+}
+
 function renderShell() {
   // 매장명: 로그인 상태면 매장명, 없으면 브랜드명
   const salonName = state.user?.salon_name || null;
@@ -215,14 +271,19 @@ function renderShell() {
       }
       <div class="header-right">
         ${canViewSales() ? `<button type="button" class="header-sales-btn" onclick="openAdmin()"><i class="fas fa-store"></i> 관리자</button>` : ''}
-        ${state.user ? `<span class="header-user-chip">${state.user.name}님</span>` : ''}
-        <i class="fas fa-bell header-icon"></i>
+        <button type="button" class="header-icon-btn" onclick="showToast('알림이 없습니다','success')" aria-label="알림">
+          <i class="fas fa-bell"></i>
+        </button>
+        <button type="button" class="header-icon-btn" onclick="openHeaderMenu()" aria-label="메뉴">
+          <i class="fas fa-bars"></i>
+        </button>
       </div>
     </header>`}
     <main class="page-content${isProduct ? ' page-content-flush' : ''}" id="page-content">
       ${renderPage()}
     </main>
     ${state.user && !['entry', 'admin-setup', 'product'].includes(state.currentPage) ? renderBottomNav(cartCount) : ''}
+    ${renderHeaderMenu()}
   `;
 }
 
