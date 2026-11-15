@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: salon-vip-commerce
+    runtime: node
+    plan: free
+    buildCommand: "true"
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: SALON_CORS_ORIGINS
+        value: https://code0471-design.github.io
+      - key: SALON_PUBLIC_BASE
+        sync: false

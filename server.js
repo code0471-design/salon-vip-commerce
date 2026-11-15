@@ -212,21 +212,42 @@ function nowStamp() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-function send(res, status, body) {
+function corsHeaders(req) {
+  const origin = String((req && req.headers && req.headers.origin) || '');
+  const allowed = String(process.env.SALON_CORS_ORIGINS || 'https://code0471-design.github.io')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const okOrigin = !origin || allowed.includes('*') || allowed.includes(origin)
+    || (origin.endsWith('github.io') && allowed.some((a) => a.includes('github.io')));
+  const headers = {
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Max-Age': '86400',
+  };
+  if (okOrigin && origin) headers['Access-Control-Allow-Origin'] = origin;
+  else if (allowed.includes('*')) headers['Access-Control-Allow-Origin'] = '*';
+  return headers;
+}
+
+function send(res, status, body, req) {
   const json = JSON.stringify(body);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(json),
+    ...corsHeaders(req),
   });
   res.end(json);
 }
 
+let currentReq = null;
+
 function ok(res, data, extra = {}) {
-  send(res, 200, { success: true, data, ...extra });
+  send(res, 200, { success: true, data, ...extra }, currentReq);
 }
 
 function fail(res, status, error) {
-  send(res, status, { success: false, error });
+  send(res, status, { success: false, error }, currentReq);
 }
 
 function phoneKey(value) {
@@ -1417,8 +1438,14 @@ function serveFile(res, filePath, transform) {
 }
 
 const server = http.createServer(async (req, res) => {
+  currentReq = req;
   const parsed = new URL(req.url, `http://${req.headers.host}`);
   const pathname = decodeURIComponent(parsed.pathname);
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, corsHeaders(req));
+    return res.end();
+  }
 
   if (pathname.startsWith('/api/')) {
     try {
