@@ -913,17 +913,23 @@ body {
 }
 .order-detail-btn:active { background: #f7f7f7; }
 
-.od-page { padding-bottom: 100px; }
+.od-page { padding-bottom: 100px; background: #fff; min-height: 100%; }
 .od-topbar {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 8px 4px;
 }
-.od-back {
-  width: 40px; height: 40px; border: none; background: transparent;
-  font-size: 16px; color: #222; cursor: pointer;
+.od-topbar-ref {
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid #f0f0f0;
 }
-.od-topbar-title { font-size: 16px; font-weight: 800; color: var(--text); }
+.od-back, .od-close {
+  width: 40px; height: 40px; border: none; background: transparent;
+  font-size: 18px; color: #222; cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+}
+.od-topbar-title { font-size: 20px; font-weight: 800; color: #111; letter-spacing: -0.3px; }
 .od-body { padding: 4px 0 20px; }
+.od-body-ref { padding: 16px 16px 28px; }
 .od-head {
   display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
   padding: 8px 16px 14px;
@@ -954,7 +960,99 @@ body {
 .od-cancel-btn:active { background: #fef2f2; }
 .od-cancel-note {
   text-align: center; font-size: 13px; color: var(--muted);
-  background: #fafafa; border-radius: 12px; padding: 14px;
+  background: #f7f7f7; border-radius: 10px; padding: 12px; margin-top: 10px;
+}
+
+/* Order detail — reference layout */
+.od-main-card {
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  padding: 16px 14px 14px;
+  background: #fff;
+}
+.od-status-row {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px;
+  margin-bottom: 14px;
+}
+.od-status-text { font-size: 17px; font-weight: 800; color: #111; }
+.od-status-sub { font-size: 12px; color: #888; font-weight: 500; }
+.od-product-row {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding-bottom: 12px;
+}
+.od-thumb {
+  width: 72px; height: 72px; border-radius: 8px; object-fit: cover;
+  background: #f5f5f5; flex-shrink: 0; border: 1px solid #eee;
+}
+.od-product-meta { flex: 1; min-width: 0; }
+.od-product-name {
+  font-size: 14px; font-weight: 700; color: #111; line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.od-qty-chip {
+  display: inline-block; margin-top: 6px; padding: 2px 8px;
+  font-size: 11px; color: #666; background: #f3f3f3; border-radius: 4px; font-weight: 600;
+}
+.od-price-row {
+  display: flex; align-items: baseline; gap: 6px; margin-top: 8px;
+}
+.od-price-now { font-size: 16px; font-weight: 800; color: #111; }
+.od-price-old {
+  font-size: 12px; color: #aaa; text-decoration: line-through; font-weight: 500;
+}
+.od-orderno {
+  margin-top: 8px; font-size: 11px; color: #888;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.od-copy {
+  border: 1px solid #ddd; background: #fff; border-radius: 4px;
+  padding: 1px 7px; font-size: 11px; color: #555; cursor: pointer; font-weight: 600;
+}
+.od-store-line {
+  font-size: 12px; color: #888; padding: 4px 0 10px; border-top: 1px solid #f2f2f2;
+}
+.od-cancel-soft {
+  width: 100%; border: none; background: #f5f5f5; color: #333;
+  border-radius: 8px; padding: 13px; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.od-cancel-soft:active { background: #ebebeb; }
+.od-section-title {
+  margin: 22px 0 10px; font-size: 16px; font-weight: 800; color: #111;
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; border: none; background: transparent; padding: 0; cursor: default;
+  text-align: left;
+}
+.od-pay-toggle { cursor: pointer; }
+.od-pay-toggle i { font-size: 13px; color: #888; }
+.od-ship-card, .od-pay-card {
+  border: 1px solid #e5e5e5; border-radius: 12px; padding: 14px; background: #fff;
+}
+.od-ship-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.od-ship-name { font-size: 15px; font-weight: 800; color: #111; }
+.od-change-btn {
+  border: 1px solid #ddd; background: #fff; border-radius: 6px;
+  padding: 4px 10px; font-size: 12px; font-weight: 700; color: #444; cursor: pointer;
+}
+.od-ship-phone { margin-top: 6px; font-size: 13px; color: #555; }
+.od-ship-addr { margin-top: 4px; font-size: 13px; color: #555; line-height: 1.45; }
+.od-pay-summary {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 14px; font-weight: 800; color: #03c75a; margin-bottom: 12px;
+}
+.od-pay-lines { border-top: 1px solid #f2f2f2; padding-top: 10px; }
+.od-pay-line {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px; color: #555; padding: 5px 0;
+}
+.od-pay-method {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid #f2f2f2;
+  font-size: 14px; font-weight: 700; color: #111;
+}
+.od-pay-earn {
+  margin-top: 10px; font-size: 12px; font-weight: 700; color: #03c75a;
 }
 .order-salon { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
 .order-designer { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
