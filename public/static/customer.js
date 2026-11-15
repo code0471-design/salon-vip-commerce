@@ -3131,9 +3131,9 @@ function renderSettleMetrics(row) {
       ${tile('실 고객결제액', won(view.paid))}
       ${tile('쿠폰사용', won(view.coupon))}
       ${tile('총 살롱가', won(view.salon))}
-      ${tile('정산액', won(view.payout), true)}
+      ${tile('정산받을 금액', won(view.payout), true)}
     </div>
-    <div class="settle-formula">총매출 = 실 고객결제액 + 쿠폰사용<br>정산액 = 총매출 − 총 살롱가</div>`;
+    <div class="settle-formula">총매출 = 실 고객결제액 + 쿠폰사용<br>정산받을 금액 = 총매출 − 총 살롱가</div>`;
 }
 
 function monthLabel(period) {
@@ -3473,7 +3473,7 @@ function renderStaffFilters(sales) {
       ${chip('', '전체', won(allSale))}
       ${people.map((row) => chip(row.name, row.name, row.count + '건 · ' + won(row.sale))).join('')}
     </div>
-    ${picked ? `<p style="font-size:12px;color:var(--muted);margin:-2px 0 10px">${picked.name} · 총매출 ${won(picked.sale)} · 실결제 ${won(Math.max(0, picked.sale - picked.coupon))} · 쿠폰 ${won(picked.coupon)} · 정산 ${won(picked.payout)}</p>` : ''}`;
+    ${picked ? `<p style="font-size:12px;color:var(--muted);margin:-2px 0 10px">${picked.name} · 총매출 ${won(picked.sale)} · 실결제 ${won(Math.max(0, picked.sale - picked.coupon))} · 쿠폰 ${won(picked.coupon)} · 정산받을 금액 ${won(picked.payout)}</p>` : ''}`;
 }
 
 function setSalesStaff(name) {
@@ -3554,8 +3554,13 @@ function renderStore() {
                   </div>
                   <div class="order-salon">${items.slice(0, 2).map((item) => item.name).join(' · ') || '상품'}</div>
                   <div class="order-designer"><i class="fas fa-user-tie" style="margin-right:4px;opacity:0.5"></i>${order.designer_name || '담당 없음'}</div>
-                  <div class="order-footer">
-                    <span style="font-size:12px;color:var(--muted)">${paid ? '정산 ' + won(money.storePayout) + (money.coupon ? ' · 실결제 ' + won(Math.max(0, money.sale - money.coupon)) + ' · 쿠폰 ' + won(money.coupon) : '') : ''}</span>
+                  <div class="order-footer order-footer-sales">
+                    ${paid ? `
+                      <div class="order-payout">
+                        <span class="order-payout-label">정산받을 금액</span>
+                        <strong class="order-payout-amt">${won(money.storePayout)}</strong>
+                        ${money.coupon ? `<span class="order-payout-meta">실결제 ${won(Math.max(0, money.sale - money.coupon))} · 쿠폰 ${won(money.coupon)}</span>` : ''}
+                      </div>` : '<span></span>'}
                     <span class="order-amount">${won(money.sale)}</span>
                   </div>
                 </div>`;
