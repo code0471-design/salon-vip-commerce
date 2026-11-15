@@ -32,11 +32,13 @@
   }
 
   function normalizeSalonCode(value) {
-    return String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+    const digits = String(value || '').replace(/\D/g, '');
+    return /^\d{5}$/.test(digits) ? digits : '';
   }
 
   function defaultSalonCode(salon) {
-    return 'S' + String(salon.id).padStart(3, '0');
+    const n = 10000 + Number(salon && salon.id ? salon.id : 0);
+    return String(n).padStart(5, '0').slice(-5);
   }
 
   function findSalon(id) {
@@ -65,12 +67,11 @@
   }
 
   function uniqueSalonCode(preferred, excludeId) {
-    let base = normalizeSalonCode(preferred) || 'SALON';
-    let candidate = base;
-    let n = 1;
+    let candidate = normalizeSalonCode(preferred) || defaultSalonCode({ id: excludeId || 0 });
+    let n = Number(candidate);
     while (db.salons.some((s) => s.id !== excludeId && normalizeSalonCode(s.salon_code) === candidate)) {
-      n += 1;
-      candidate = `${base}${n}`;
+      n = (n + 1) % 100000;
+      candidate = String(n).padStart(5, '0');
     }
     return candidate;
   }
@@ -370,8 +371,11 @@
     }],
     ['GET', /^\/api\/salons$/, () => ({ data: db.salons.map(publicSalon) })],
     ['GET', /^\/api\/salons\/lookup$/, (req) => {
-      const code = normalizeSalonCode(req.query.get('code'));
-      if (!code) return { status: 400, error: '매장 코드를 입력해주세요' };
+      const raw = String(req.query.get('code') || '').trim();
+      const code = normalizeSalonCode(raw);
+      if (!code) {
+        return { status: 400, error: raw ? '매장 코드는 5자리 숫자입니다' : '매장 코드를 입력해주세요' };
+      }
       const salon = findSalonByCode(code);
       if (!salon) return { status: 404, error: '매장 코드를 찾을 수 없습니다' };
       return {
@@ -411,8 +415,11 @@
         if (body[key] !== undefined) salon[key] = body[key];
       });
       if (body.salon_code !== undefined) {
-        const code = normalizeSalonCode(body.salon_code);
-        if (!code) return { status: 400, error: '매장 코드를 입력해주세요' };
+        const raw = String(body.salon_code || '').trim();
+        const code = normalizeSalonCode(raw);
+        if (!code) {
+          return { status: 400, error: raw ? '매장 코드는 5자리 숫자입니다' : '매장 코드를 입력해주세요' };
+        }
         salon.salon_code = uniqueSalonCode(code, salon.id);
       }
       save();
@@ -603,31 +610,16 @@
       if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
       if (!designerId) return { status: 400, error: '담당자를 선택해주세요' };
       if (user.current_salon_id && user.current_salon_id !== salon.id) {
-        const from = findSalon(user.current_salon_id);
-        return {
-          data: null,
-          extra: {
-            requires_confirmation: true,
-            switch_info: {
-              from_salon: from ? from.salon_name : '',
-              to_salon: salon.salon_name,
-              to_salon_id: salon.id,
-              designer_id: designerId,
-            },
-          },
-        };
+        return { status: 400, error: '이미 등록된 매장이 있습니다. 고객당 매장은 1곳만 가능합니다' };
       }
       const result = assignSalon(user, salon.id, designerId);
       if (result.error) return { status: 400, error: result.error };
       return { data: result.user, extra: { message: `${salon.salon_name} · 담당자 등록이 완료되었습니다` } };
     }],
-    ['POST', /^\/api\/users\/(\d+)\/confirm-switch$/, (req, id) => {
-      const user = db.users.find((u) => u.id === Number(id));
-      if (!user) return { status: 404, error: '고객을 찾을 수 없습니다' };
-      const result = assignSalon(user, req.body.to_salon_id, req.body.designer_id);
-      if (result.error) return { status: 400, error: result.error };
-      return { data: result.user, extra: { message: '메인 살롱과 담당자가 변경되었습니다' } };
-    }],
+    ['POST', /^\/api\/users\/(\d+)\/confirm-switch$/, () => ({
+      status: 400,
+      error: '매장 변경은 불가합니다. 고객당 매장은 1곳만 가능합니다',
+    })],
     ['GET', /^\/api\/brands$/, () => ({ data: db.brands })],
     ['POST', /^\/api\/brands$/, (req) => {
       const body = req.body || {};
