@@ -27,6 +27,8 @@ let state = {
   coupons: [],
   selectedProductId: null,
   productBackPage: 'home',
+  selectedOrderId: null,
+  orderBackPage: 'orders',
   priceBreakdownOpen: true,
   // 상품 상세 할인 선택: 기본 전체 적용, 고객이 해제/변경 가능
   dealPrefs: null, // { productId, useCoupon, couponId, usePoints, pointsUse }
@@ -576,6 +578,7 @@ function renderPage() {
     case 'scan':         return renderScan();
     case 'shop':         return renderShop();
     case 'orders':       return renderOrders();
+    case 'order-detail': return renderOrderDetailPage();
     case 'profile':      return renderProfile();
     case 'product':      return renderProductPage();
     default:             return renderHome();
@@ -2294,6 +2297,17 @@ function renderOrders() {
   `;
 }
 
+function findOrderById(id) {
+  return state.orders.find((x) => Number(x.id) === Number(id))
+    || (state.storeOrders || []).find((x) => Number(x.id) === Number(id))
+    || null;
+}
+
+function orderShippingLabel(status) {
+  const map = { READY: '상품준비중', SHIPPING: '배송중', DELIVERED: '배송완료', CANCELLED: '취소' };
+  return map[status] || status || '상품준비중';
+}
+
 function renderOrderCard(o) {
   const items = JSON.parse(o.order_items || '[]');
   const statusMap = { PAID:'결제완료', PENDING:'결제대기', CANCELLED:'취소됨', REFUNDED:'환불됨' };
@@ -2301,7 +2315,7 @@ function renderOrderCard(o) {
     ? (items.slice(0, 2).map((i) => i.name).join(' · ') + (items.length > 2 ? ` 외 ${items.length - 2}건` : ''))
     : '상품 정보 없음';
   return `
-    <div class="order-card" onclick="openOrderDetail(${o.id})">
+    <div class="order-card">
       <div class="order-card-top">
         <span style="font-size:11px;color:var(--muted)">#${o.id} · ${new Date(o.created_at).toLocaleDateString('ko-KR')}</span>
         <span class="order-status-badge status-${o.payment_status}">${statusMap[o.payment_status]||o.payment_status}</span>
@@ -2313,72 +2327,100 @@ function renderOrderCard(o) {
         <span style="font-size:12px;color:var(--muted)">총 ${items.reduce((s,i)=>s+i.qty,0)}개</span>
         <span class="order-amount">${(o.total_amount||0).toLocaleString()}원</span>
       </div>
+      <button type="button" class="order-detail-btn" onclick="openOrderDetail(${o.id})">주문상세</button>
     </div>`;
 }
 
 function openOrderDetail(id) {
-  const o = state.orders.find(x => x.id === id) || (state.storeOrders || []).find(x => x.id === id);
-  if (!o) return;
+  const o = findOrderById(id);
+  if (!o) { showToast('주문을 찾을 수 없습니다', 'error'); return; }
+  if (state.currentPage !== 'order-detail') state.orderBackPage = state.currentPage || 'orders';
+  state.selectedOrderId = Number(id);
+  navigate('order-detail');
+}
+
+function closeOrderDetailPage() {
+  const back = state.orderBackPage || 'orders';
+  state.selectedOrderId = null;
+  navigate(back === 'order-detail' ? 'orders' : back);
+}
+
+function renderOrderDetailPage() {
+  const o = findOrderById(state.selectedOrderId);
+  if (!o) {
+    return `<div style="padding:40px 24px;text-align:center">
+      <p style="color:var(--muted);margin-bottom:16px">주문을 찾을 수 없습니다</p>
+      <button class="btn-primary" style="width:auto;padding:12px 24px" onclick="navigate('orders')">주문 목록</button>
+    </div>`;
+  }
   const items = JSON.parse(o.order_items || '[]');
   const statusMap = { PAID:'결제완료', PENDING:'결제대기', CANCELLED:'취소됨', REFUNDED:'환불됨' };
   const money = orderMoney(o);
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.innerHTML = `
-    <div class="modal-sheet">
-      <div class="modal-handle"></div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <h3 style="font-size:17px;font-weight:800;color:var(--text)">주문 #${o.id}</h3>
-        <span class="order-status-badge status-${o.payment_status}">${statusMap[o.payment_status]}</span>
+  const isOwner = !!(state.user && state.user.is_owner);
+  return `
+    <div class="od-page">
+      <div class="od-topbar">
+        <button type="button" class="od-back" onclick="closeOrderDetailPage()" aria-label="뒤로">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+        <div class="od-topbar-title">주문상세</div>
+        <span style="width:40px"></span>
       </div>
-      <div class="cart-salon-info" style="margin-bottom:12px">
-        <div style="font-size:11px;color:var(--muted)">살롱 · 디자이너</div>
-        <div style="font-size:14px;font-weight:700;color:var(--text);margin-top:2px">${o.salon_name} · ${o.designer_name||'담당 없음'}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:3px">${new Date(o.created_at).toLocaleString('ko-KR')}</div>
-      </div>
-      ${o.shipping_address ? `
-      <div class="cart-salon-info" style="margin-bottom:12px">
-        <div style="font-size:11px;color:var(--muted)">배송지</div>
-        <div style="font-size:13px;font-weight:700;color:var(--text);margin-top:2px">${escText(o.shipping_name || '')} · ${escText(o.shipping_phone || '')}</div>
-        <div style="font-size:12px;color:var(--muted);margin-top:3px">${escText(o.shipping_address)}</div>
-      </div>` : ''}
-      ${items.map(i => `
-        <div class="cart-line">
-          <span style="font-size:13px;color:var(--text)">${i.name} × ${i.qty}</span>
-          <span style="font-size:13px;font-weight:600">${(i.price*i.qty).toLocaleString()}원</span>
-        </div>`).join('')}
-      <div class="cart-total-row">
-        <span>합계</span>
-        <span class="cart-total-val">${(o.total_amount||0).toLocaleString()}원</span>
-      </div>
-      ${state.user && state.user.is_owner
-        ? (o.payment_status === 'PAID' ? `<div class="rev-breakdown">
-            <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">정산액</div>
-            <div style="font-size:16px;font-weight:700;color:var(--text)">${won(money.storePayout)}</div>
-            <div style="font-size:12px;color:var(--text);margin-top:8px">총매출 ${won(money.sale)} · 실 고객결제액 ${won(Math.max(0, money.sale - money.coupon))}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:2px">쿠폰사용 ${won(money.coupon)} · 총 살롱가 ${won(Math.max(0, money.sale - money.storePayout))}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:4px">정산액 = 총매출 − 총 살롱가</div>
-          </div>` : '')
-        : `<div class="rev-breakdown">
-        <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">수익 배분 내역</div>
-        <div class="rev-grid">
-          <div class="rev-item">
-            <div style="font-size:10px;color:var(--muted)">플랫폼</div>
-            <div style="font-size:13px;font-weight:700">${(o.platform_amount||0).toLocaleString()}원</div>
-            <div style="font-size:10px;color:var(--muted)">40%</div>
+
+      <div class="od-body">
+        <div class="od-head">
+          <div>
+            <div class="od-order-id">주문 #${o.id}</div>
+            <div class="od-date">${new Date(o.created_at).toLocaleString('ko-KR')}</div>
           </div>
-          <div class="rev-item">
-            <div style="font-size:10px;color:var(--muted)">매장 원장</div>
-            <div style="font-size:13px;font-weight:700">${Math.round((o.total_amount || 0) * 0.3).toLocaleString()}원</div>
-            <div style="font-size:10px;color:var(--muted)">30%</div>
-          </div>
+          <span class="order-status-badge status-${o.payment_status}">${statusMap[o.payment_status] || o.payment_status}</span>
         </div>
-      </div>`}
-      <button onclick="closeModal()" style="width:100%;background:none;border:none;padding:14px;color:var(--muted);font-size:13px;cursor:pointer;margin-top:8px">닫기</button>
-    </div>`;
-  modal.onclick = (e) => { if (e.target === modal) closeModal(); };
-  document.body.appendChild(modal);
-  window.__modal = modal;
+
+        <div class="info-card od-card">
+          <div class="info-card-header">배송 정보</div>
+          <div class="info-row"><span>배송상태</span><span>${escText(orderShippingLabel(o.shipping_status))}</span></div>
+          <div class="info-row"><span>매장</span><span>${escText(o.salon_name || '-')}</span></div>
+          <div class="info-row" style="border-bottom:none"><span>담당</span><span>${escText(o.designer_name || '담당 없음')}</span></div>
+        </div>
+
+        ${o.shipping_address ? `
+        <div class="info-card od-card">
+          <div class="info-card-header">배송지</div>
+          <div style="padding:12px 16px 14px">
+            <div style="font-size:14px;font-weight:700;color:var(--text)">${escText(o.shipping_name || '')}${o.shipping_phone ? ' · ' + escText(o.shipping_phone) : ''}</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5">${escText(o.shipping_address)}</div>
+          </div>
+        </div>` : ''}
+
+        <div class="info-card od-card">
+          <div class="info-card-header">주문 상품</div>
+          ${items.map((i) => `
+            <div class="od-item-row">
+              <div>
+                <div class="od-item-name">${escText(i.name || '상품')}</div>
+                <div class="od-item-qty">${Number(i.qty || 0)}개</div>
+              </div>
+              <div class="od-item-price">${((Number(i.price) || 0) * (Number(i.qty) || 0)).toLocaleString()}원</div>
+            </div>`).join('') || `<div class="profile-coupon-empty">상품 정보가 없습니다</div>`}
+          <div class="od-total-row">
+            <span>합계</span>
+            <span>${(o.total_amount || 0).toLocaleString()}원</span>
+          </div>
+          ${o.points_earned ? `<div class="od-earn">+${Number(o.points_earned).toLocaleString()}P 적립</div>` : ''}
+        </div>
+
+        ${isOwner && o.payment_status === 'PAID' ? `
+        <div class="info-card od-card">
+          <div class="info-card-header">정산 정보</div>
+          <div style="padding:12px 16px 14px">
+            <div style="font-size:18px;font-weight:800;color:var(--text)">${won(money.storePayout)}</div>
+            <div style="font-size:12px;color:var(--text);margin-top:8px">총매출 ${won(money.sale)} · 실결제 ${won(Math.max(0, money.sale - money.coupon))}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">쿠폰 ${won(money.coupon)} · 살롱가 ${won(Math.max(0, money.sale - money.storePayout))}</div>
+          </div>
+        </div>` : ''}
+      </div>
+    </div>
+  `;
 }
 
 // ============================================================
