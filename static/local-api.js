@@ -122,13 +122,25 @@
     const salon = findSalon(user.current_salon_id);
     const designer = findDesigner(user.mapped_designer_id);
     const owned = ownedSalon(user);
+    const staffDesigner = db.designers.find((d) => {
+      if (d.status === 'RESIGNED') return false;
+      if (user.staff_designer_id && d.id === Number(user.staff_designer_id)) return true;
+      if (user.kakao_id && user.kakao_id === `designer-${d.id}`) return true;
+      const phone = String(user.phone || '').replace(/\D/g, '');
+      const dPhone = String(d.phone || '').replace(/\D/g, '');
+      return !!(phone && dPhone && phone === dPhone);
+    });
+    const staffSalon = staffDesigner ? findSalon(staffDesigner.salon_id) : null;
     return {
       ...user,
-      salon_name: salon ? salon.salon_name : (owned ? owned.salon_name : null),
+      salon_name: salon ? salon.salon_name : (owned ? owned.salon_name : (staffSalon ? staffSalon.salon_name : null)),
       designer_name: designer ? designer.designer_name : null,
       designer_img: designer ? designer.profile_img : null,
       is_owner: !!owned,
       owned_salon_id: owned ? owned.id : null,
+      is_staff: !!staffDesigner,
+      staff_salon_id: staffDesigner ? staffDesigner.salon_id : null,
+      staff_designer_id: staffDesigner ? staffDesigner.id : null,
     };
   }
 

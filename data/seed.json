@@ -384,6 +384,7 @@
       "salon_id": 1,
       "designer_name": "한예슬 디자이너",
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=ysl",
+      "phone": "010-2222-3333",
       "status": "ACTIVE",
       "commission_rate": 0.15,
       "created_at": "2026-08-10 06:09:35"

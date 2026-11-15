@@ -137,9 +137,9 @@ function render() {
 }
 
 function renderShell() {
-  const showCartFAB = state.cart.length > 0 && state.currentPage === 'shop';
   // 매장명: 로그인 상태면 매장명, 없으면 브랜드명
   const salonName = state.user?.salon_name || null;
+  const cartCount = state.cart.reduce((s, i) => s + i.qty, 0);
   return `
     <header class="app-header">
       ${salonName
@@ -147,6 +147,7 @@ function renderShell() {
         : `<div class="logo">SALON <span>VIP</span></div>`
       }
       <div class="header-right">
+        ${canViewSales() ? `<button type="button" class="header-sales-btn" onclick="navigate('store')"><i class="fas fa-chart-line"></i> 매출</button>` : ''}
         ${state.user ? `<span class="header-user-chip">${state.user.name}님</span>` : ''}
         <i class="fas fa-bell header-icon"></i>
       </div>
@@ -154,8 +155,7 @@ function renderShell() {
     <main class="page-content" id="page-content">
       ${renderPage()}
     </main>
-    ${state.user ? renderBottomNav() : ''}
-    ${showCartFAB ? renderCartFAB() : ''}
+    ${state.user ? renderBottomNav(cartCount) : ''}
   `;
 }
 
@@ -164,48 +164,61 @@ function ownerSalon() {
   return state.salons.find((salon) => salon.id === state.user.owned_salon_id) || null;
 }
 
+function salesSalon() {
+  if (!state.user) return null;
+  const owned = ownerSalon();
+  if (owned) return owned;
+  if (state.user.is_staff && state.user.staff_salon_id) {
+    return state.salons.find((salon) => salon.id === state.user.staff_salon_id) || null;
+  }
+  return null;
+}
+
+function canViewSales() {
+  return !!salesSalon();
+}
+
 function catalogSalonId() {
   if (!state.user) return '';
-  return state.user.owned_salon_id || state.user.current_salon_id || '';
+  return state.user.owned_salon_id || state.user.staff_salon_id || state.user.current_salon_id || '';
 }
 
 function needsSalonBinding() {
-  if (!state.user || state.user.is_owner) return false;
+  if (!state.user || state.user.is_owner || state.user.is_staff) return false;
   return !state.user.current_salon_id || !state.user.mapped_designer_id;
 }
 
-function renderBottomNav() {
+function renderBottomNav(cartCount) {
+  const count = cartCount == null ? state.cart.reduce((s, i) => s + i.qty, 0) : cartCount;
   const tabs = [
     { id: 'home', icon: 'fa-home', label: '홈' },
-    ownerSalon()
-      ? { id: 'store', icon: 'fa-chart-line', label: '매출' }
-      : { id: 'scan', icon: 'fa-store', label: needsSalonBinding() ? '매장등록' : '내 매장' },
-    { id: 'shop', icon: 'fa-shopping-bag', label: '쇼핑' },
-    { id: 'profile', icon: 'fa-user', label: '내 정보' }
+    { id: 'category', icon: 'fa-th-large', label: '카테고리' },
+    { id: 'search', icon: 'fa-search', label: '검색' },
+    { id: 'profile', icon: 'fa-user', label: '마이' },
+    { id: 'cart', icon: 'fa-shopping-bag', label: '장바구니', badge: count },
   ];
-  return `<nav class="bottom-nav">${tabs.map(t => `
+  return `<nav class="bottom-nav bottom-nav-5">${tabs.map(t => `
     <button class="nav-item ${state.currentPage === t.id ? 'active' : ''}" onclick="navigate('${t.id}')">
-      <i class="fas ${t.icon}"></i><span>${t.label}</span>
+      <span class="nav-icon-wrap">
+        <i class="fas ${t.icon}"></i>
+        ${t.badge ? `<span class="nav-badge">${t.badge > 99 ? '99+' : t.badge}</span>` : ''}
+      </span>
+      <span>${t.label}</span>
     </button>`).join('')}</nav>`;
-}
-
-function renderCartFAB() {
-  const total = state.cart.reduce((s, i) => s + i.qty, 0);
-  return `<button class="cart-fab" onclick="openCart()">
-    <i class="fas fa-shopping-bag"></i>
-    ${total > 0 ? `<span class="cart-count">${total}</span>` : ''}
-  </button>`;
 }
 
 function renderPage() {
   switch(state.currentPage) {
-    case 'home':    return renderHome();
-    case 'store':   return renderStore();
-    case 'scan':    return renderScan();
-    case 'shop':    return renderShop();
-    case 'orders':  return renderOrders();
-    case 'profile': return renderProfile();
-    default:        return renderHome();
+    case 'home':     return renderHome();
+    case 'category': return renderCategory();
+    case 'search':   return renderSearch();
+    case 'cart':     return renderCartPage();
+    case 'store':    return renderStore();
+    case 'scan':     return renderScan();
+    case 'shop':     return renderShop();
+    case 'orders':   return renderOrders();
+    case 'profile':  return renderProfile();
+    default:         return renderHome();
   }
 }
 
@@ -256,7 +269,7 @@ function renderHome() {
         <span style="background:var(--rose);color:white;font-size:9px;font-weight:800;padding:3px 7px;border-radius:5px;letter-spacing:1px;margin-right:6px">BEST</span>
         베스트 제품
       </span>
-      <span class="see-all" onclick="navigate('shop')">전체보기 →</span>
+      <span class="see-all" onclick="navigate('category')">전체보기 →</span>
     </div>
     <div class="best-scroll">
       ${best.map(p => renderBestCard(p)).join('')}
@@ -279,6 +292,119 @@ function renderHome() {
 function goShopCategory(cat) {
   state.selectedCategory = cat;
   navigate('shop');
+}
+
+function renderCategory() {
+  if (!state.user) return renderLoginPrompt();
+  const categories = ['전체', '샴푸', '컨디셔너', '트리트먼트', '오일/세럼', '스프레이', '컬크림', '왁스/젤'];
+  return `
+    <div class="page-pad">
+      <h2 class="page-title">카테고리</h2>
+      <p class="page-sub">원하는 제품군을 선택하세요</p>
+      <div class="category-menu-list">
+        ${categories.map((name) => `
+          <button type="button" class="category-menu-row" onclick="goShopCategory('${name}')">
+            <span>${name}</span>
+            <i class="fas fa-chevron-right"></i>
+          </button>`).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderSearch() {
+  if (!state.user) return renderLoginPrompt();
+  const q = (state.searchQuery || '').trim().toLowerCase();
+  const list = !q
+    ? []
+    : state.products.filter((p) =>
+        String(p.name || '').toLowerCase().includes(q)
+        || String(p.category || '').toLowerCase().includes(q)
+        || String(p.brand_name || '').toLowerCase().includes(q));
+  return `
+    <div class="page-pad">
+      <h2 class="page-title">검색</h2>
+      <div class="search-box">
+        <i class="fas fa-search"></i>
+        <input id="product-search" class="search-input" type="search" placeholder="제품명, 카테고리 검색"
+          value="${state.searchQuery || ''}"
+          oninput="state.searchQuery=this.value; render()">
+      </div>
+      ${!q
+        ? `<p class="page-sub" style="margin-top:20px">검색어를 입력해 주세요</p>`
+        : list.length === 0
+          ? `<p class="page-sub" style="margin-top:20px">검색 결과가 없습니다</p>`
+          : `<div class="search-result-list">${list.map((p) => renderProductCard(p)).join('')}</div>`}
+    </div>
+  `;
+}
+
+function renderCartPage() {
+  if (!state.user) return renderLoginPrompt();
+  if (needsSalonBinding()) {
+    return `
+      <div class="page-pad" style="padding-top:40px;text-align:center">
+        <i class="fas fa-store" style="font-size:28px;color:var(--muted);opacity:0.4"></i>
+        <h3 style="margin:14px 0 6px;font-size:16px;font-weight:800">매장 등록이 필요해요</h3>
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">장바구니·결제는 매장 코드 등록 후 이용할 수 있습니다</p>
+        <button class="btn-primary" style="width:auto;padding:12px 24px" onclick="navigate('scan')">매장 코드 입력</button>
+      </div>`;
+  }
+  const total = state.cart.reduce((s, i) => s + i.price * i.qty, 0);
+  const salonAmt = Math.round(total * 0.3);
+  const ownerProfit = cartStoreProfit();
+  if (state.cart.length === 0) {
+    return `
+      <div class="page-pad" style="padding-top:48px;text-align:center">
+        <i class="fas fa-shopping-bag" style="font-size:32px;color:var(--muted);opacity:0.3"></i>
+        <h3 style="margin:14px 0 6px;font-size:16px;font-weight:800">장바구니가 비어 있어요</h3>
+        <button class="btn-primary" style="width:auto;padding:12px 24px;margin-top:12px" onclick="navigate('category')">상품 보러가기</button>
+      </div>`;
+  }
+  return `
+    <div class="page-pad" style="padding-bottom:120px">
+      <h2 class="page-title">장바구니</h2>
+      <div class="cart-salon-info" style="margin:12px 0 16px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">담당 살롱 · 디자이너</div>
+        <div style="font-size:14px;font-weight:700;color:var(--text)">
+          ${state.user.salon_name || '미등록'} · ${state.user.designer_name || '담당 없음'}
+        </div>
+      </div>
+      ${state.cart.map((i) => `
+        <div class="cart-line">
+          <div style="flex:1">
+            <div style="font-size:14px;font-weight:600;color:var(--text)">${i.name}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">
+              <button type="button" class="qty-btn" onclick="updateCartQty(${i.product_id},-1)">−</button>
+              <span style="margin:0 8px">${i.qty}</span>
+              <button type="button" class="qty-btn" onclick="updateCartQty(${i.product_id},1)">+</button>
+              · ${i.price.toLocaleString()}원
+            </div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:14px;font-weight:700;color:var(--rose)">${(i.price * i.qty).toLocaleString()}원</div>
+            <button type="button" class="demo-link" style="margin-top:4px" onclick="removeFromCart(${i.product_id});render()">삭제</button>
+          </div>
+        </div>`).join('')}
+      <div class="cart-total-row">
+        <span>합계</span>
+        <span class="cart-total-val">${total.toLocaleString()}원</span>
+      </div>
+      ${state.user && (state.user.is_owner || state.user.is_staff) ? `<div class="rev-breakdown">
+        <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">매장 수익</div>
+        <div style="font-size:16px;font-weight:700;color:var(--text)">${won(ownerProfit)}</div>
+      </div>` : `<div class="rev-breakdown">
+        <div style="font-size:11px;font-weight:700;color:#16a34a;margin-bottom:8px">수익 배분</div>
+        <div class="rev-grid">
+          <div class="rev-item"><div style="font-size:10px;color:var(--muted)">플랫폼</div><div style="font-size:13px;font-weight:700">${Math.round(total * 0.4).toLocaleString()}원</div></div>
+          <div class="rev-item"><div style="font-size:10px;color:var(--muted)">매장</div><div style="font-size:13px;font-weight:700">${salonAmt.toLocaleString()}원</div></div>
+        </div>
+      </div>`}
+      <button class="btn-primary" style="margin-top:8px" onclick="placeOrder()">
+        <i class="fas fa-credit-card"></i> 결제하기 ${total.toLocaleString()}원
+      </button>
+    </div>
+  `;
 }
 
 function renderBestCard(p) {
@@ -395,7 +521,9 @@ function renderLogin() {
         <div style="text-align:center;margin-top:18px">
           <button onclick="loginAsDemo()" class="demo-link" style="display:inline">데모 계정</button>
           <span style="color:#ccc;margin:0 8px">·</span>
-          <button onclick="loginAsOwner()" class="demo-link" style="display:inline">원장으로 보기</button>
+          <button onclick="loginAsOwner()" class="demo-link" style="display:inline">원장</button>
+          <span style="color:#ccc;margin:0 8px">·</span>
+          <button onclick="loginAsStaff()" class="demo-link" style="display:inline">담당자</button>
         </div>
       </div>
     </div>
@@ -589,8 +717,25 @@ async function loginAsOwner() {
   if (res.success) {
     saveUser(res.data);
     await loadAppData();
-    navigate('store');
-    showToast('프로헤어 강남점 원장으로 들어왔습니다', 'success');
+    navigate('home');
+    showToast('프로헤어 강남점 원장 · 헤더 매출 버튼을 확인하세요', 'success');
+  }
+}
+
+async function loginAsStaff() {
+  const res = await api('/api/auth/social', 'POST', {
+    provider: 'kakao',
+    auth_id: 'designer-1',
+    name: '한예슬',
+    phone: '010-2222-3333',
+  });
+  if (res.success && res.data) {
+    saveUser(res.data);
+    await loadAppData();
+    navigate('home');
+    showToast('담당자 로그인 · 헤더 매출 버튼을 확인하세요', 'success');
+  } else {
+    showToast(res.error || '담당자 로그인 실패', 'error');
   }
 }
 
@@ -967,66 +1112,13 @@ function removeFromCart(productId) {
   state.cart = state.cart.filter(i => i.product_id !== productId);
 }
 
-// ---- Cart Sheet ----
+// ---- Cart (bottom tab page) ----
 function openCart() {
   if (!state.user) {
     showToast('로그인이 필요합니다', 'error');
     return;
   }
-  if (needsSalonBinding()) {
-    showToast('매장 코드와 담당자를 먼저 등록해주세요', 'error');
-    navigate('scan');
-    return;
-  }
-  const total = state.cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const salonAmt = Math.round(total * 0.3);
-  const ownerProfit = cartStoreProfit();
-
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.innerHTML = `
-    <div class="modal-sheet">
-      <div class="modal-handle"></div>
-      <h3 style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:16px">
-        <i class="fas fa-shopping-bag" style="color:var(--rose);margin-right:8px"></i>주문 확인
-      </h3>
-      <div class="cart-salon-info">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">담당 살롱 · 디자이너</div>
-        <div style="font-size:14px;font-weight:700;color:var(--text)">
-          ${state.user.salon_name || '미등록'} · ${state.user.designer_name || '담당 없음'}
-        </div>
-      </div>
-      ${state.cart.map(i => `
-        <div class="cart-line">
-          <div>
-            <div style="font-size:14px;font-weight:600;color:var(--text)">${i.name}</div>
-            <div style="font-size:12px;color:var(--muted)">${i.price.toLocaleString()}원 × ${i.qty}</div>
-          </div>
-          <span style="font-size:14px;font-weight:700;color:var(--rose)">${(i.price*i.qty).toLocaleString()}원</span>
-        </div>`).join('')}
-      <div class="cart-total-row">
-        <span>합계</span>
-        <span class="cart-total-val">${total.toLocaleString()}원</span>
-      </div>
-      ${state.user && state.user.is_owner ? `<div class="rev-breakdown">
-        <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">매장 수익</div>
-        <div style="font-size:16px;font-weight:700;color:var(--text)">${won(ownerProfit)}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:4px">우리 매장 판매가 − 살롱가</div>
-      </div>` : `<div class="rev-breakdown">
-        <div style="font-size:11px;font-weight:700;color:#16a34a;margin-bottom:8px">💰 수익 배분</div>
-        <div class="rev-grid">
-          <div class="rev-item"><div style="font-size:10px;color:var(--muted)">플랫폼</div><div style="font-size:13px;font-weight:700">${Math.round(total*0.4).toLocaleString()}원</div><div style="font-size:10px;color:var(--muted)">40%</div></div>
-          <div class="rev-item"><div style="font-size:10px;color:var(--muted)">매장</div><div style="font-size:13px;font-weight:700">${salonAmt.toLocaleString()}원</div><div style="font-size:10px;color:var(--muted)">30%</div></div>
-        </div>
-      </div>`}
-      <button class="btn-primary" style="margin-top:4px" onclick="placeOrder()">
-        <i class="fas fa-credit-card"></i> 결제하기 ${total.toLocaleString()}원
-      </button>
-      <button onclick="closeModal()" style="width:100%;background:none;border:none;padding:12px;color:var(--muted);font-size:13px;cursor:pointer;margin-top:4px">취소</button>
-    </div>`;
-  modal.onclick = (e) => { if (e.target === modal) closeModal(); };
-  document.body.appendChild(modal);
-  window.__modal = modal;
+  navigate('cart');
 }
 
 async function placeOrder() {
@@ -1247,7 +1339,14 @@ function handleLogout() {
   showToast('로그아웃되었습니다. 다시 로그인하면 내 매장으로 연결됩니다');
 }
 
-function attachListeners() { /* reserved for swipe gestures */ }
+function attachListeners() {
+  const input = document.getElementById('product-search');
+  if (input && state.currentPage === 'search') {
+    const len = input.value.length;
+    input.focus();
+    try { input.setSelectionRange(len, len); } catch (e) { /* ignore */ }
+  }
+}
 
 // ============================================================
 // DATA LOADING
@@ -1628,7 +1727,7 @@ function setSalesStaff(name) {
 }
 
 function renderStore() {
-  const salon = ownerSalon();
+  const salon = salesSalon();
   if (!salon) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
   if (state.storeView === 'brands') return renderStoreBrands();
   if (state.storeView === 'prices') return renderStorePrices();

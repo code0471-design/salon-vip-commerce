@@ -117,6 +117,7 @@ body {
   z-index: 300;
   box-shadow: 0 -2px 20px rgba(0,0,0,0.07);
 }
+.bottom-nav-5 { grid-template-columns: repeat(5, 1fr); }
 
 .nav-item {
   display: flex; flex-direction: column; align-items: center;
@@ -128,6 +129,45 @@ body {
 .nav-item i { font-size: 19px; transition: transform 0.2s; }
 .nav-item.active { color: var(--primary); }
 .nav-item.active i { color: var(--accent); transform: scale(1.1); }
+.nav-icon-wrap { position: relative; display: inline-flex; }
+.nav-badge {
+  position: absolute; top: -6px; right: -10px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 999px; background: var(--rose); color: #fff;
+  font-size: 9px; font-weight: 800; line-height: 16px; text-align: center;
+}
+.header-sales-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: none; border-radius: 999px; padding: 7px 12px;
+  background: #1a1a2e; color: #c8a96e;
+  font-size: 12px; font-weight: 800; cursor: pointer; font-family: var(--font);
+}
+.header-sales-btn:active { opacity: 0.85; }
+.page-pad { padding: 18px 16px 110px; }
+.page-title { font-size: 20px; font-weight: 800; color: var(--text); margin: 0 0 4px; }
+.page-sub { font-size: 13px; color: var(--muted); margin: 0 0 16px; }
+.category-menu-list { display: flex; flex-direction: column; gap: 8px; }
+.category-menu-row {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  background: #fff; border: 1.5px solid var(--border); border-radius: 14px;
+  padding: 16px 16px; font-size: 15px; font-weight: 700; color: var(--text);
+  cursor: pointer; font-family: var(--font);
+}
+.category-menu-row i { color: #c0bbb4; font-size: 12px; }
+.search-box {
+  display: flex; align-items: center; gap: 10px;
+  background: #fff; border: 1.5px solid var(--border); border-radius: 14px;
+  padding: 12px 14px;
+}
+.search-box i { color: #b0aaa0; }
+.search-input {
+  flex: 1; border: none; outline: none; font-size: 15px; font-family: var(--font); background: transparent;
+}
+.search-result-list { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.qty-btn {
+  width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--border);
+  background: #fff; font-size: 14px; cursor: pointer; line-height: 1;
+}
 .store-menu {
   width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 12px;
   background: white; border: 1px solid var(--border); border-radius: 14px;
