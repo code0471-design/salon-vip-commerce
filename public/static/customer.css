@@ -570,13 +570,12 @@ body {
   position: sticky; top: 56px; z-index: 100;
 }
 .cat-tabs {
-  display: flex; gap: 4px;
-  padding: 10px 14px;
-  overflow-x: auto; scrollbar-width: none;
+  display: flex; flex-wrap: wrap; gap: 6px 4px;
+  padding: 10px 14px 12px;
+  overflow: visible;
 }
-.cat-tabs::-webkit-scrollbar { display: none; }
 .cat-tab {
-  flex-shrink: 0; padding: 7px 16px;
+  flex: 0 0 auto; padding: 7px 14px;
   border-radius: 20px; font-size: 12px; font-weight: 700;
   cursor: pointer; border: 1.5px solid var(--border);
   background: transparent; color: var(--muted);
