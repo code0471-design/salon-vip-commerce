@@ -2297,15 +2297,17 @@ function renderOrders() {
 function renderOrderCard(o) {
   const items = JSON.parse(o.order_items || '[]');
   const statusMap = { PAID:'결제완료', PENDING:'결제대기', CANCELLED:'취소됨', REFUNDED:'환불됨' };
+  const productTitle = items.length
+    ? (items.slice(0, 2).map((i) => i.name).join(' · ') + (items.length > 2 ? ` 외 ${items.length - 2}건` : ''))
+    : '상품 정보 없음';
   return `
     <div class="order-card" onclick="openOrderDetail(${o.id})">
       <div class="order-card-top">
         <span style="font-size:11px;color:var(--muted)">#${o.id} · ${new Date(o.created_at).toLocaleDateString('ko-KR')}</span>
         <span class="order-status-badge status-${o.payment_status}">${statusMap[o.payment_status]||o.payment_status}</span>
       </div>
-      <div class="order-salon">${o.salon_name}</div>
-      <div class="order-designer"><i class="fas fa-user-tie" style="margin-right:4px;opacity:0.5"></i>${o.designer_name || '담당 없음'}</div>
-      <div class="order-items-preview">${items.slice(0,2).map(i => i.name).join(' · ')}${items.length > 2 ? ` 외 ${items.length-2}건` : ''}</div>
+      <div class="order-product-title">${escText(productTitle)}</div>
+      <div class="order-salon-sub">${escText(o.salon_name || '')}${o.designer_name ? ' · ' + escText(o.designer_name) : ''}</div>
       ${o.points_earned ? `<div class="order-points">+${Number(o.points_earned).toLocaleString()}P 적립</div>` : ''}
       <div class="order-footer">
         <span style="font-size:12px;color:var(--muted)">총 ${items.reduce((s,i)=>s+i.qty,0)}개</span>
@@ -2516,7 +2518,7 @@ function renderProfile() {
     ${state.profileInfoOpen ? renderProfileInfoPanel(u) : ''}
 
     <div class="info-card">
-      <div class="info-card-header">보유 혜택</div>
+      <div class="info-card-header profile-section-title">보유 혜택</div>
       <div class="profile-benefit-grid">
         <div class="profile-benefit-card">
           <div class="profile-benefit-label"><i class="fas fa-coins" style="margin-right:6px"></i>보유 포인트</div>
@@ -2542,7 +2544,7 @@ function renderProfile() {
     </div>
 
     <div class="info-card" style="padding-bottom:8px">
-      <div class="info-card-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <div class="info-card-header profile-section-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
         <span>주문/배송내역</span>
         <button type="button" class="profile-edit-btn" onclick="navigate('orders')">전체보기</button>
       </div>
