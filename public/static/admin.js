@@ -67,6 +67,25 @@ function showToast(msg, type = '') {
 }
 
 // ---- Render ----
+function renderDataSourceBanner() {
+  const onPages = location.hostname.endsWith('github.io');
+  if (onPages) {
+    return `
+      <div class="data-source-banner pages">
+        <i class="fas fa-info-circle"></i>
+        <span>이 어드민은 <strong>이 브라우저에 저장된 데모 DB</strong>를 봅니다. 고객 앱(같은 사이트)에서 개설한 매장이 여기 살롱 목록에 나타납니다. 다른 PC·다른 브라우저·로컬 서버에는 안 보입니다.</span>
+      </div>`;
+  }
+  return `
+    <div class="data-source-banner local">
+      <i class="fas fa-database"></i>
+      <span>로컬 서버 DB(<code>data/db.json</code>)입니다. GitHub Pages 고객 앱에서 만든 매장은 여기에 없습니다. 같은 데모 매장을 보려면
+        <a href="https://code0471-design.github.io/salon-vip-commerce/admin.html" target="_blank" rel="noopener">GitHub Pages 어드민</a>을
+        고객 앱과 <strong>같은 브라우저</strong>로 여세요.
+      </span>
+    </div>`;
+}
+
 function renderAdmin() {
   const app = document.getElementById('admin-app');
   app.innerHTML = `
@@ -74,6 +93,7 @@ function renderAdmin() {
     ${renderSidebar()}
     <div class="main-content">
       ${renderTopbar()}
+      ${renderDataSourceBanner()}
       <div class="page" id="admin-page">
         ${renderAdminPage()}
       </div>
