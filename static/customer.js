@@ -29,6 +29,7 @@ let state = {
   productBackPage: 'home',
   selectedOrderId: null,
   orderBackPage: 'orders',
+  orderPayOpen: true,
   priceBreakdownOpen: true,
   // 상품 상세 할인 선택: 기본 전체 적용, 고객이 해제/변경 가능
   dealPrefs: null, // { productId, useCoupon, couponId, usePoints, pointsUse }
@@ -2417,6 +2418,35 @@ function closeOrderDetailPage() {
   navigate(back === 'order-detail' ? 'orders' : back);
 }
 
+function maskPhone(phone) {
+  const d = String(phone || '').replace(/\D/g, '');
+  if (d.length < 10) return phone || '-';
+  return d.slice(0, 3) + '-' + d.slice(3, 4) + '***-' + d.slice(-4, -3) + '***';
+}
+
+function formatOrderDateShort(value) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const week = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+  return (d.getMonth() + 1) + '. ' + d.getDate() + '. (' + week + ')';
+}
+
+function copyOrderNo(orderNo) {
+  const text = String(orderNo || '');
+  if (!text) return;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => showToast('주문번호가 복사되었습니다', 'success'))
+      .catch(() => showToast(text, 'success'));
+    return;
+  }
+  showToast(text, 'success');
+}
+
+function toggleOrderPayOpen() {
+  state.orderPayOpen = !state.orderPayOpen;
+  render();
+}
+
 function renderOrderDetailPage() {
   const o = findOrderById(state.selectedOrderId);
   if (!o) {
@@ -2446,90 +2476,95 @@ function renderOrderDetailPage() {
     items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 0), 0));
   const pointsEarned = Number(o.points_earned || 0);
   const canCancel = canRequestOrderCancel(o);
-  const shipStatus = o.cancel_requested && (o.shipping_status || 'READY') === 'READY'
-    ? '취소요청중'
-    : orderShippingLabel(o.shipping_status);
+  const orderNo = String(o.id).padStart(4, '0') + String(new Date(o.created_at).getTime() || o.id).slice(-8);
+  const payOpen = state.orderPayOpen !== false;
+  const fallbackImg = 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=300&q=80';
 
   return `
-    <div class="od-page">
-      <div class="od-topbar">
-        <button type="button" class="od-back" onclick="closeOrderDetailPage()" aria-label="뒤로">
-          <i class="fas fa-chevron-left"></i>
+    <div class="od-page od-page-ref">
+      <div class="od-topbar od-topbar-ref">
+        <div class="od-topbar-title">주문 상세정보</div>
+        <button type="button" class="od-close" onclick="closeOrderDetailPage()" aria-label="닫기">
+          <i class="fas fa-times"></i>
         </button>
-        <div class="od-topbar-title">주문상세</div>
-        <span style="width:40px"></span>
       </div>
 
-      <div class="od-body">
-        <div class="od-head">
-          <div>
-            <div class="od-order-id">주문 #${o.id}</div>
-            <div class="od-date">${new Date(o.created_at).toLocaleString('ko-KR')}</div>
+      <div class="od-body od-body-ref">
+        <div class="od-main-card">
+          <div class="od-status-row">
+            <span class="od-status-text">${escText(badge.label)}</span>
+            <span class="od-status-sub">${escText(formatOrderDateShort(o.created_at))} · ${escText(orderShippingLabel(o.shipping_status))}</span>
           </div>
-          <span class="order-status-badge status-${badge.cls}">${escText(badge.label)}</span>
-        </div>
-
-        <div class="info-card od-card">
-          <div class="info-card-header">주문 상품</div>
-          ${items.map((i) => `
-            <div class="od-item-row">
-              <div>
-                <div class="od-item-name">${escText(i.name || '상품')}</div>
-                <div class="od-item-qty">${Number(i.qty || 0)}개</div>
+          ${items.map((i) => {
+            const product = findCatalogProduct(i.product_id);
+            const img = (product && product.image_url) || fallbackImg;
+            const line = (Number(i.price) || 0) * (Number(i.qty) || 0);
+            const original = product ? Number(product.original_price || 0) * (Number(i.qty) || 0) : 0;
+            return `
+            <div class="od-product-row">
+              <img class="od-thumb" src="${img}" alt="" onerror="this.src='${fallbackImg}'">
+              <div class="od-product-meta">
+                <div class="od-product-name">${escText(i.name || '상품')}</div>
+                <div class="od-qty-chip">수량 ${Number(i.qty || 0)}개</div>
+                <div class="od-price-row">
+                  <span class="od-price-now">${line.toLocaleString()}원</span>
+                  ${original > line ? `<span class="od-price-old">${original.toLocaleString()}원</span>` : ''}
+                </div>
+                <div class="od-orderno">
+                  상품주문번호 : ${escText(orderNo)}
+                  <button type="button" class="od-copy" onclick="copyOrderNo('${escText(orderNo)}')">복사</button>
+                </div>
               </div>
-              <div class="od-item-price">${((Number(i.price) || 0) * (Number(i.qty) || 0)).toLocaleString()}원</div>
-            </div>`).join('') || `<div class="profile-coupon-empty">상품 정보가 없습니다</div>`}
-          <div class="info-row"><span>매장</span><span>${escText(o.salon_name || '-')}</span></div>
-          <div class="info-row" style="border-bottom:none"><span>담당</span><span>${escText(designerName || '담당 없음')}</span></div>
+            </div>`;
+          }).join('') || `<div class="profile-coupon-empty">상품 정보가 없습니다</div>`}
+          <div class="od-store-line">${escText(o.salon_name || '')}${designerName ? ' · 담당 ' + escText(designerName) : ''}</div>
+          ${canCancel ? `
+          <button type="button" class="od-cancel-soft" onclick="requestOrderCancel(${o.id})">취소요청</button>
+          ` : (o.cancel_requested ? `<div class="od-cancel-note">취소 요청이 접수되었습니다</div>` : '')}
         </div>
 
-        <div class="info-card od-card">
-          <div class="info-card-header">배송지</div>
-          <div class="info-row"><span>배송상태</span><span>${escText(shipStatus)}</span></div>
-          ${shipAddr ? `
-          <div style="padding:4px 16px 14px">
-            <div style="font-size:14px;font-weight:700;color:var(--text)">${escText(shipName)}${shipPhone ? ' · ' + escText(shipPhone) : ''}</div>
-            <div style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5">${escText(shipAddr)}</div>
-          </div>` : `<div class="profile-coupon-empty" style="margin:8px 16px 14px">배송지 정보가 없습니다</div>`}
+        <div class="od-section-title">배송지</div>
+        <div class="od-ship-card">
+          <div class="od-ship-top">
+            <div class="od-ship-name">${escText(shipName || '-')}</div>
+            ${canCancel ? `<button type="button" class="od-change-btn" onclick="navigate('profile'); openProfileInfo()">변경</button>` : ''}
+          </div>
+          <div class="od-ship-phone">${escText(maskPhone(shipPhone))}</div>
+          <div class="od-ship-addr">${escText(shipAddr || '배송지 정보가 없습니다')}</div>
         </div>
 
-        <div class="info-card od-card">
-          <div class="info-card-header">결제정보</div>
-          <div class="info-row"><span>상품금액</span><span>${goodsAmount.toLocaleString()}원</span></div>
-          <div class="info-row"><span>쿠폰할인</span><span>${couponDisc ? '-' + couponDisc.toLocaleString() + '원' : '0원'}</span></div>
-          <div class="info-row"><span>포인트사용</span><span>${pointsUsed ? '-' + pointsUsed.toLocaleString() + 'P' : '0P'}</span></div>
-          <div class="info-row"><span>결제상태</span><span>${escText(orderPaymentLabel(o.payment_status))}</span></div>
-          <div class="od-total-row">
-            <span>결제금액</span>
+        <button type="button" class="od-section-title od-pay-toggle" onclick="toggleOrderPayOpen()">
+          <span>결제정보</span>
+          <i class="fas fa-chevron-${payOpen ? 'up' : 'down'}"></i>
+        </button>
+        ${payOpen ? `
+        <div class="od-pay-card">
+          <div class="od-pay-summary">
+            <span>주문금액</span>
+            <span>총 ${paidAmount.toLocaleString()}원</span>
+          </div>
+          <div class="od-pay-lines">
+            <div class="od-pay-line"><span>상품금액</span><span>${goodsAmount.toLocaleString()}원</span></div>
+            <div class="od-pay-line"><span>쿠폰할인</span><span>${couponDisc ? '-' + couponDisc.toLocaleString() + '원' : '0원'}</span></div>
+            <div class="od-pay-line"><span>포인트사용</span><span>${pointsUsed ? '-' + pointsUsed.toLocaleString() + 'P' : '0P'}</span></div>
+            <div class="od-pay-line"><span>배송비</span><span>무료</span></div>
+          </div>
+          <div class="od-pay-method">
+            <span>${escText(orderPaymentLabel(o.payment_status))}</span>
             <span>${paidAmount.toLocaleString()}원</span>
           </div>
-        </div>
-
-        <div class="info-card od-card">
-          <div class="info-card-header">구매 포인트 적립</div>
-          <div class="info-row" style="border-bottom:none">
-            <span>적립 예정/완료</span>
-            <span class="od-earn-inline">+${pointsEarned.toLocaleString()}P</span>
-          </div>
-        </div>
-
-        ${isOwner && o.payment_status === 'PAID' ? `
-        <div class="info-card od-card">
-          <div class="info-card-header">정산 정보</div>
-          <div style="padding:12px 16px 14px">
-            <div style="font-size:18px;font-weight:800;color:var(--text)">${won(money.storePayout)}</div>
-            <div style="font-size:12px;color:var(--text);margin-top:8px">총매출 ${won(money.sale)} · 실결제 ${won(Math.max(0, money.sale - money.coupon))}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:2px">쿠폰 ${won(money.coupon)} · 살롱가 ${won(Math.max(0, money.sale - money.storePayout))}</div>
-          </div>
+          <div class="od-pay-earn">구매 적립 +${pointsEarned.toLocaleString()}P</div>
         </div>` : ''}
 
-        <div style="padding:8px 16px 24px">
-          ${canCancel ? `
-          <button type="button" class="od-cancel-btn" onclick="requestOrderCancel(${o.id})">취소요청</button>
-          ` : (o.cancel_requested ? `
-          <div class="od-cancel-note">취소 요청이 접수되었습니다. 매장 확인 후 처리됩니다.</div>
-          ` : '')}
-        </div>
+        ${isOwner && o.payment_status === 'PAID' ? `
+        <div class="od-section-title">정산 정보</div>
+        <div class="od-pay-card">
+          <div class="od-pay-summary"><span>정산액</span><span>${won(money.storePayout)}</span></div>
+          <div class="od-pay-lines">
+            <div class="od-pay-line"><span>총매출</span><span>${won(money.sale)}</span></div>
+            <div class="od-pay-line"><span>쿠폰</span><span>${won(money.coupon)}</span></div>
+          </div>
+        </div>` : ''}
       </div>
     </div>
   `;
