@@ -143,6 +143,40 @@ body {
   font-size: 12px; font-weight: 800; cursor: pointer; font-family: var(--font);
 }
 .header-sales-btn:active { opacity: 0.85; }
+.admin-tabs {
+  display: flex; gap: 8px; margin-bottom: 14px;
+}
+.admin-tab {
+  flex: 1; border: 1.5px solid var(--border); background: #fff; color: var(--muted);
+  border-radius: 12px; padding: 10px 12px; font-size: 13px; font-weight: 800;
+  cursor: pointer; font-family: var(--font);
+}
+.admin-tab.on {
+  background: var(--primary); color: #fff; border-color: var(--primary);
+}
+.entry-admin-link {
+  display: block; width: 100%; margin-top: 14px; border: none; background: none;
+  color: var(--muted); font-size: 12px; font-weight: 600; text-decoration: underline;
+  cursor: pointer; font-family: var(--font);
+}
+.setup-form .form-label { margin-top: 12px; }
+.setup-form .form-label:first-child { margin-top: 0; }
+.setup-designer-block { margin-top: 14px; }
+.setup-designer-head {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+}
+.setup-designer-row {
+  display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-bottom: 8px; align-items: center;
+}
+.setup-remove {
+  width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border);
+  background: #fff; color: var(--muted); cursor: pointer;
+}
+.manage-designer-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: #fff; border: 1px solid var(--border); border-radius: 14px;
+  padding: 12px 14px; margin-bottom: 8px;
+}
 .page-pad { padding: 18px 16px 110px; }
 .page-title { font-size: 20px; font-weight: 800; color: var(--text); margin: 0 0 4px; }
 .page-sub { font-size: 13px; color: var(--muted); margin: 0 0 16px; }

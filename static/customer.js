@@ -29,6 +29,16 @@ let state = {
   onboardingStep: 'code', // code | designer
   loginStep: 'social', // social | account | profile
   pendingSocial: null, // { provider, auth_id, name?, phone? }
+  adminTab: 'sales', // sales | manage
+  manageDesigners: [],
+  setupDraft: {
+    salon_name: '',
+    owner_name: '',
+    owner_phone: '',
+    address: '',
+    salon_code: '',
+    designers: [{ designer_name: '', phone: '' }],
+  },
   loading: false
 };
 
@@ -80,10 +90,13 @@ function clearSessionOnly() {
   state.storeOrders = [];
   state.storeSettlement = null;
   state.storeView = '';
+  state.adminTab = 'sales';
+  state.manageDesigners = [];
   state.cart = [];
   state.pendingSocial = null;
   state.loginStep = 'social';
   resetOnboarding();
+  resetSetupDraft();
   sessionStorage.removeItem('salon_user');
 }
 
@@ -147,7 +160,7 @@ function renderShell() {
         : `<div class="logo">SALON <span>VIP</span></div>`
       }
       <div class="header-right">
-        ${canViewSales() ? `<button type="button" class="header-sales-btn" onclick="navigate('store')"><i class="fas fa-chart-line"></i> 매출</button>` : ''}
+        ${canViewSales() ? `<button type="button" class="header-sales-btn" onclick="openAdmin()"><i class="fas fa-store"></i> 관리자</button>` : ''}
         ${state.user ? `<span class="header-user-chip">${state.user.name}님</span>` : ''}
         <i class="fas fa-bell header-icon"></i>
       </div>
@@ -155,7 +168,7 @@ function renderShell() {
     <main class="page-content" id="page-content">
       ${renderPage()}
     </main>
-    ${state.user ? renderBottomNav(cartCount) : ''}
+    ${state.user && !['entry', 'admin-setup'].includes(state.currentPage) ? renderBottomNav(cartCount) : ''}
   `;
 }
 
@@ -188,6 +201,37 @@ function needsSalonBinding() {
   return !state.user.current_salon_id || !state.user.mapped_designer_id;
 }
 
+function needsEntryGate() {
+  if (!state.user) return false;
+  if (state.user.is_owner || state.user.is_staff) return false;
+  return needsSalonBinding();
+}
+
+function resetSetupDraft() {
+  state.setupDraft = {
+    salon_name: '',
+    owner_name: state.user ? (state.user.name || '') : '',
+    owner_phone: state.user ? (state.user.phone || '') : '',
+    address: '',
+    salon_code: '',
+    designers: [{ designer_name: '', phone: '' }],
+  };
+}
+
+function openAdmin() {
+  state.adminTab = ownerSalon() ? (state.adminTab || 'sales') : 'sales';
+  navigate('store');
+  if (canViewSales()) loadStoreLedger().then(() => render());
+  if (ownerSalon()) loadManageDesigners().then(() => render());
+}
+
+function setAdminTab(tab) {
+  state.adminTab = tab === 'manage' ? 'manage' : 'sales';
+  render();
+  if (state.adminTab === 'manage') loadManageDesigners().then(() => render());
+  if (state.adminTab === 'sales') loadStoreLedger().then(() => render());
+}
+
 function renderBottomNav(cartCount) {
   const count = cartCount == null ? state.cart.reduce((s, i) => s + i.qty, 0) : cartCount;
   const tabs = [
@@ -209,16 +253,18 @@ function renderBottomNav(cartCount) {
 
 function renderPage() {
   switch(state.currentPage) {
-    case 'home':     return renderHome();
-    case 'category': return renderCategory();
-    case 'search':   return renderSearch();
-    case 'cart':     return renderCartPage();
-    case 'store':    return renderStore();
-    case 'scan':     return renderScan();
-    case 'shop':     return renderShop();
-    case 'orders':   return renderOrders();
-    case 'profile':  return renderProfile();
-    default:         return renderHome();
+    case 'home':         return renderHome();
+    case 'category':     return renderCategory();
+    case 'search':       return renderSearch();
+    case 'cart':         return renderCartPage();
+    case 'store':        return renderStore();
+    case 'entry':        return renderEntryGate();
+    case 'admin-setup':  return renderAdminSetup();
+    case 'scan':         return renderScan();
+    case 'shop':         return renderShop();
+    case 'orders':       return renderOrders();
+    case 'profile':      return renderProfile();
+    default:             return renderHome();
   }
 }
 
@@ -246,7 +292,7 @@ function renderHome() {
     </div>
 
     ${needSalon ? `
-    <div class="home-salon-cta" onclick="navigate('scan')">
+    <div class="home-salon-cta" onclick="navigate('entry')">
       <div>
         <div class="home-salon-cta-title">매장 코드를 등록해 주세요</div>
         <div class="home-salon-cta-sub">담당자 연결 후 VIP 쇼핑·적립이 시작됩니다</div>
@@ -347,7 +393,7 @@ function renderCartPage() {
         <i class="fas fa-store" style="font-size:28px;color:var(--muted);opacity:0.4"></i>
         <h3 style="margin:14px 0 6px;font-size:16px;font-weight:800">매장 등록이 필요해요</h3>
         <p style="font-size:13px;color:var(--muted);margin-bottom:16px">장바구니·결제는 매장 코드 등록 후 이용할 수 있습니다</p>
-        <button class="btn-primary" style="width:auto;padding:12px 24px" onclick="navigate('scan')">매장 코드 입력</button>
+        <button class="btn-primary" style="width:auto;padding:12px 24px" onclick="navigate('entry')">살롱 VIP 입장하기</button>
       </div>`;
   }
   const total = state.cart.reduce((s, i) => s + i.price * i.qty, 0);
@@ -516,7 +562,7 @@ function renderLogin() {
           </button>
         </div>
 
-        <p class="login-flow-hint">계정 선택 → 매장 코드(5자리) → 담당자 · 이후 자동 로그인</p>
+        <p class="login-flow-hint">계정 선택 → 살롱 VIP 입장 · 이후 자동 로그인</p>
 
         <div style="text-align:center;margin-top:18px">
           <button onclick="loginAsDemo()" class="demo-link" style="display:inline">데모 계정</button>
@@ -662,11 +708,12 @@ async function finishSocialAuth(res, provider, authId) {
   state.pendingSocial = null;
   state.loginStep = 'social';
   await loadAppData();
-  navigate('home');
-  if (needsSalonBinding()) {
-    showToast('환영합니다! 홈에서 매장 코드를 등록해 주세요', 'success');
+  if (needsEntryGate()) {
+    navigate('entry');
+    showToast('환영합니다! 입장 방법을 선택해 주세요', 'success');
     return;
   }
+  navigate('home');
   const salonLabel = res.data.salon_name ? res.data.salon_name + '으로 ' : '';
   showToast(salonLabel + '로그인되었습니다', 'success');
 }
@@ -694,18 +741,162 @@ function resetOnboarding() {
 }
 
 function renderOnboardingGate() {
+  return renderEntryGate();
+}
+
+function renderEntryGate() {
+  if (!state.user) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
+  if (!needsEntryGate()) {
+    return `
+      <div class="scan-page">
+        <div class="onboard-card">
+          <div class="onboard-icon"><i class="fas fa-check"></i></div>
+          <h2>이미 입장 완료</h2>
+          <p>등록된 매장으로 바로 이동합니다.</p>
+          <button class="btn-primary" onclick="navigate('home')">홈으로</button>
+        </div>
+      </div>`;
+  }
   return `
-    <div class="scan-page">
-      <div class="onboard-card">
-        <div class="onboard-icon"><i class="fas fa-store"></i></div>
-        <h2>매장 등록이 필요해요</h2>
-        <p>가입 후 매장 코드와 담당자를 선택해야 VIP 쇼핑·적립이 연결됩니다.</p>
+    <div class="scan-page entry-page">
+      <div class="onboard-card entry-card">
+        <div class="onboard-icon"><i class="fas fa-door-open"></i></div>
+        <h2>살롱 VIP 입장하기</h2>
+        <p>고객은 매장 코드로 입장하고, 원장님은 관리자로 매장을 개설할 수 있어요.</p>
         <button class="btn-primary" onclick="navigate('scan')">
-          <i class="fas fa-key"></i> 매장 코드 입력하기
+          <i class="fas fa-key"></i> 살롱 VIP 입장하기
+        </button>
+        <button type="button" class="entry-admin-link" onclick="openAdminSetup()">관리자 입장</button>
+      </div>
+    </div>
+  `;
+}
+
+function openAdminSetup() {
+  resetSetupDraft();
+  if (state.user) {
+    state.setupDraft.owner_name = state.user.name || '';
+    state.setupDraft.owner_phone = state.user.phone || '';
+  }
+  navigate('admin-setup');
+}
+
+function updateSetupField(key, value) {
+  state.setupDraft[key] = value;
+}
+
+function updateSetupDesigner(index, key, value) {
+  if (!state.setupDraft.designers[index]) return;
+  state.setupDraft.designers[index][key] = value;
+}
+
+function addSetupDesignerRow() {
+  state.setupDraft.designers.push({ designer_name: '', phone: '' });
+  render();
+}
+
+function removeSetupDesignerRow(index) {
+  if (state.setupDraft.designers.length <= 1) {
+    state.setupDraft.designers = [{ designer_name: '', phone: '' }];
+  } else {
+    state.setupDraft.designers.splice(index, 1);
+  }
+  render();
+}
+
+function renderAdminSetup() {
+  if (!state.user) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
+  if (state.user.is_owner) {
+    return `
+      <div class="scan-page">
+        <div class="onboard-card">
+          <h2>이미 매장이 있습니다</h2>
+          <p>관리자 화면에서 매장 정보를 수정하세요.</p>
+          <button class="btn-primary" onclick="openAdmin()">관리자로 이동</button>
+        </div>
+      </div>`;
+  }
+  const d = state.setupDraft;
+  return `
+    <div class="scan-page admin-setup-page">
+      <button class="store-back" onclick="navigate('entry')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>입장</button>
+      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">매장 세팅</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">필수 정보를 입력하고 저장하면 매장이 생성됩니다.</p>
+      <div class="code-card setup-form">
+        <label class="form-label">매장명</label>
+        <input class="form-input" value="${escText(d.salon_name)}" placeholder="예: 프로헤어 강남점"
+          oninput="updateSetupField('salon_name', this.value)">
+        <label class="form-label">대표자</label>
+        <input class="form-input" value="${escText(d.owner_name)}" placeholder="대표자 이름"
+          oninput="updateSetupField('owner_name', this.value)">
+        <label class="form-label">휴대폰번호</label>
+        <input class="form-input" type="tel" value="${escText(d.owner_phone)}" placeholder="010-0000-0000"
+          oninput="updateSetupField('owner_phone', this.value)">
+        <label class="form-label">주소</label>
+        <input class="form-input" value="${escText(d.address)}" placeholder="매장 주소"
+          oninput="updateSetupField('address', this.value)">
+        <label class="form-label">매장코드 6자리</label>
+        <input class="form-input code-input" type="tel" inputmode="numeric" maxlength="6"
+          value="${escText(d.salon_code)}" placeholder="예: 100001"
+          oninput="updateSetupField('salon_code', this.value.replace(/\\D/g,'').slice(0,6)); this.value=state.setupDraft.salon_code">
+        <div class="setup-designer-block">
+          <div class="setup-designer-head">
+            <label class="form-label" style="margin:0">담당자 추가</label>
+            <button type="button" class="ghost-text-btn" onclick="addSetupDesignerRow()">+ 추가</button>
+          </div>
+          ${d.designers.map((row, i) => `
+            <div class="setup-designer-row">
+              <input class="form-input" placeholder="담당자 이름" value="${escText(row.designer_name)}"
+                oninput="updateSetupDesigner(${i}, 'designer_name', this.value)">
+              <input class="form-input" type="tel" placeholder="휴대폰(선택)" value="${escText(row.phone || '')}"
+                oninput="updateSetupDesigner(${i}, 'phone', this.value)">
+              <button type="button" class="setup-remove" onclick="removeSetupDesignerRow(${i})" aria-label="삭제"><i class="fas fa-times"></i></button>
+            </div>`).join('')}
+        </div>
+        <button class="btn-primary" style="margin-top:16px" onclick="submitSalonSetup()">
+          <i class="fas fa-check"></i> 저장하고 매장 생성
         </button>
       </div>
     </div>
   `;
+}
+
+async function submitSalonSetup() {
+  if (!state.user) return;
+  const d = state.setupDraft;
+  if (!d.salon_name || !d.owner_name || !d.owner_phone) {
+    showToast('매장명, 대표자, 휴대폰번호를 입력하세요', 'error');
+    return;
+  }
+  if (!/^\d{6}$/.test(String(d.salon_code || '').trim())) {
+    showToast('매장 코드는 6자리 숫자입니다', 'error');
+    return;
+  }
+  const designers = (d.designers || [])
+    .filter((row) => row.designer_name && String(row.designer_name).trim())
+    .map((row) => ({ designer_name: String(row.designer_name).trim(), phone: String(row.phone || '').trim() }));
+  const res = await api('/api/salons/setup', 'POST', {
+    user_id: state.user.id,
+    salon_name: d.salon_name.trim(),
+    owner_name: d.owner_name.trim(),
+    owner_phone: d.owner_phone.trim(),
+    address: (d.address || '').trim(),
+    salon_code: String(d.salon_code).trim(),
+    designers,
+  });
+  if (!res.success) {
+    showToast(res.error || '매장 생성에 실패했습니다', 'error');
+    return;
+  }
+  if (res.data && res.data.user) saveUser(res.data.user);
+  if (res.data && res.data.salon) rememberSalon(res.data.salon);
+  await loadAppData();
+  state.adminTab = 'manage';
+  navigate('store');
+  await loadManageDesigners();
+  await loadStoreLedger();
+  render();
+  showToast(res.message || '매장이 개설되었습니다', 'success');
 }
 
 async function loginAsOwner() {
@@ -718,7 +909,7 @@ async function loginAsOwner() {
     saveUser(res.data);
     await loadAppData();
     navigate('home');
-    showToast('프로헤어 강남점 원장 · 헤더 매출 버튼을 확인하세요', 'success');
+    showToast('프로헤어 강남점 원장 · 헤더 관리자 버튼을 확인하세요', 'success');
   }
 }
 
@@ -733,7 +924,7 @@ async function loginAsStaff() {
     saveUser(res.data);
     await loadAppData();
     navigate('home');
-    showToast('담당자 로그인 · 헤더 매출 버튼을 확인하세요', 'success');
+    showToast('담당자 로그인 · 헤더 관리자 버튼을 확인하세요', 'success');
   } else {
     showToast(res.error || '담당자 로그인 실패', 'error');
   }
@@ -773,7 +964,7 @@ function renderScan() {
         매장 · 담당자 등록
       </h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:18px">
-        5자리 매장 코드 입력 후 담당자를 선택하세요. 고객당 매장은 1곳만 등록됩니다.
+        6자리 매장 코드 입력 후 담당자를 선택하세요. 고객당 매장은 1곳만 등록됩니다.
       </p>
 
       <div class="onboard-steps">
@@ -785,19 +976,19 @@ function renderScan() {
         <div class="code-card">
           <label class="form-label" for="salon-code-input">매장 코드</label>
           <input id="salon-code-input" class="form-input code-input" type="tel" inputmode="numeric"
-            maxlength="5" autocomplete="off"
+            maxlength="6" autocomplete="off"
             value="${state.salonCodeInput || ''}"
-            placeholder="예: 10001"
-            oninput="state.salonCodeInput=this.value.replace(/\\D/g,'').slice(0,5); this.value=state.salonCodeInput">
-          <p class="code-hint">매장에서 안내받은 5자리 숫자 코드를 입력하세요.</p>
+            placeholder="예: 100001"
+            oninput="state.salonCodeInput=this.value.replace(/\\D/g,'').slice(0,6); this.value=state.salonCodeInput">
+          <p class="code-hint">매장에서 안내받은 6자리 숫자 코드를 입력하세요.</p>
           <button class="btn-primary" style="margin-top:14px" onclick="lookupSalonCode()">
             <i class="fas fa-search"></i> 매장 확인
           </button>
         </div>
         <div class="code-demo-hint">
-          데모 코드 · <button type="button" class="demo-link" onclick="fillDemoCode('10001')">10001</button>
-          · <button type="button" class="demo-link" onclick="fillDemoCode('10002')">10002</button>
-          · <button type="button" class="demo-link" onclick="fillDemoCode('10003')">10003</button>
+          데모 코드 · <button type="button" class="demo-link" onclick="fillDemoCode('100001')">100001</button>
+          · <button type="button" class="demo-link" onclick="fillDemoCode('100002')">100002</button>
+          · <button type="button" class="demo-link" onclick="fillDemoCode('100003')">100003</button>
         </div>
       ` : `
         <div class="salon-confirm-card">
@@ -885,8 +1076,8 @@ function fillDemoCode(code) {
 async function lookupSalonCode() {
   const code = (state.salonCodeInput || (document.getElementById('salon-code-input') || {}).value || '').trim();
   if (!code) { showToast('매장 코드를 입력해주세요', 'error'); return; }
-  if (!/^\d{5}$/.test(code)) {
-    showToast('매장 코드는 5자리 숫자입니다', 'error');
+  if (!/^\d{6}$/.test(code)) {
+    showToast('매장 코드는 6자리 숫자입니다', 'error');
     return;
   }
   state.salonCodeInput = code;
@@ -1085,8 +1276,8 @@ function closeModal() {
 
 function addToCart(productId) {
   if (state.user && needsSalonBinding()) {
-    showToast('매장 코드와 담당자를 먼저 등록해주세요', 'error');
-    navigate('scan');
+    showToast('먼저 살롱 VIP에 입장해 주세요', 'error');
+    navigate('entry');
     return;
   }
   const p = state.products.find(x => x.id === productId);
@@ -1124,9 +1315,9 @@ function openCart() {
 async function placeOrder() {
   if (!state.user) return;
   if (needsSalonBinding()) {
-    showToast('매장 코드와 담당자를 먼저 등록해주세요', 'error');
+    showToast('먼저 살롱 VIP에 입장해 주세요', 'error');
     closeModal();
-    navigate('scan');
+    navigate('entry');
     return;
   }
   closeModal();
@@ -1306,8 +1497,8 @@ function renderProfile() {
       <button class="btn-secondary" style="margin-bottom:10px" onclick="navigate('scan'); startDesignerChange()">
         <i class="fas fa-user-edit" style="margin-right:8px"></i>같은 매장 담당자만 변경
       </button>` : `
-      <button class="btn-secondary" style="margin-bottom:10px" onclick="resetOnboarding();navigate('scan')">
-        <i class="fas fa-store" style="margin-right:8px"></i>매장 · 담당자 등록
+      <button class="btn-secondary" style="margin-bottom:10px" onclick="navigate('entry')">
+        <i class="fas fa-store" style="margin-right:8px"></i>살롱 VIP 입장하기
       </button>`}
       <button onclick="handleLogout()" style="width:100%;background:none;border:1.5px solid #fee2e2;border-radius:14px;padding:14px;color:#dc2626;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:0.3px">
         <i class="fas fa-sign-out-alt" style="margin-right:8px"></i>로그아웃
@@ -1435,7 +1626,7 @@ function orderItemNames(order) {
 }
 
 async function loadStoreLedger() {
-  const salon = ownerSalon();
+  const salon = salesSalon();
   if (!salon) {
     state.storeOrders = [];
     state.storeSettlement = null;
@@ -1540,7 +1731,7 @@ function renderStorePrices() {
 function renderPriceBrandList(salon, brands, products) {
   return `
     <div style="padding:20px 16px 28px">
-      <button class="store-back" onclick="navigate('store')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>매출</button>
+      <button class="store-back" onclick="navigate('store')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>관리자</button>
       <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">판매가 할인 설정</h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:14px">${escText(salon.salon_name)}에서 할인할 브랜드를 고르세요.</p>
       ${brands.map((brand) => {
@@ -1676,7 +1867,7 @@ function renderStoreBrands() {
   const brands = (state.brands || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   return `
     <div style="padding:20px 16px 28px">
-      <button class="store-back" onclick="navigate('store')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>매출</button>
+      <button class="store-back" onclick="navigate('store')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>관리자</button>
       <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">브랜드 판매 노출</h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:8px">${salon.salon_name} · 끄면 이 매장 고객에게 그 브랜드 상품이 안 보입니다.</p>
       ${brands.map((brand) => {
@@ -1731,6 +1922,9 @@ function renderStore() {
   if (!salon) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
   if (state.storeView === 'brands') return renderStoreBrands();
   if (state.storeView === 'prices') return renderStorePrices();
+  const isOwner = !!ownerSalon();
+  const tab = state.adminTab === 'manage' && isOwner ? 'manage' : 'sales';
+  if (tab === 'manage') return renderStoreManage(salon);
   const hidden = new Set(salon.hidden_brand_ids || []);
   const brands = state.brands || [];
   const blockedCount = brands.filter((brand) => brandBlocksStore(brand, salon.id)).length;
@@ -1743,8 +1937,9 @@ function renderStore() {
   const sales = (state.storeOrders || []).slice().sort((a, b) => b.id - a.id);
   return `
     <div style="padding:20px 16px 28px">
-      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">매출</h2>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:14px">${salon.salon_name}</p>
+      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">관리자</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:10px">${salon.salon_name}</p>
+      ${renderAdminTabs(isOwner, 'sales')}
       <button class="store-menu" onclick="openStorePrices()">
         <span>
           <strong>판매가 할인 설정</strong>
@@ -1808,6 +2003,126 @@ function renderStore() {
     </div>`;
 }
 
+function renderAdminTabs(isOwner, active) {
+  if (!isOwner) return '';
+  return `
+    <div class="admin-tabs">
+      <button type="button" class="admin-tab${active === 'sales' ? ' on' : ''}" onclick="setAdminTab('sales')">매출</button>
+      <button type="button" class="admin-tab${active === 'manage' ? ' on' : ''}" onclick="setAdminTab('manage')">매장관리</button>
+    </div>`;
+}
+
+async function loadManageDesigners() {
+  const salon = ownerSalon();
+  if (!salon) {
+    state.manageDesigners = [];
+    return;
+  }
+  const res = await api('/api/designers?salon_id=' + salon.id);
+  if (res.success) state.manageDesigners = res.data || [];
+}
+
+function renderStoreManage(salon) {
+  const designers = (state.manageDesigners || []).filter((d) => d.status !== 'RESIGNED');
+  return `
+    <div style="padding:20px 16px 28px">
+      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">관리자</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:10px">${escText(salon.salon_name)}</p>
+      ${renderAdminTabs(true, 'manage')}
+      <div class="code-card setup-form" style="margin-top:4px">
+        <div class="section-label" style="margin-top:0">기본 정보</div>
+        <label class="form-label">매장명</label>
+        <input id="manage-salon-name" class="form-input" value="${escText(salon.salon_name || '')}">
+        <label class="form-label">대표자</label>
+        <input id="manage-owner-name" class="form-input" value="${escText(salon.owner_name || '')}">
+        <label class="form-label">휴대폰번호</label>
+        <input id="manage-owner-phone" class="form-input" type="tel" value="${escText(salon.owner_phone || '')}">
+        <label class="form-label">주소</label>
+        <input id="manage-address" class="form-input" value="${escText(salon.address || '')}">
+        <label class="form-label">매장코드</label>
+        <input class="form-input" value="${escText(salon.salon_code || '')}" disabled>
+        <button class="btn-primary" style="margin-top:12px" onclick="saveSalonManage()">기본 정보 저장</button>
+      </div>
+      <div class="section-label">담당자 리스트</div>
+      ${designers.length === 0
+        ? '<p style="font-size:13px;color:var(--muted);padding:4px 0 12px">등록된 담당자가 없습니다.</p>'
+        : designers.map((d) => `
+          <div class="manage-designer-row">
+            <div>
+              <div style="font-weight:700">${escText((d.designer_name || '').replace(' 디자이너', ''))}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">${escText(d.phone || '연락처 없음')}</div>
+            </div>
+            <button type="button" class="ghost-text-btn" onclick="resignDesigner(${d.id})">삭제</button>
+          </div>`).join('')}
+      <div class="code-card setup-form" style="margin-top:12px">
+        <div class="section-label" style="margin-top:0">담당자 추가</div>
+        <label class="form-label">이름</label>
+        <input id="manage-new-designer-name" class="form-input" placeholder="담당자 이름">
+        <label class="form-label">휴대폰(선택)</label>
+        <input id="manage-new-designer-phone" class="form-input" type="tel" placeholder="010-0000-0000">
+        <button class="btn-secondary" style="margin-top:12px;width:100%" onclick="addManageDesigner()">담당자 추가</button>
+      </div>
+    </div>`;
+}
+
+async function saveSalonManage() {
+  const salon = ownerSalon();
+  if (!salon) return;
+  const body = {
+    salon_name: (document.getElementById('manage-salon-name') || {}).value || '',
+    owner_name: (document.getElementById('manage-owner-name') || {}).value || '',
+    owner_phone: (document.getElementById('manage-owner-phone') || {}).value || '',
+    address: (document.getElementById('manage-address') || {}).value || '',
+  };
+  const res = await api('/api/salons/' + salon.id, 'PUT', body);
+  if (!res.success) {
+    showToast(res.error || '저장하지 못했습니다', 'error');
+    return;
+  }
+  rememberSalon(res.data);
+  if (state.user) {
+    const userRes = await api('/api/users/' + state.user.id);
+    if (userRes.success) saveUser(userRes.data.user);
+  }
+  render();
+  showToast('매장 정보를 저장했습니다', 'success');
+}
+
+async function addManageDesigner() {
+  const salon = ownerSalon();
+  if (!salon) return;
+  const name = ((document.getElementById('manage-new-designer-name') || {}).value || '').trim();
+  const phone = ((document.getElementById('manage-new-designer-phone') || {}).value || '').trim();
+  if (!name) {
+    showToast('담당자 이름을 입력하세요', 'error');
+    return;
+  }
+  const res = await api('/api/designers', 'POST', {
+    salon_id: salon.id,
+    designer_name: name,
+    phone,
+  });
+  if (!res.success) {
+    showToast(res.error || '추가하지 못했습니다', 'error');
+    return;
+  }
+  await loadManageDesigners();
+  render();
+  showToast('담당자를 추가했습니다', 'success');
+}
+
+async function resignDesigner(id) {
+  if (!confirm('이 담당자를 삭제할까요?')) return;
+  const res = await api('/api/designers/' + id + '/resign', 'POST', {});
+  if (!res.success) {
+    showToast(res.error || '삭제하지 못했습니다', 'error');
+    return;
+  }
+  await loadManageDesigners();
+  render();
+  showToast('담당자를 삭제했습니다', 'success');
+}
+
 async function toggleSalonBrand(brandId, hidden) {
   const salon = ownerSalon();
   if (!salon) return;
@@ -1833,7 +2148,7 @@ async function init() {
   const params = new URLSearchParams(location.search);
   const prefillCode = params.get('code') || '';
   if (prefillCode) {
-    state.salonCodeInput = String(prefillCode).replace(/\D/g, '').slice(0, 5);
+    state.salonCodeInput = String(prefillCode).replace(/\D/g, '').slice(0, 6);
     state.currentPage = 'scan';
   } else if (params.get('salon')) {
     // legacy QR links: /scan?salon=1 → resolve via salon list after load
@@ -1847,6 +2162,9 @@ async function init() {
   if (!state.user) {
     const restored = await tryAutoLogin();
     if (restored) {
+      if (needsEntryGate() && state.currentPage !== 'scan' && state.currentPage !== 'admin-setup') {
+        state.currentPage = 'entry';
+      }
       render();
       return;
     }
@@ -1858,6 +2176,9 @@ async function init() {
       const res = await api(`/api/users/${state.user.id}`);
       if (res.success) saveUser(res.data.user);
     } catch (e) { /* 세션 데이터 유지 */ }
+  }
+  if (state.user && needsEntryGate() && !['scan', 'admin-setup', 'entry'].includes(state.currentPage) && !state.salonCodeInput && !state.legacySalonPrefill) {
+    state.currentPage = 'entry';
   }
   if (state.user && state.salonCodeInput && !state.selectedSalon) {
     await lookupSalonCode();

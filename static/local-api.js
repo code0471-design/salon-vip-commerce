@@ -32,14 +32,14 @@
   }
 
   function normalizeSalonCode(value) {
-    const digits = String(value || '').replace(/\D/g, '');
-    return /^\d{5}$/.test(digits) ? digits : '';
-  }
+  const digits = String(value || '').replace(/\D/g, '');
+  return /^\d{6}$/.test(digits) ? digits : '';
+}
 
   function defaultSalonCode(salon) {
-    const n = 10000 + Number(salon && salon.id ? salon.id : 0);
-    return String(n).padStart(5, '0').slice(-5);
-  }
+  const n = 100000 + Number(salon && salon.id ? salon.id : 0);
+  return String(n).padStart(6, '0').slice(-6);
+}
 
   function findSalon(id) {
     return db.salons.find((s) => s.id === Number(id));
@@ -70,8 +70,8 @@
     let candidate = normalizeSalonCode(preferred) || defaultSalonCode({ id: excludeId || 0 });
     let n = Number(candidate);
     while (db.salons.some((s) => s.id !== excludeId && normalizeSalonCode(s.salon_code) === candidate)) {
-      n = (n + 1) % 100000;
-      candidate = String(n).padStart(5, '0');
+      n = (n + 1) % 1000000;
+    candidate = String(n).padStart(6, '0');
     }
     return candidate;
   }
@@ -386,7 +386,7 @@
       const raw = String(req.query.get('code') || '').trim();
       const code = normalizeSalonCode(raw);
       if (!code) {
-        return { status: 400, error: raw ? '매장 코드는 5자리 숫자입니다' : '매장 코드를 입력해주세요' };
+        return { status: 400, error: raw ? '매장 코드는 6자리 숫자입니다' : '매장 코드를 입력해주세요' };
       }
       const salon = findSalonByCode(code);
       if (!salon) return { status: 404, error: '매장 코드를 찾을 수 없습니다' };
@@ -397,7 +397,63 @@
         },
       };
     }],
-    ['POST', /^\/api\/salons$/, (req) => {
+        ['POST', /^\/api\/salons\/setup$/, (req) => {
+        const body = req.body || {};
+        const user = db.users.find((u) => u.id === Number(body.user_id));
+        if (!user) return { status: 404, error: '사용자를 찾을 수 없습니다' };
+        if (!body.salon_name || !body.owner_name || !body.owner_phone) {
+          return { status: 400, error: '매장명, 대표자, 휴대폰번호를 입력하세요' };
+        }
+        const rawCode = String(body.salon_code || '').trim();
+        const code = normalizeSalonCode(rawCode);
+        if (!code) return { status: 400, error: rawCode ? '매장 코드는 6자리 숫자입니다' : '매장 코드를 입력해주세요' };
+        if (findSalonByCode(code)) return { status: 400, error: '이미 사용 중인 매장 코드입니다' };
+        const owned = ownedSalon(user);
+        if (owned) return { status: 400, error: '이미 운영 중인 매장이 있습니다' };
+        const salonId = nextId(db.salons);
+        const salon = {
+          id: salonId,
+          salon_name: String(body.salon_name).trim(),
+          salon_code: code,
+          logo_url: 'https://api.dicebear.com/7.x/shapes/svg?seed=' + encodeURIComponent(body.salon_name),
+          owner_name: String(body.owner_name).trim(),
+          owner_phone: String(body.owner_phone).trim(),
+          address: String(body.address || '').trim(),
+          bank_account: body.bank_account || '',
+          hidden_brand_ids: [],
+          brand_discount_rates: {},
+          product_discount_rates: {},
+          product_prices: {},
+          created_at: nowStamp(),
+        };
+        db.salons.push(salon);
+        const designerNames = Array.isArray(body.designers) ? body.designers : [];
+        designerNames.forEach((row) => {
+          const rawName = typeof row === 'string' ? row : (row && row.designer_name);
+          if (!rawName || !String(rawName).trim()) return;
+          const name = String(rawName).includes('디자이너') ? String(rawName).trim() : String(rawName).trim() + ' 디자이너';
+          db.designers.push({
+            id: nextId(db.designers),
+            salon_id: salonId,
+            designer_name: name,
+            phone: (row && row.phone) || '',
+            profile_img: 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + encodeURIComponent(name),
+            status: 'ACTIVE',
+            commission_rate: 0.15,
+            created_at: nowStamp(),
+          });
+        });
+        user.name = salon.owner_name;
+        user.phone = salon.owner_phone;
+        user.current_salon_id = salonId;
+        user.mapped_designer_id = null;
+        save();
+        return {
+          data: { salon: publicSalon(salon), user: publicUser(user), designers: activeDesignersForSalon(salonId) },
+          extra: { message: '매장이 개설되었습니다' },
+        };
+      }],
+      ['POST', /^\/api\/salons$/, (req) => {
       const body = req.body || {};
       if (!body.salon_name || !body.owner_name || !body.owner_phone) return { status: 400, error: '필수 항목을 입력하세요' };
       const salonId = nextId(db.salons);
@@ -423,14 +479,14 @@
       const salon = findSalon(id);
       if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
       const body = req.body || {};
-      ['salon_name', 'owner_name', 'owner_phone', 'bank_account'].forEach((key) => {
+      ['salon_name', 'owner_name', 'owner_phone', 'bank_account', 'address'].forEach((key) => {
         if (body[key] !== undefined) salon[key] = body[key];
       });
       if (body.salon_code !== undefined) {
         const raw = String(body.salon_code || '').trim();
         const code = normalizeSalonCode(raw);
         if (!code) {
-          return { status: 400, error: raw ? '매장 코드는 5자리 숫자입니다' : '매장 코드를 입력해주세요' };
+          return { status: 400, error: raw ? '매장 코드는 6자리 숫자입니다' : '매장 코드를 입력해주세요' };
         }
         salon.salon_code = uniqueSalonCode(code, salon.id);
       }
@@ -548,6 +604,7 @@
         id: nextId(db.designers),
         salon_id: Number(body.salon_id),
         designer_name: name,
+        phone: String(body.phone || '').trim(),
         profile_img: `https://api.dicebear.com/7.x/avataaars/svg?seed=${nextId(db.designers)}`,
         status: 'ACTIVE',
         commission_rate: Number(body.commission_rate || 0.15),
