@@ -1411,12 +1411,12 @@ const routes = [
     if (!user.current_salon_id) return { status: 400, error: '먼저 매장 코드를 등록해주세요' };
     const salon = findSalon(user.current_salon_id);
     if (!salon) return { status: 400, error: '등록된 살롱을 찾을 수 없습니다' };
-    // 담당자는 있으면 귀속, 없어도 주문은 진행 (고객 결제 화면에서 담당자 선택 문구 노출 금지)
+    // 담당자는 매핑되어 있으면 귀속(퇴사여도 표시명과 일치). 없어도 주문은 진행.
     let designer = null;
     if (user.mapped_designer_id) {
       designer = db.designers.find((d) =>
-        d.id === Number(user.mapped_designer_id) && d.salon_id === salon.id && d.status === 'ACTIVE')
-        || null;
+        d.id === Number(user.mapped_designer_id) && Number(d.salon_id) === Number(salon.id)
+        && d.status !== 'INVITED') || null;
     }
     const items = [];
     for (const item of body.items || []) {
