@@ -1945,18 +1945,10 @@ function renderProfile() {
     </div>
 
     <div style="padding:0 16px 100px">
-      ${!u.is_owner ? `
-      <button class="btn-secondary" style="margin-bottom:10px" onclick="openAdminSetup()">
-        <i class="fas fa-store" style="margin-right:8px"></i>매장 개설하기 (관리자)
-      </button>
-      <p style="font-size:12px;color:var(--muted);margin:-2px 0 12px;padding:0 2px">고객으로 먼저 입장했어도, 여기서 내 매장을 개설할 수 있습니다.</p>` : ''}
-      ${u.current_salon_id ? `
-      <button class="btn-secondary" style="margin-bottom:10px" onclick="navigate('scan'); startDesignerChange()">
-        <i class="fas fa-user-edit" style="margin-right:8px"></i>같은 매장 담당자만 변경
-      </button>` : `
+      ${!u.is_owner && !u.is_staff && !u.current_salon_id ? `
       <button class="btn-secondary" style="margin-bottom:10px" onclick="navigate('entry')">
         <i class="fas fa-store" style="margin-right:8px"></i>살롱 VIP 입장하기
-      </button>`}
+      </button>` : ''}
       <button onclick="handleLogout()" style="width:100%;background:none;border:1.5px solid #fee2e2;border-radius:14px;padding:14px;color:#dc2626;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:0.3px">
         <i class="fas fa-sign-out-alt" style="margin-right:8px"></i>로그아웃
       </button>
