@@ -942,6 +942,17 @@ body {
 .od-earn {
   padding: 0 16px 14px; font-size: 12px; font-weight: 700; color: #15803d;
 }
+.od-earn-inline { font-weight: 800; color: #15803d; }
+.od-cancel-btn {
+  width: 100%; border: 1.5px solid #fecaca; background: #fff;
+  color: #dc2626; border-radius: 14px; padding: 14px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.od-cancel-btn:active { background: #fef2f2; }
+.od-cancel-note {
+  text-align: center; font-size: 13px; color: var(--muted);
+  background: #fafafa; border-radius: 12px; padding: 14px;
+}
 .order-salon { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
 .order-designer { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
 .order-footer { display: flex; justify-content: space-between; align-items: center; }
