@@ -1396,7 +1396,7 @@ function renderAdminSetup() {
           oninput="updateSetupField('salon_code', this.value.replace(/\\D/g,'').slice(0,6)); this.value=state.setupDraft.salon_code">
         <div class="setup-designer-block">
           <div class="setup-designer-head">
-            <label class="form-label" style="margin:0">담당자 초대</label>
+            <label class="form-label" style="margin:0">담당자 추가</label>
             <button type="button" class="ghost-text-btn" onclick="addSetupDesignerRow()">+ 추가</button>
           </div>
           <p class="setup-designer-hint">각 담당자 매출 확인이 필요한 경우 추가하세요.<br>1인샵은 추가할 필요 없습니다.</p>
@@ -3644,7 +3644,7 @@ function renderStoreManage(salon) {
             </div>
           </div>`).join('')}
       <div class="code-card setup-form" style="margin-top:12px">
-        <div class="section-label" style="margin-top:0">담당자 초대</div>
+        <div class="section-label" style="margin-top:0">담당자 추가</div>
         <p style="font-size:12px;color:var(--muted);margin:0 0 10px">요청을 보내면 담당자 휴대폰으로 초대 문자가 갑니다. 같은 번호로 가입·문자인증을 마치면 담당자 등록이 완료됩니다.</p>
         <label class="form-label">이름</label>
         <input id="manage-new-designer-name" class="form-input" placeholder="담당자 이름">
