@@ -2476,7 +2476,7 @@ function renderOrderDetailPage() {
     items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 0), 0));
   const pointsEarned = Number(o.points_earned || 0);
   const canCancel = canRequestOrderCancel(o);
-  const orderNo = String(o.id).padStart(4, '0') + String(new Date(o.created_at).getTime() || o.id).slice(-8);
+  const orderNo = String(o.id);
   const payOpen = state.orderPayOpen !== false;
   const fallbackImg = 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=300&q=80';
 
@@ -2511,7 +2511,7 @@ function renderOrderDetailPage() {
                   ${original > line ? `<span class="od-price-old">${original.toLocaleString()}원</span>` : ''}
                 </div>
                 <div class="od-orderno">
-                  상품주문번호 : ${escText(orderNo)}
+                  주문번호 : ${escText(orderNo)}
                   <button type="button" class="od-copy" onclick="copyOrderNo('${escText(orderNo)}')">복사</button>
                 </div>
               </div>
