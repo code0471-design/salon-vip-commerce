@@ -54,6 +54,7 @@ let state = {
   otpSent: false,
   adminTab: 'sales', // sales | manage
   manageDesigners: [],
+  resignConfirmId: null,
   pendingStaffInvites: [],
   deepInviteId: null,
   deepInviteInfo: null,
@@ -294,6 +295,7 @@ function renderShell() {
     ${renderHeaderMenu()}
     ${renderCartQtySheet()}
     ${renderCartAddedSheet()}
+    ${renderResignConfirm()}
   `;
 }
 
@@ -3637,7 +3639,7 @@ function renderStoreManage(salon) {
             </div>
             <div style="display:flex;gap:8px;align-items:center">
               ${d.status === 'INVITED' ? `<button type="button" class="ghost-text-btn" onclick="resendDesignerInvite(${d.id})">재요청</button>` : ''}
-              <button type="button" class="ghost-text-btn" onclick="resignDesigner(${d.id})">삭제</button>
+              <button type="button" class="ghost-text-btn resign-text-btn" onclick="askResignDesigner(${d.id})">퇴사처리</button>
             </div>
           </div>`).join('')}
       <div class="code-card setup-form" style="margin-top:12px">
@@ -3756,16 +3758,54 @@ async function resendDesignerInvite(id) {
   else showToast(res.message || '초대 문자를 다시 보냈습니다', 'success');
 }
 
-async function resignDesigner(id) {
-  if (!confirm('이 담당자를 삭제할까요?')) return;
+function askResignDesigner(id) {
+  state.resignConfirmId = Number(id) || null;
+  render();
+}
+
+function closeResignConfirm() {
+  state.resignConfirmId = null;
+  render();
+}
+
+function renderResignConfirm() {
+  const id = Number(state.resignConfirmId || 0);
+  if (!id) return '';
+  const d = (state.manageDesigners || []).find((row) => Number(row.id) === id);
+  const name = d ? String(d.designer_name || '').replace(' 디자이너', '') : '';
+  return `
+    <div class="confirm-overlay" onclick="closeResignConfirm()">
+      <div class="confirm-card" role="dialog" aria-modal="true" aria-labelledby="resign-confirm-title" onclick="event.stopPropagation()">
+        <div class="confirm-ico" aria-hidden="true"><i class="fas fa-user-slash"></i></div>
+        <h3 id="resign-confirm-title" class="confirm-title">담당자를 퇴사처리할까요?</h3>
+        <p class="confirm-sub">삭제후에도 매출 내역은 남습니다</p>
+        ${name ? `<p class="confirm-name">${escText(name)}</p>` : ''}
+        <div class="confirm-actions">
+          <button type="button" class="confirm-btn cancel" onclick="closeResignConfirm()">취소</button>
+          <button type="button" class="confirm-btn danger" onclick="confirmResignDesigner()">퇴사처리</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function confirmResignDesigner() {
+  const id = Number(state.resignConfirmId || 0);
+  if (!id) return;
+  state.resignConfirmId = null;
   const res = await api('/api/designers/' + id + '/resign', 'POST', {});
   if (!res.success) {
-    showToast(res.error || '삭제하지 못했습니다', 'error');
+    render();
+    showToast(res.error || '퇴사처리하지 못했습니다', 'error');
     return;
   }
   await loadManageDesigners();
   render();
-  showToast('담당자를 삭제했습니다', 'success');
+  showToast('담당자를 퇴사처리했습니다', 'success');
+}
+
+async function resignDesigner(id) {
+  askResignDesigner(id);
 }
 
 async function toggleSalonBrand(brandId, hidden) {
