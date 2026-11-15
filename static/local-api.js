@@ -1301,6 +1301,62 @@
     (db.users || []).forEach((user) => {
       if (user.points == null) user.points = 0;
     });
+    // 데모 소셜 계정(김민수 등)을 시드와 고정 auth_id로 맞춤 — 매번 신규가입 화면 방지
+    (function ensureDemoSocialUsers() {
+      const demos = [
+        {
+          kakao_id: 'kakao_demo_minsu',
+          aliases: ['kakao_001'],
+          name: '김민수',
+          phone: '010-1111-2222',
+          shipping_address: '(06236) 서울 강남구 테헤란로 152 301호',
+          current_salon_id: 1,
+          mapped_designer_id: 1,
+        },
+        {
+          kakao_id: 'kakao_004',
+          aliases: [],
+          name: '이서연',
+          phone: '010-7777-8888',
+          shipping_address: '(06236) 서울 강남구 테헤란로 152 502호',
+          current_salon_id: 1,
+          mapped_designer_id: 3,
+        },
+      ];
+      demos.forEach((demo) => {
+        let user = (db.users || []).find((u) => u.kakao_id === demo.kakao_id);
+        if (!user) {
+          user = (db.users || []).find((u) => (demo.aliases || []).includes(u.kakao_id));
+        }
+        if (!user) {
+          user = (db.users || []).find((u) => u.name === demo.name || (demo.name === '김민수' && u.name === '홍길동' && u.id === 1));
+        }
+        if (user) {
+          user.kakao_id = demo.kakao_id;
+          user.auth_provider = 'kakao';
+          user.name = demo.name;
+          if (!user.phone) user.phone = demo.phone;
+          if (!user.shipping_address) user.shipping_address = demo.shipping_address;
+          if (!user.current_salon_id) user.current_salon_id = demo.current_salon_id;
+          if (!user.mapped_designer_id) user.mapped_designer_id = demo.mapped_designer_id;
+          user.phone_verified = true;
+        } else {
+          db.users.push({
+            id: nextId(db.users),
+            kakao_id: demo.kakao_id,
+            auth_provider: 'kakao',
+            name: demo.name,
+            phone: demo.phone,
+            shipping_address: demo.shipping_address,
+            phone_verified: true,
+            current_salon_id: demo.current_salon_id,
+            mapped_designer_id: demo.mapped_designer_id,
+            created_at: nowStamp(),
+            points: 0,
+          });
+        }
+      });
+    })();
     save();
   })();
 
