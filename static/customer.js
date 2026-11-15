@@ -27,8 +27,8 @@ let state = {
   selectedDesigner: null,
   salonCodeInput: '',
   onboardingStep: 'code', // code | designer
-  loginStep: 'social', // social | profile
-  pendingSocial: null, // { provider, auth_id }
+  loginStep: 'social', // social | account | profile
+  pendingSocial: null, // { provider, auth_id, name?, phone? }
   loading: false
 };
 
@@ -318,7 +318,37 @@ function providerLabel(provider) {
   return ({ kakao: '카카오', google: '구글', naver: '네이버', apple: '애플' })[provider] || provider;
 }
 
+function providerAccounts(provider) {
+  // 실제 OAuth 연동 전: 계정 선택 UI 데모. 실서비스에서는 카카오/구글 계정 선택창이 뜹니다.
+  const device = getDeviceId().slice(-4);
+  const map = {
+    kakao: [
+      { slot: '1', name: '김민수', handle: 'minsu@kakao.com' },
+      { slot: '2', name: '이서연', handle: 'seoyeon@kakao.com' },
+    ],
+    google: [
+      { slot: '1', name: '박지훈', handle: 'jihoon@gmail.com' },
+      { slot: '2', name: '최유진', handle: 'yujin@gmail.com' },
+    ],
+    naver: [
+      { slot: '1', name: '정하늘', handle: 'haneul@naver.com' },
+      { slot: '2', name: '한소희', handle: 'sohee@naver.com' },
+    ],
+    apple: [
+      { slot: '1', name: '오세진', handle: 'sejin_' + device + '@privaterelay.appleid.com' },
+    ],
+  };
+  return map[provider] || [];
+}
+
+function authIdForAccount(provider, slot) {
+  return provider + '_' + getDeviceId() + '_acct' + slot;
+}
+
 function renderLogin() {
+  if (state.loginStep === 'account' && state.pendingSocial) {
+    return renderSocialAccountPicker();
+  }
   if (state.loginStep === 'profile' && state.pendingSocial) {
     return renderSocialProfile();
   }
@@ -351,7 +381,7 @@ function renderLogin() {
           </button>
         </div>
 
-        <p class="login-flow-hint">가입 → 매장 코드(5자리) → 담당자 선택 · 이후 자동 로그인</p>
+        <p class="login-flow-hint">계정 선택 → 매장 코드(5자리) → 담당자 · 이후 자동 로그인</p>
 
         <div style="text-align:center;margin-top:18px">
           <button onclick="loginAsDemo()" class="demo-link" style="display:inline">데모 계정</button>
@@ -367,9 +397,50 @@ function goBackToSocialLogin() {
   state.loginStep = 'social';
   state.pendingSocial = null;
   render();
-  if (history.state && history.state.salonLoginStep === 'profile') {
+  if (history.state && (history.state.salonLoginStep === 'profile' || history.state.salonLoginStep === 'account')) {
     history.replaceState({}, '', location.pathname + location.search);
   }
+}
+
+function goBackToAccountPicker() {
+  if (!state.pendingSocial) { goBackToSocialLogin(); return; }
+  state.loginStep = 'account';
+  render();
+}
+
+function renderSocialAccountPicker() {
+  const p = state.pendingSocial;
+  const accounts = providerAccounts(p.provider);
+  const label = providerLabel(p.provider);
+  return `
+    <div class="login-wrap">
+      <div class="login-hero" style="padding:28px 28px 16px">
+        <button type="button" class="login-back-btn" onclick="goBackToSocialLogin()">
+          <i class="fas fa-chevron-left"></i> 뒤로
+        </button>
+        <h1 style="font-size:22px;font-weight:900;color:#fff;margin:12px 0 0">${label} 계정 선택</h1>
+        <p style="font-size:13px;color:rgba(255,255,255,0.65);margin-top:8px">계속할 ${label} 계정을 선택하세요</p>
+      </div>
+      <div class="login-body">
+        <div class="account-pick-list">
+          ${accounts.map((a) => `
+            <button type="button" class="account-pick-row" onclick="selectSocialAccount('${p.provider}','${a.slot}','${a.name.replace(/'/g, '')}')">
+              <div class="account-pick-avatar">${a.name.slice(0, 1)}</div>
+              <div class="account-pick-meta">
+                <div class="account-pick-name">${a.name}</div>
+                <div class="account-pick-handle">${a.handle}</div>
+              </div>
+              <i class="fas fa-chevron-right" style="color:#ccc;font-size:12px"></i>
+            </button>
+          `).join('')}
+        </div>
+        <button type="button" class="account-pick-other" onclick="useAnotherSocialAccount('${p.provider}')">
+          다른 ${label} 계정 사용
+        </button>
+        <p class="login-flow-hint" style="margin-top:14px">데모용 계정 선택 화면입니다. 실서비스에서는 ${label} 로그인 창이 열립니다.</p>
+      </div>
+    </div>
+  `;
 }
 
 function renderSocialProfile() {
@@ -377,11 +448,11 @@ function renderSocialProfile() {
   return `
     <div class="login-wrap">
       <div class="login-hero" style="padding:28px 28px 16px">
-        <button type="button" class="login-back-btn" onclick="goBackToSocialLogin()">
-          <i class="fas fa-chevron-left"></i> 소셜 선택으로
+        <button type="button" class="login-back-btn" onclick="goBackToAccountPicker()">
+          <i class="fas fa-chevron-left"></i> 계정 선택으로
         </button>
         <h1 style="font-size:22px;font-weight:900;color:#fff;margin:12px 0 0">회원 정보</h1>
-        <p style="font-size:13px;color:rgba(255,255,255,0.65);margin-top:8px">${providerLabel(p.provider)} 가입 · 이름만 입력하면 매장 코드로 이어집니다</p>
+        <p style="font-size:13px;color:rgba(255,255,255,0.65);margin-top:8px">${providerLabel(p.provider)} 새 계정 · 이름 입력 후 매장 코드로 이어집니다</p>
       </div>
       <div class="login-body">
         <div class="form-field">
@@ -395,22 +466,26 @@ function renderSocialProfile() {
         <button class="btn-primary" style="margin-top:8px" onclick="submitSocialProfile()">
           <i class="fas fa-arrow-right"></i> 다음 · 매장 코드
         </button>
-        <button type="button" class="demo-link" onclick="goBackToSocialLogin()">다른 계정으로</button>
+        <button type="button" class="demo-link" onclick="goBackToAccountPicker()">다른 계정으로</button>
       </div>
     </div>
   `;
 }
 
-async function startSocialLogin(provider) {
-  const authId = authIdFor(provider);
-  const res = await api('/api/auth/social', 'POST', { provider, auth_id: authId });
-  if (res.needs_profile) {
-    state.pendingSocial = { provider, auth_id: authId };
-    state.loginStep = 'profile';
-    history.pushState({ salonLoginStep: 'profile' }, '', location.href);
-    render();
-    return;
-  }
+function startSocialLogin(provider) {
+  state.pendingSocial = { provider };
+  state.loginStep = 'account';
+  history.pushState({ salonLoginStep: 'account' }, '', location.href);
+  render();
+}
+
+async function selectSocialAccount(provider, slot, name) {
+  const authId = authIdForAccount(provider, slot);
+  const res = await api('/api/auth/social', 'POST', {
+    provider,
+    auth_id: authId,
+    name,
+  });
   if (!res.success || !res.data) {
     showToast(res.error || '로그인에 실패했습니다', 'error');
     return;
@@ -418,11 +493,23 @@ async function startSocialLogin(provider) {
   await finishSocialAuth(res, provider, authId);
 }
 
+function useAnotherSocialAccount(provider) {
+  const authId = authIdForAccount(provider, 'new_' + Date.now().toString(36));
+  state.pendingSocial = { provider, auth_id: authId };
+  state.loginStep = 'profile';
+  history.pushState({ salonLoginStep: 'profile' }, '', location.href);
+  render();
+}
+
 async function submitSocialProfile() {
   const name = (document.getElementById('login-name') || {}).value.trim();
   const phone = (document.getElementById('login-phone') || {}).value.trim();
   if (!name) { showToast('이름을 입력해주세요', 'error'); return; }
-  if (!state.pendingSocial) { state.loginStep = 'social'; render(); return; }
+  if (!state.pendingSocial || !state.pendingSocial.auth_id) {
+    state.loginStep = 'account';
+    render();
+    return;
+  }
   const { provider, auth_id } = state.pendingSocial;
   const res = await api('/api/auth/social', 'POST', { provider, auth_id, name, phone });
   if (!res.success || !res.data) {
@@ -1697,9 +1784,14 @@ async function initDB() {
   } catch (e) { console.log('DB may already be initialized'); }
 }
 
-window.addEventListener('popstate', (event) => {
+window.addEventListener('popstate', () => {
   if (state.user) return;
   if (state.loginStep === 'profile') {
+    state.loginStep = state.pendingSocial ? 'account' : 'social';
+    render();
+    return;
+  }
+  if (state.loginStep === 'account') {
     state.loginStep = 'social';
     state.pendingSocial = null;
     render();
