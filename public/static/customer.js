@@ -214,13 +214,13 @@ function renderPage() {
 // ============================================================
 function renderHome() {
   if (!state.user) return renderLogin();
-  if (needsSalonBinding()) return renderOnboardingGate();
 
   const u = state.user;
   const best = state.bestProducts.length > 0 ? state.bestProducts : state.products.slice(0, 6);
   const categories = ['샴푸', '컨디셔너', '트리트먼트', '오일/세럼', '스프레이', '컬크림', '왁스/젤'];
   const mainBanner = (state.banners || []).find((banner) => banner.banner_type === 'MAIN' && banner.status === 'ACTIVE' && banner.image_url);
   const bannerUrl = (mainBanner && mainBanner.image_url) || 'static/banner-sample.png';
+  const needSalon = needsSalonBinding();
 
   return `
     <!-- ① 고객 인사 배너 (한 줄) -->
@@ -231,6 +231,15 @@ function renderHome() {
       </div>
       <div class="greeting-vip-chip"><i class="fas fa-crown"></i> VIP</div>
     </div>
+
+    ${needSalon ? `
+    <div class="home-salon-cta" onclick="navigate('scan')">
+      <div>
+        <div class="home-salon-cta-title">매장 코드를 등록해 주세요</div>
+        <div class="home-salon-cta-sub">담당자 연결 후 VIP 쇼핑·적립이 시작됩니다</div>
+      </div>
+      <span class="home-salon-cta-btn">등록</span>
+    </div>` : ''}
 
     <div class="home-banner">
       <img src="${bannerUrl}" alt="${(mainBanner && mainBanner.title) || '메인 배너'}">
@@ -525,13 +534,11 @@ async function finishSocialAuth(res, provider, authId) {
   state.pendingSocial = null;
   state.loginStep = 'social';
   await loadAppData();
+  navigate('home');
   if (needsSalonBinding()) {
-    resetOnboarding();
-    navigate('scan');
-    showToast('매장 코드를 입력해 주세요', 'success');
+    showToast('환영합니다! 홈에서 매장 코드를 등록해 주세요', 'success');
     return;
   }
-  navigate('home');
   const salonLabel = res.data.salon_name ? res.data.salon_name + '으로 ' : '';
   showToast(salonLabel + '로그인되었습니다', 'success');
 }
@@ -1740,11 +1747,6 @@ async function init() {
 
   if (!state.user) {
     const restored = await tryAutoLogin();
-    if (restored && needsSalonBinding()) {
-      resetOnboarding();
-      navigate('scan');
-      return;
-    }
     if (restored) {
       render();
       return;
@@ -1769,10 +1771,6 @@ async function init() {
       await lookupSalonCode();
       return;
     }
-  }
-  if (state.user && needsSalonBinding() && state.currentPage !== 'scan') {
-    navigate('scan');
-    return;
   }
   render();
 }
