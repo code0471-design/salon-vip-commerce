@@ -16,6 +16,7 @@ let state = {
   banners: [],
   categories: ['전체', '샴푸', '컨디셔너', '트리트먼트', '오일/세럼', '스프레이', '컬크림', '왁스/젤'],
   selectedCategory: '전체',
+  selectedBrandId: 0, // 0 = 전체 브랜드
   cart: [],
   wishlist: (() => {
     try {
@@ -483,7 +484,7 @@ function renderBottomNav(cartCount) {
   const count = cartCount == null ? state.cart.reduce((s, i) => s + i.qty, 0) : cartCount;
   const tabs = [
     { id: 'home', icon: 'fa-home', label: '홈' },
-    { id: 'category', icon: 'fa-th-large', label: '카테고리' },
+    { id: 'brands', icon: 'fa-tags', label: '브랜드' },
     { id: 'search', icon: 'fa-search', label: '검색' },
     { id: 'profile', icon: 'fa-user', label: '마이' },
     { id: 'cart', icon: 'fa-shopping-bag', label: '장바구니', badge: count },
@@ -501,7 +502,8 @@ function renderBottomNav(cartCount) {
 function renderPage() {
   switch(state.currentPage) {
     case 'home':         return renderHome();
-    case 'category':     return renderCategory();
+    case 'brands':       return renderBrands();
+    case 'category':     return renderBrands(); // 이전 카테고리 탭 → 브랜드
     case 'search':       return renderSearch();
     case 'cart':         return renderCartPage();
     case 'store':        return renderStore();
@@ -576,7 +578,7 @@ function renderHome() {
         <span style="background:var(--rose);color:white;font-size:9px;font-weight:800;padding:3px 7px;border-radius:5px;letter-spacing:1px;margin-right:6px">BEST</span>
         베스트 제품
       </span>
-      <span class="see-all" onclick="navigate('category')">전체보기 →</span>
+      <span class="see-all" onclick="navigate('brands')">전체보기 →</span>
     </div>
     <div class="best-scroll">
       ${best.map(p => renderBestCard(p)).join('')}
@@ -604,21 +606,37 @@ function goHomeSearch() {
 // 홈 카테고리 클릭 → 쇼핑 페이지로 이동 + 카테고리 필터
 function goShopCategory(cat) {
   state.selectedCategory = cat;
+  state.selectedBrandId = 0;
   navigate('shop');
 }
 
-function renderCategory() {
+function goShopBrand(brandId) {
+  state.selectedBrandId = Number(brandId) || 0;
+  state.selectedCategory = '전체';
+  navigate('shop');
+}
+
+function renderBrands() {
   if (!state.user) return renderLoginPrompt();
-  const categories = ['전체', '샴푸', '컨디셔너', '트리트먼트', '오일/세럼', '스프레이', '컬크림', '왁스/젤'];
+  const brands = (state.brands || []).slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ko'));
+  const counts = {};
+  (state.products || []).forEach((p) => {
+    const id = Number(p.brand_id) || 0;
+    counts[id] = (counts[id] || 0) + 1;
+  });
   return `
     <div class="page-pad">
-      <h2 class="page-title">카테고리</h2>
-      <p class="page-sub">원하는 제품군을 선택하세요</p>
+      <h2 class="page-title">브랜드</h2>
+      <p class="page-sub">브랜드를 선택해 제품을 보세요</p>
       <div class="category-menu-list">
-        ${categories.map((name) => `
-          <button type="button" class="category-menu-row" onclick="goShopCategory('${name}')">
-            <span>${name}</span>
-            <i class="fas fa-chevron-right"></i>
+        <button type="button" class="category-menu-row" onclick="goShopBrand(0)">
+          <span>전체 브랜드</span>
+          <span class="brand-menu-meta">${(state.products || []).length} · <i class="fas fa-chevron-right"></i></span>
+        </button>
+        ${brands.map((brand) => `
+          <button type="button" class="category-menu-row" onclick="goShopBrand(${brand.id})">
+            <span>${escText(brand.name)}</span>
+            <span class="brand-menu-meta">${counts[brand.id] || 0} · <i class="fas fa-chevron-right"></i></span>
           </button>`).join('')}
       </div>
     </div>
@@ -671,7 +689,7 @@ function renderCartPage() {
       <div class="page-pad" style="padding-top:48px;text-align:center">
         <i class="fas fa-shopping-bag" style="font-size:32px;color:var(--muted);opacity:0.3"></i>
         <h3 style="margin:14px 0 6px;font-size:16px;font-weight:800">장바구니가 비어 있어요</h3>
-        <button class="btn-primary" style="width:auto;padding:12px 24px;margin-top:12px" onclick="navigate('category')">상품 보러가기</button>
+        <button class="btn-primary" style="width:auto;padding:12px 24px;margin-top:12px" onclick="navigate('brands')">상품 보러가기</button>
       </div>`;
   }
   return `
@@ -1630,20 +1648,26 @@ async function confirmScan() {
 function renderShop() {
   if (state.user && needsSalonBinding()) return renderOnboardingGate();
 
-  const filtered = state.selectedCategory === '전체'
-    ? state.products
-    : state.products.filter(p => p.category === state.selectedCategory);
+  const brandId = Number(state.selectedBrandId) || 0;
+  const brands = (state.brands || []).slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ko'));
+  let filtered = state.products || [];
+  if (brandId) filtered = filtered.filter((p) => Number(p.brand_id) === brandId);
+  if (state.selectedCategory && state.selectedCategory !== '전체') {
+    filtered = filtered.filter((p) => p.category === state.selectedCategory);
+  }
 
-  const cartTotal = state.cart.reduce((s, i) => s + i.price * i.qty, 0);
   const cartCount = state.cart.reduce((s, i) => s + i.qty, 0);
   const salonName = state.user?.salon_name || 'SUBLIMIC';
+  const brandName = brandId
+    ? ((brands.find((b) => Number(b.id) === brandId) || {}).name || '브랜드')
+    : '';
 
   return `
     <!-- Shop Header -->
     <div class="shop-header">
       <div>
         <h2>${salonName}</h2>
-        <p class="sub">프리미엄 헤어케어 · VIP 전용가${state.user?.designer_name ? ' · ' + state.user.designer_name : ''}</p>
+        <p class="sub">프리미엄 헤어케어 · VIP 전용가${state.user?.designer_name ? ' · ' + state.user.designer_name : ''}${brandName ? ' · ' + escText(brandName) : ''}</p>
       </div>
       ${state.cart.length > 0 ? `
       <div class="cart-mini-bar" onclick="openCart()">
@@ -1654,12 +1678,13 @@ function renderShop() {
       <span class="vip-info-bar"><i class="fas fa-crown"></i> VIP 전용가</span>`}
     </div>
 
-    <!-- Category Tabs -->
+    <!-- Brand Tabs -->
     <div class="cat-tabs-wrap">
       <div class="cat-tabs">
-        ${state.categories.map(cat => `
-          <button class="cat-tab ${state.selectedCategory === cat ? 'active' : ''}" onclick="filterCategory('${cat}')">
-            ${cat}
+        <button class="cat-tab ${!brandId ? 'active' : ''}" onclick="filterBrand(0)">전체</button>
+        ${brands.map((brand) => `
+          <button class="cat-tab ${brandId === Number(brand.id) ? 'active' : ''}" onclick="filterBrand(${brand.id})">
+            ${escText(brand.name)}
           </button>`).join('')}
       </div>
     </div>
@@ -1707,6 +1732,12 @@ function renderProductCard(p) {
 
 function filterCategory(cat) {
   state.selectedCategory = cat;
+  render();
+}
+
+function filterBrand(brandId) {
+  state.selectedBrandId = Number(brandId) || 0;
+  state.selectedCategory = '전체';
   render();
 }
 
