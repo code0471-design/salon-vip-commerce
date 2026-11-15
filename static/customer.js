@@ -3205,16 +3205,19 @@ function renderSalesMonthChips(period) {
 }
 
 function settleView(row) {
-  const sale = Number(row && row.sales) || 0;
+  const sale = Number(row && row.sales) || 0; // 총 판매가 (쿠폰·포인트 적용 전)
   const coupon = Number(row && row.coupon_discount) || 0;
+  const points = Number(row && row.points_used) || 0;
   const payout = Number(row && row.payout) || 0;
+  const revenue = Number(row && row.paid_amount);
   return {
     count: Number(row && row.orders) || 0,
     sale,
-    paid: Math.max(0, sale - coupon),
+    revenue: Number.isFinite(revenue) ? Math.max(0, revenue) : Math.max(0, sale - coupon - points), // 총매출
     coupon,
-    salon: Math.max(0, sale - payout),
-    payout,
+    points,
+    salon: Math.max(0, sale - payout), // 총 살롱가
+    payout, // 정산받을 금액 = 총 판매가 − 총 살롱가
   };
 }
 
@@ -3224,13 +3227,12 @@ function renderSettleMetrics(row) {
   return `
     <div class="settle-metrics">
       ${tile('총건수', view.count + '건')}
-      ${tile('총매출', won(view.sale))}
-      ${tile('실 고객결제액', won(view.paid))}
-      ${tile('쿠폰사용', won(view.coupon))}
+      ${tile('총 판매가', won(view.sale))}
       ${tile('총 살롱가', won(view.salon))}
+      ${tile('총매출', won(view.revenue))}
       ${tile('정산받을 금액', won(view.payout), true)}
     </div>
-    <div class="settle-formula">총매출 = 실 고객결제액 + 쿠폰사용<br>정산받을 금액 = 총매출 − 총 살롱가</div>`;
+    <div class="settle-formula">총 판매가 = 쿠폰·포인트 적용 전<br>총매출 = 쿠폰·포인트 적용 후 실매출<br>정산받을 금액 = 총 판매가 − 총 살롱가</div>`;
 }
 
 function monthLabel(period) {
@@ -3554,10 +3556,10 @@ function renderStaffFilters(sales) {
     if (order.payment_status !== 'PAID') return;
     const name = order.designer_name || '담당 없음';
     const money = orderMoney(order);
-    const row = totals.get(name) || { name, count: 0, sale: 0, coupon: 0, payout: 0 };
+    const row = totals.get(name) || { name, count: 0, sale: 0, revenue: 0, payout: 0 };
     row.count += 1;
     row.sale += money.sale;
-    row.coupon += money.coupon;
+    row.revenue += money.paid;
     row.payout += money.storePayout;
     totals.set(name, row);
   });
@@ -3570,7 +3572,7 @@ function renderStaffFilters(sales) {
       ${chip('', '전체', won(allSale))}
       ${people.map((row) => chip(row.name, row.name, row.count + '건 · ' + won(row.sale))).join('')}
     </div>
-    ${picked ? `<p style="font-size:12px;color:var(--muted);margin:-2px 0 10px">${picked.name} · 총매출 ${won(picked.sale)} · 실결제 ${won(Math.max(0, picked.sale - picked.coupon))} · 쿠폰 ${won(picked.coupon)} · 정산받을 금액 ${won(picked.payout)}</p>` : ''}`;
+    ${picked ? `<p style="font-size:12px;color:var(--muted);margin:-2px 0 10px">${picked.name} · 총 판매가 ${won(picked.sale)} · 총매출 ${won(picked.revenue)} · 정산받을 금액 ${won(picked.payout)}</p>` : ''}`;
 }
 
 function setSalesStaff(name) {
