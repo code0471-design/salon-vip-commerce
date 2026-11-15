@@ -366,11 +366,10 @@ function renderLogin() {
 function goBackToSocialLogin() {
   state.loginStep = 'social';
   state.pendingSocial = null;
-  if (history.state && history.state.salonLoginStep === 'profile') {
-    history.back();
-    return;
-  }
   render();
+  if (history.state && history.state.salonLoginStep === 'profile') {
+    history.replaceState({}, '', location.pathname + location.search);
+  }
 }
 
 function renderSocialProfile() {
@@ -379,10 +378,10 @@ function renderSocialProfile() {
     <div class="login-wrap">
       <div class="login-hero" style="padding:28px 28px 16px">
         <button type="button" class="login-back-btn" onclick="goBackToSocialLogin()">
-          <i class="fas fa-chevron-left"></i> 뒤로
+          <i class="fas fa-chevron-left"></i> 소셜 선택으로
         </button>
-        <h1 style="font-size:22px;font-weight:900;color:var(--text);margin:12px 0 0">회원 정보</h1>
-        <p style="font-size:13px;color:var(--muted);margin-top:8px">${providerLabel(p.provider)} 가입 · 이름만 입력하면 매장 코드로 이어집니다</p>
+        <h1 style="font-size:22px;font-weight:900;color:#fff;margin:12px 0 0">회원 정보</h1>
+        <p style="font-size:13px;color:rgba(255,255,255,0.65);margin-top:8px">${providerLabel(p.provider)} 가입 · 이름만 입력하면 매장 코드로 이어집니다</p>
       </div>
       <div class="login-body">
         <div class="form-field">
