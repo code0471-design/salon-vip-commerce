@@ -242,7 +242,7 @@ body {
 .search-input {
   flex: 1; border: none; outline: none; font-size: 15px; font-family: var(--font); background: transparent;
 }
-.search-result-list { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+.search-result-grid { margin-top: 14px; padding-left: 0; padding-right: 0; }
 .qty-btn {
   width: 26px; height: 26px; border-radius: 8px; border: 1px solid var(--border);
   background: #fff; font-size: 14px; cursor: pointer; line-height: 1;

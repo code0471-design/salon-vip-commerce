@@ -647,7 +647,7 @@ function renderSearch() {
         ? `<p class="page-sub" style="margin-top:20px">검색어를 입력해 주세요</p>`
         : list.length === 0
           ? `<p class="page-sub" style="margin-top:20px">검색 결과가 없습니다</p>`
-          : `<div class="search-result-list">${list.map((p) => renderProductCard(p)).join('')}</div>`}
+          : `<div class="product-grid search-result-grid">${list.map((p) => renderProductCard(p)).join('')}</div>`}
     </div>
   `;
 }
