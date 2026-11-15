@@ -159,6 +159,11 @@ body {
   color: var(--muted); font-size: 12px; font-weight: 600; text-decoration: underline;
   cursor: pointer; font-family: var(--font);
 }
+.entry-logout-link {
+  display: block; width: 100%; margin-top: 10px; border: none; background: none;
+  color: #b91c1c; font-size: 12px; font-weight: 600;
+  cursor: pointer; font-family: var(--font);
+}
 .setup-form .form-label { margin-top: 12px; }
 .setup-form .form-label:first-child { margin-top: 0; }
 .setup-designer-block { margin-top: 14px; }
