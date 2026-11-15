@@ -183,7 +183,18 @@ body {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
 }
 .setup-designer-row {
-  display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; margin-bottom: 8px; align-items: center;
+  display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 8px; margin-bottom: 8px; align-items: center;
+}
+.setup-designer-row.requested .form-input {
+  border-color: #86efac;
+}
+.setup-request-btn {
+  height: 42px; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--primary);
+  background: #fff; color: var(--primary); font-size: 12px; font-weight: 800;
+  cursor: pointer; font-family: var(--font); white-space: nowrap;
+}
+.setup-request-btn.on {
+  background: #ecfdf5; border-color: #059669; color: #047857;
 }
 .setup-remove {
   width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border);
