@@ -269,8 +269,9 @@ function renderShell() {
   const salonName = state.user?.salon_name || null;
   const cartCount = state.cart.reduce((s, i) => s + i.qty, 0);
   const isProduct = state.currentPage === 'product';
+  const isLogin = !state.user;
   return `
-    ${isProduct ? '' : `
+    ${isProduct || isLogin ? '' : `
     <header class="app-header">
       ${salonName
         ? `<div class="header-salon-name">${salonName}<span class="brand-dot"></span></div>`
@@ -286,7 +287,7 @@ function renderShell() {
         </button>
       </div>
     </header>`}
-    <main class="page-content${isProduct ? ' page-content-flush' : ''}" id="page-content">
+    <main class="page-content${isProduct || isLogin ? ' page-content-flush' : ''}" id="page-content">
       ${renderPage()}
     </main>
     ${state.user && !['entry', 'admin-setup', 'product'].includes(state.currentPage) ? renderBottomNav(cartCount) : ''}
@@ -918,14 +919,17 @@ function renderLogin() {
   return `
     <div class="login-wrap">
       <div class="login-hero">
-        <div class="login-logo">
-          <i class="fas fa-scissors" style="font-size:28px;color:var(--accent)"></i>
+        <div class="login-hero-glow" aria-hidden="true"></div>
+        <div class="login-mark" aria-hidden="true">
+          <i class="fas fa-scissors"></i>
         </div>
-        <h1 style="font-size:26px;font-weight:900;letter-spacing:2px;margin:14px 0 4px;color:var(--text)">SALON VIP</h1>
-        <p style="font-size:13px;color:var(--muted);letter-spacing:0.3px">프리미엄 살롱 VIP 멤버십</p>
+        <h1 class="login-brand">SALON <span>VIP</span></h1>
+        <p class="login-tagline">프리미엄 살롱 VIP 멤버십</p>
+        <div class="login-hero-line" aria-hidden="true"></div>
       </div>
 
       <div class="login-body">
+        <div class="login-body-handle" aria-hidden="true"></div>
         <h2 class="login-title">시작하기</h2>
         <p class="login-sub">소셜 계정으로 가입하면, 매장 코드 등록 후 VIP 쇼핑이 연결됩니다.</p>
 
@@ -936,12 +940,12 @@ function renderLogin() {
           ${renderSocialBtn('apple', 'Apple로 시작하기', 'social-apple', '<i class="fab fa-apple"></i>')}
         </div>
 
-        <div style="text-align:center;margin-top:18px">
-          <button onclick="loginAsDemo()" class="demo-link" style="display:inline">데모 계정</button>
-          <span style="color:#ccc;margin:0 8px">·</span>
-          <button onclick="loginAsOwner()" class="demo-link" style="display:inline">내 매장 원장</button>
-          <span style="color:#ccc;margin:0 8px">·</span>
-          <button onclick="loginAsStaff()" class="demo-link" style="display:inline">담당자</button>
+        <div class="login-demo-row">
+          <button type="button" onclick="loginAsDemo()" class="demo-link">데모 계정</button>
+          <span class="login-demo-dot">·</span>
+          <button type="button" onclick="loginAsOwner()" class="demo-link">내 매장 원장</button>
+          <span class="login-demo-dot">·</span>
+          <button type="button" onclick="loginAsStaff()" class="demo-link">담당자</button>
         </div>
       </div>
     </div>
