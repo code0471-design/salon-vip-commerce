@@ -942,6 +942,25 @@ body {
 /* ═══════════════════════════════════════════
    PROFILE
 ═══════════════════════════════════════════ */
+.profile-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 18px 16px 6px;
+}
+.profile-top-name {
+  font-size: 22px; font-weight: 900; color: var(--text); letter-spacing: -0.4px;
+}
+.profile-info-btn {
+  border: 1px solid var(--border); background: #fff; border-radius: 999px;
+  padding: 8px 14px; font-size: 13px; font-weight: 700; color: var(--text); cursor: pointer;
+}
+.profile-top-sub {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 0 16px 14px;
+}
+.profile-top-salon { font-size: 12px; color: var(--muted); font-weight: 600; }
+.profile-order-list { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.profile-order-list .order-card { margin: 0; }
+
 .profile-hero {
   background: var(--primary);
   padding: 36px 20px 28px; text-align: center; color: white;
