@@ -27,8 +27,13 @@ let state = {
   selectedDesigner: null,
   salonCodeInput: '',
   onboardingStep: 'code', // code | designer
+  loginStep: 'social', // social | profile
+  pendingSocial: null, // { provider, auth_id }
   loading: false
 };
+
+const AUTH_STORE_KEY = 'salon_auth';
+const DEVICE_ID_KEY = 'salon_device_id';
 
 // ---- Session Storage for demo user ----
 function loadUser() {
@@ -38,6 +43,48 @@ function loadUser() {
 function saveUser(u) {
   state.user = u;
   sessionStorage.setItem('salon_user', JSON.stringify(u));
+}
+
+function getDeviceId() {
+  let id = localStorage.getItem(DEVICE_ID_KEY);
+  if (!id) {
+    id = 'dev_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem(DEVICE_ID_KEY, id);
+  }
+  return id;
+}
+
+function authIdFor(provider) {
+  return provider + '_' + getDeviceId();
+}
+
+function rememberAuth(provider, authId, remember) {
+  localStorage.setItem(AUTH_STORE_KEY, JSON.stringify({
+    provider,
+    auth_id: authId,
+    remember: !!remember,
+  }));
+}
+
+function readAuth() {
+  try {
+    return JSON.parse(localStorage.getItem(AUTH_STORE_KEY) || 'null');
+  } catch (e) {
+    return null;
+  }
+}
+
+function clearSessionOnly() {
+  state.user = null;
+  state.orders = [];
+  state.storeOrders = [];
+  state.storeSettlement = null;
+  state.storeView = '';
+  state.cart = [];
+  state.pendingSocial = null;
+  state.loginStep = 'social';
+  resetOnboarding();
+  sessionStorage.removeItem('salon_user');
 }
 
 // ---- API Helpers ----
@@ -265,9 +312,16 @@ function renderStars(rating) {
 }
 
 // ============================================================
-// LOGIN PAGE
+// LOGIN PAGE — social signup → (profile if new) → salon code
 // ============================================================
+function providerLabel(provider) {
+  return ({ kakao: '카카오', google: '구글', naver: '네이버', apple: '애플' })[provider] || provider;
+}
+
 function renderLogin() {
+  if (state.loginStep === 'profile' && state.pendingSocial) {
+    return renderSocialProfile();
+  }
   return `
     <div class="login-wrap">
       <div class="login-hero">
@@ -278,53 +332,122 @@ function renderLogin() {
         <p style="font-size:13px;color:var(--muted);letter-spacing:0.3px">프리미엄 살롱 VIP 멤버십</p>
       </div>
 
-      <div class="vip-perks">
-        <div class="perk-row"><i class="fas fa-tag" style="color:var(--rose)"></i><span>모든 제품 <strong style="color:var(--rose)">VIP 전용 할인가</strong> 적용</span></div>
-        <div class="perk-row"><i class="fas fa-user-tie" style="color:var(--accent)"></i><span>담당자 지정 후 구매·적립 연결</span></div>
-        <div class="perk-row"><i class="fas fa-store" style="color:var(--primary2)"></i><span>매장 코드로 살롱 커머스 입장</span></div>
-        <div class="perk-row"><i class="fas fa-gift" style="color:#7c3aed"></i><span>SUBLIMIC 프리미엄 제품 라인업</span></div>
-      </div>
-
       <div class="login-body">
-        <div class="form-field">
-          <label class="form-label">이름</label>
-          <input id="login-name" class="form-input" type="text" placeholder="이름을 입력하세요">
+        <h2 class="login-title">시작하기</h2>
+        <p class="login-sub">소셜 계정으로 가입하면, 매장 코드 등록 후 VIP 쇼핑이 연결됩니다.</p>
+
+        <div class="social-login-stack">
+          <button type="button" class="social-btn social-kakao" onclick="startSocialLogin('kakao')">
+            <span class="social-ico">K</span>카카오로 시작하기
+          </button>
+          <button type="button" class="social-btn social-google" onclick="startSocialLogin('google')">
+            <span class="social-ico">G</span>Google로 시작하기
+          </button>
+          <button type="button" class="social-btn social-naver" onclick="startSocialLogin('naver')">
+            <span class="social-ico">N</span>네이버로 시작하기
+          </button>
+          <button type="button" class="social-btn social-apple" onclick="startSocialLogin('apple')">
+            <span class="social-ico"><i class="fab fa-apple"></i></span>Apple로 시작하기
+          </button>
         </div>
-        <div class="form-field">
-          <label class="form-label">전화번호</label>
-          <input id="login-phone" class="form-input" type="tel" placeholder="010-0000-0000">
-        </div>
-        <button class="btn-primary" style="margin-top:8px" onclick="handleLogin()">
-          <i class="fas fa-arrow-right"></i> 시작하기
-        </button>
-        <div style="text-align:center;margin-top:14px">
-          <button onclick="loginAsDemo()" class="demo-link">데모 계정으로 둘러보기</button>
-          <button onclick="loginAsOwner()" class="demo-link" style="margin-left:12px">원장으로 보기</button>
+
+        <p class="login-flow-hint">가입 → 매장 코드(5자리) → 담당자 선택 · 이후 자동 로그인</p>
+
+        <div style="text-align:center;margin-top:18px">
+          <button onclick="loginAsDemo()" class="demo-link" style="display:inline">데모 계정</button>
+          <span style="color:#ccc;margin:0 8px">·</span>
+          <button onclick="loginAsOwner()" class="demo-link" style="display:inline">원장으로 보기</button>
         </div>
       </div>
     </div>
   `;
 }
 
-async function handleLogin() {
-  const name = document.getElementById('login-name').value.trim();
-  const phone = document.getElementById('login-phone').value.trim();
-  if (!name) { showToast('이름을 입력해주세요', 'error'); return; }
+function renderSocialProfile() {
+  const p = state.pendingSocial;
+  return `
+    <div class="login-wrap">
+      <div class="login-hero" style="padding:40px 28px 20px">
+        <h1 style="font-size:22px;font-weight:900;color:var(--text);margin:0">회원 정보</h1>
+        <p style="font-size:13px;color:var(--muted);margin-top:8px">${providerLabel(p.provider)} 가입 · 이름만 입력하면 매장 코드로 이어집니다</p>
+      </div>
+      <div class="login-body">
+        <div class="form-field">
+          <label class="form-label">이름</label>
+          <input id="login-name" class="form-input" type="text" placeholder="이름을 입력하세요">
+        </div>
+        <div class="form-field">
+          <label class="form-label">전화번호 (선택)</label>
+          <input id="login-phone" class="form-input" type="tel" placeholder="010-0000-0000">
+        </div>
+        <button class="btn-primary" style="margin-top:8px" onclick="submitSocialProfile()">
+          <i class="fas fa-arrow-right"></i> 다음 · 매장 코드
+        </button>
+        <button type="button" class="demo-link" onclick="state.loginStep='social';state.pendingSocial=null;render()">다른 계정으로</button>
+      </div>
+    </div>
+  `;
+}
 
-  const kakaoId = 'kakao_' + Date.now();
-  const res = await api('/api/users', 'POST', { kakao_id: kakaoId, name, phone });
-  if (res.success) {
-    saveUser(res.data);
-    await loadAppData();
-    if (needsSalonBinding()) {
-      resetOnboarding();
-      navigate('scan');
-      showToast('매장 코드를 입력해 주세요', 'success');
-      return;
-    }
+async function startSocialLogin(provider) {
+  const authId = authIdFor(provider);
+  const res = await api('/api/auth/social', 'POST', { provider, auth_id: authId });
+  if (res.needs_profile) {
+    state.pendingSocial = { provider, auth_id: authId };
+    state.loginStep = 'profile';
     render();
-    showToast('환영합니다, ' + name + '님!', 'success');
+    return;
   }
+  if (!res.success || !res.data) {
+    showToast(res.error || '로그인에 실패했습니다', 'error');
+    return;
+  }
+  await finishSocialAuth(res, provider, authId);
+}
+
+async function submitSocialProfile() {
+  const name = (document.getElementById('login-name') || {}).value.trim();
+  const phone = (document.getElementById('login-phone') || {}).value.trim();
+  if (!name) { showToast('이름을 입력해주세요', 'error'); return; }
+  if (!state.pendingSocial) { state.loginStep = 'social'; render(); return; }
+  const { provider, auth_id } = state.pendingSocial;
+  const res = await api('/api/auth/social', 'POST', { provider, auth_id, name, phone });
+  if (!res.success || !res.data) {
+    showToast(res.error || '가입에 실패했습니다', 'error');
+    return;
+  }
+  await finishSocialAuth(res, provider, auth_id);
+}
+
+async function finishSocialAuth(res, provider, authId) {
+  rememberAuth(provider, authId, true);
+  saveUser(res.data);
+  state.pendingSocial = null;
+  state.loginStep = 'social';
+  await loadAppData();
+  if (needsSalonBinding()) {
+    resetOnboarding();
+    navigate('scan');
+    showToast('매장 코드를 입력해 주세요', 'success');
+    return;
+  }
+  navigate('home');
+  const salonLabel = res.data.salon_name ? res.data.salon_name + '으로 ' : '';
+  showToast(salonLabel + '로그인되었습니다', 'success');
+}
+
+async function tryAutoLogin() {
+  if (state.user) return true;
+  const auth = readAuth();
+  if (!auth || !auth.remember || !auth.auth_id || !auth.provider) return false;
+  const res = await api('/api/auth/social', 'POST', {
+    provider: auth.provider,
+    auth_id: auth.auth_id,
+  });
+  if (res.needs_profile || !res.success || !res.data) return false;
+  saveUser(res.data);
+  await loadAppData();
+  return true;
 }
 
 function resetOnboarding() {
@@ -1008,15 +1131,13 @@ function renderLoginPrompt() {
 }
 
 function handleLogout() {
-  state.user = null;
-  state.orders = [];
-  state.storeOrders = [];
-  state.storeSettlement = null;
-  state.storeView = '';
-  state.cart = [];
-  sessionStorage.removeItem('salon_user');
+  const auth = readAuth();
+  // 자동 로그인은 끄고, 같은 소셜 버튼으로 다시 로그인하면 매장 유지
+  if (auth && auth.auth_id) rememberAuth(auth.provider, auth.auth_id, false);
+  else localStorage.removeItem(AUTH_STORE_KEY);
+  clearSessionOnly();
   navigate('home');
-  showToast('로그아웃되었습니다');
+  showToast('로그아웃되었습니다. 다시 로그인하면 내 매장으로 연결됩니다');
 }
 
 function attachListeners() { /* reserved for swipe gestures */ }
@@ -1506,7 +1627,7 @@ async function init() {
   const params = new URLSearchParams(location.search);
   const prefillCode = params.get('code') || '';
   if (prefillCode) {
-    state.salonCodeInput = String(prefillCode).toUpperCase();
+    state.salonCodeInput = String(prefillCode).replace(/\D/g, '').slice(0, 5);
     state.currentPage = 'scan';
   } else if (params.get('salon')) {
     // legacy QR links: /scan?salon=1 → resolve via salon list after load
@@ -1516,6 +1637,20 @@ async function init() {
   render();
   await initDB();
   await loadAppData();
+
+  if (!state.user) {
+    const restored = await tryAutoLogin();
+    if (restored && needsSalonBinding()) {
+      resetOnboarding();
+      navigate('scan');
+      return;
+    }
+    if (restored) {
+      render();
+      return;
+    }
+  }
+
   // 세션에 저장된 유저 데이터를 API에서 최신 정보로 갱신 (매장명 등 변경 반영)
   if (state.user?.id) {
     try {
