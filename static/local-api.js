@@ -1260,14 +1260,12 @@
       if (!user.current_salon_id) return { status: 400, error: '먼저 매장 코드를 등록해주세요' };
       const salon = findSalon(user.current_salon_id);
       if (!salon) return { status: 400, error: '등록된 살롱을 찾을 수 없습니다' };
-      const isOwner = !!ownedSalon(user);
+      // 담당자는 있으면 귀속, 없어도 주문은 진행 (고객 결제 화면에서 담당자 선택 문구 노출 금지)
       let designer = null;
       if (user.mapped_designer_id) {
         designer = db.designers.find((d) =>
-          d.id === Number(user.mapped_designer_id) && d.salon_id === salon.id && d.status === 'ACTIVE');
-      }
-      if (!isOwner && !designer) {
-        return { status: 400, error: '담당자를 선택한 뒤 주문할 수 있습니다' };
+          d.id === Number(user.mapped_designer_id) && d.salon_id === salon.id && d.status === 'ACTIVE')
+          || null;
       }
       const items = [];
       for (const item of body.items || []) {
