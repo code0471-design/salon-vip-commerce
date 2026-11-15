@@ -17,6 +17,12 @@ let state = {
   categories: ['전체', '샴푸', '컨디셔너', '트리트먼트', '오일/세럼', '스프레이', '컬크림', '왁스/젤'],
   selectedCategory: '전체',
   cart: [],
+  wishlist: (() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('salon-vip-wishlist') || '[]');
+      return Array.isArray(raw) ? raw.map(Number).filter(Boolean) : [];
+    } catch (_) { return []; }
+  })(),
   orders: [],
   storeOrders: [],
   storeSettlement: null,
@@ -705,32 +711,67 @@ function renderCartPage() {
   `;
 }
 
+function productBrandName(p) {
+  if (p && p.brand_name) return String(p.brand_name);
+  const brands = state.brands || [];
+  const brand = brands.find((b) => Number(b.id) === Number(p && p.brand_id));
+  return brand ? brand.name : (p && p.category) || '';
+}
+
+function isWishlisted(productId) {
+  return (state.wishlist || []).includes(Number(productId));
+}
+
+function toggleWishlist(productId, ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  const id = Number(productId);
+  const list = Array.isArray(state.wishlist) ? state.wishlist.slice() : [];
+  const idx = list.indexOf(id);
+  if (idx >= 0) list.splice(idx, 1);
+  else list.push(id);
+  state.wishlist = list;
+  try { localStorage.setItem('salon-vip-wishlist', JSON.stringify(list)); } catch (_) {}
+  render();
+}
+
+function addToCartFromCard(productId, ev) {
+  if (ev) { ev.stopPropagation(); ev.preventDefault(); }
+  addToCart(productId);
+}
+
+function freeShipHint(p) {
+  const qty = Number(p && p.free_ship_qty) || 6;
+  return qty + '개 구매시 무료배송';
+}
+
 function renderBestCard(p) {
   const price = sellingPrice(p);
-  const disc = Math.round((1 - price / p.original_price) * 100);
-  const stars = renderStars(p.rating || 4.8);
+  const brand = productBrandName(p);
+  const wished = isWishlisted(p.id);
+  const inCart = state.cart.find((i) => i.product_id === p.id);
   return `
     <div class="best-card" onclick="openProductDetail(${p.id})">
       <div class="best-card-img-wrap">
         <img class="best-card-img" src="${p.image_url || 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=300&q=80'}"
-             alt="${p.name}" loading="lazy"
+             alt="${escText(p.name)}" loading="lazy"
              onerror="this.src='https://images.unsplash.com/photo-1556228720-195a672e8a03?w=300&q=80'">
-        ${p.is_best ? `<div class="best-badge">BEST</div>` : ''}
-        <div class="gift-badge"><i class="fas fa-gift"></i></div>
+        <button type="button" class="pc-wish-btn${wished ? ' on' : ''}" onclick="toggleWishlist(${p.id},event)" aria-label="찜">
+          <i class="${wished ? 'fas' : 'far'} fa-heart"></i>
+        </button>
+        <button type="button" class="pc-cart-btn" onclick="addToCartFromCard(${p.id},event)" aria-label="장바구니">
+          <i class="fas fa-shopping-bag"></i>
+          ${inCart ? `<span class="pc-cart-qty">${inCart.qty}</span>` : ''}
+        </button>
       </div>
       <div class="best-card-body">
-        <div class="best-cat">${p.category}</div>
-        <div class="best-name">${p.name}</div>
-        <div class="best-price-row">
-          <span class="best-original">${(p.original_price||0).toLocaleString()}</span>
-          <span class="best-discount">${disc}%</span>
+        <div class="pc-brand">${escText(brand)}</div>
+        <div class="best-name">${escText(p.name)}</div>
+        <div class="pc-base-price">${(p.original_price || 0).toLocaleString()}원</div>
+        <div class="pc-deal-row">
+          <span class="pc-deal-price">${price.toLocaleString()}원</span>
+          <span class="pc-deal-label">나의 최대할인가</span>
         </div>
-        <div class="best-vip">${price.toLocaleString()}<span style="font-size:11px;font-weight:500">원</span></div>
-        <div class="best-rating">
-          <span class="best-stars">${stars}</span>
-          <span class="best-rating-val">${p.rating || '4.8'}</span>
-          <span class="best-rating-cnt">(${(p.review_count||0).toLocaleString()})</span>
-        </div>
+        <div class="pc-ship-hint">${escText(freeShipHint(p))}</div>
       </div>
     </div>`;
 }
@@ -1625,32 +1666,32 @@ function renderShop() {
 
 function renderProductCard(p) {
   const price = sellingPrice(p);
-  const disc = Math.round((1 - price / p.original_price) * 100);
-  const stars = renderStars(p.rating || 4.8);
-  const inCart = state.cart.find(i => i.product_id === p.id);
+  const brand = productBrandName(p);
+  const wished = isWishlisted(p.id);
+  const inCart = state.cart.find((i) => i.product_id === p.id);
   return `
     <div class="product-card" onclick="openProductDetail(${p.id})">
       <div class="product-card-img-wrap">
         <img class="product-card-img" src="${p.image_url || 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=300&q=80'}"
-             alt="${p.name}" loading="lazy"
+             alt="${escText(p.name)}" loading="lazy"
              onerror="this.src='https://images.unsplash.com/photo-1556228720-195a672e8a03?w=300&q=80'">
-        ${p.is_best ? `<div class="p-best-badge">BEST</div>` : ''}
-        <div class="p-gift-tag"><i class="fas fa-gift"></i></div>
-        ${inCart ? `<div style="position:absolute;bottom:8px;right:8px;background:var(--rose);color:white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">${inCart.qty}</div>` : ''}
+        <button type="button" class="pc-wish-btn${wished ? ' on' : ''}" onclick="toggleWishlist(${p.id},event)" aria-label="찜">
+          <i class="${wished ? 'fas' : 'far'} fa-heart"></i>
+        </button>
+        <button type="button" class="pc-cart-btn" onclick="addToCartFromCard(${p.id},event)" aria-label="장바구니">
+          <i class="fas fa-shopping-bag"></i>
+          ${inCart ? `<span class="pc-cart-qty">${inCart.qty}</span>` : ''}
+        </button>
       </div>
       <div class="product-card-body">
-        <div class="pc-cat">${p.category}</div>
-        <div class="pc-name">${p.name}</div>
-        <div class="pc-price-row">
-          <span class="pc-original">${(p.original_price||0).toLocaleString()}</span>
-          <span class="pc-discount-badge">${disc}%</span>
+        <div class="pc-brand">${escText(brand)}</div>
+        <div class="pc-name">${escText(p.name)}</div>
+        <div class="pc-base-price">${(p.original_price || 0).toLocaleString()}원</div>
+        <div class="pc-deal-row">
+          <span class="pc-deal-price">${price.toLocaleString()}원</span>
+          <span class="pc-deal-label">나의 최대할인가</span>
         </div>
-        <div class="pc-vip">${price.toLocaleString()}<span style="font-size:11px;font-weight:500">원</span></div>
-        <div class="pc-rating">
-          <span class="pc-stars">${stars}</span>
-          <span class="pc-rating-val">${p.rating || '4.8'}</span>
-          <span class="pc-review-cnt">${(p.review_count||0).toLocaleString()}</span>
-        </div>
+        <div class="pc-ship-hint">${escText(freeShipHint(p))}</div>
       </div>
     </div>`;
 }
