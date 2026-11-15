@@ -56,6 +56,7 @@ let state = {
   profilePhoneVerified: false,
   profileOtpSent: false,
   profileEditing: false,
+  profileInfoOpen: false,
   setupDraft: {
     salon_name: '',
     owner_name: '',
@@ -2399,7 +2400,25 @@ function couponValueLabel(coupon) {
   return Number(coupon.discount_value || 0).toLocaleString() + '원 할인';
 }
 
+function openProfileInfo() {
+  state.profileInfoOpen = true;
+  state.profileEditing = false;
+  state.profilePhoneVerified = false;
+  state.profileOtpSent = false;
+  render();
+  window.scrollTo(0, 0);
+}
+
+function closeProfileInfo() {
+  state.profileInfoOpen = false;
+  state.profileEditing = false;
+  state.profilePhoneVerified = false;
+  state.profileOtpSent = false;
+  render();
+}
+
 function startProfileEdit() {
+  state.profileInfoOpen = true;
   state.profileEditing = true;
   state.profilePhoneVerified = false;
   state.profileOtpSent = false;
@@ -2413,86 +2432,31 @@ function cancelProfileEdit() {
   render();
 }
 
-function renderProfile() {
-  if (!state.user) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
-  const u = state.user;
-  const totalSpent = state.orders.filter(o => o.payment_status === 'PAID').reduce((s,o) => s + o.total_amount, 0);
-  const orderCount = state.orders.filter(o => o.payment_status === 'PAID').length;
+function renderProfileInfoPanel(u) {
   const ship = String(u.shipping_address || '');
-  const points = Number(u.points || 0);
-  const coupons = userOwnedCoupons();
   const editing = !!state.profileEditing;
-
   return `
-    <div class="profile-hero">
-      <div class="profile-avatar-wrap">
-        <i class="fas fa-user" style="font-size:28px;color:white;opacity:0.9"></i>
-      </div>
-      <div class="profile-name">${escText(u.name)}</div>
-      <div class="profile-vip-chip"><i class="fas fa-crown" style="margin-right:4px"></i>VIP 멤버</div>
-    </div>
-
-    <div class="profile-stats">
-      <div class="profile-stat-item">
-        <div class="pval">${orderCount}</div>
-        <div class="plbl">총 주문</div>
-      </div>
-      <div class="profile-stat-item">
-        <div class="pval rose">${totalSpent.toLocaleString()}원</div>
-        <div class="plbl">총 이용금액</div>
-      </div>
-      <div class="profile-stat-item">
-        <div class="pval">${points.toLocaleString()}P</div>
-        <div class="plbl">보유 포인트</div>
-      </div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-card-header">보유 혜택</div>
-      <div class="profile-benefit-grid">
-        <div class="profile-benefit-card">
-          <div class="profile-benefit-label"><i class="fas fa-coins" style="margin-right:6px"></i>보유 포인트</div>
-          <div class="profile-benefit-value">${points.toLocaleString()}<span>P</span></div>
-        </div>
-        <div class="profile-benefit-card">
-          <div class="profile-benefit-label"><i class="fas fa-ticket-alt" style="margin-right:6px"></i>보유 쿠폰</div>
-          <div class="profile-benefit-value">${coupons.length}<span>장</span></div>
-        </div>
-      </div>
-      <div class="profile-coupon-list">
-        ${coupons.length === 0
-          ? `<div class="profile-coupon-empty">보유 중인 쿠폰이 없습니다</div>`
-          : coupons.map((c) => `
-            <div class="profile-coupon-item">
-              <div>
-                <div class="profile-coupon-name">${escText(c.name)}</div>
-                <div class="profile-coupon-meta">${escText(couponValueLabel(c))}${c.ends_at ? ' · ~' + escText(c.ends_at) : ''}</div>
-              </div>
-              <div class="profile-coupon-badge">사용가능</div>
-            </div>`).join('')}
-      </div>
-    </div>
-
-    <div class="info-card">
-      <div class="info-card-header">내 살롱 · 담당자</div>
-      <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--light);border-radius:12px">
-        <div style="width:46px;height:46px;background:var(--primary);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <i class="fas fa-scissors" style="color:var(--accent);font-size:18px"></i>
-        </div>
-        <div>
-          <div style="font-size:15px;font-weight:700;color:var(--text)">${escText(u.salon_name || '미등록')}</div>
-          <div style="font-size:12px;color:var(--muted)">담당 · ${escText(u.designer_name || '없음')}</div>
-        </div>
-      </div>
-    </div>
-
     <div class="info-card${editing ? ' setup-form' : ''}" style="padding-bottom:16px">
       <div class="info-card-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <span>기본 정보</span>
-        ${editing ? '' : `<button type="button" class="profile-edit-btn" onclick="startProfileEdit()">수정</button>`}
+        <span>정보관리</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${editing ? '' : `<button type="button" class="profile-edit-btn" onclick="startProfileEdit()">수정</button>`}
+          <button type="button" class="profile-edit-btn" onclick="closeProfileInfo()">닫기</button>
+        </div>
+      </div>
+      <div style="padding:12px 16px 0">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--light);border-radius:12px;margin-bottom:12px">
+          <div style="width:42px;height:42px;background:var(--primary);border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <i class="fas fa-scissors" style="color:var(--accent);font-size:16px"></i>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:var(--text)">${escText(u.salon_name || '미등록')}</div>
+            <div style="font-size:12px;color:var(--muted)">담당 · ${escText(u.designer_name || '없음')}</div>
+          </div>
+        </div>
       </div>
       ${editing ? `
-      <div style="padding:12px 16px 0">
+      <div style="padding:0 16px 4px">
         <label class="form-label">이름</label>
         <input id="profile-name" class="form-input" type="text" value="${escText(u.name || '')}">
         <label class="form-label">휴대폰번호</label>
@@ -2528,6 +2492,65 @@ function renderProfile() {
       <div class="info-row"><span>배송주소</span><span style="text-align:right;max-width:62%">${escText(ship || '-')}</span></div>
       <div class="info-row" style="border-bottom:none"><span>가입일</span><span>${u.created_at ? new Date(u.created_at).toLocaleDateString('ko-KR') : '-'}</span></div>
       `}
+    </div>
+  `;
+}
+
+function renderProfile() {
+  if (!state.user) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
+  const u = state.user;
+  const points = Number(u.points || 0);
+  const coupons = userOwnedCoupons();
+  const recentOrders = (state.orders || []).slice(0, 5);
+
+  return `
+    <div class="profile-top">
+      <div class="profile-top-name">${escText(u.name)}님</div>
+      <button type="button" class="profile-info-btn" onclick="openProfileInfo()">정보관리</button>
+    </div>
+    <div class="profile-top-sub">
+      <span class="profile-vip-chip"><i class="fas fa-crown" style="margin-right:4px"></i>VIP 멤버</span>
+      <span class="profile-top-salon">${escText(u.salon_name || '매장 미등록')}${u.designer_name ? ' · ' + escText(u.designer_name) : ''}</span>
+    </div>
+
+    ${state.profileInfoOpen ? renderProfileInfoPanel(u) : ''}
+
+    <div class="info-card">
+      <div class="info-card-header">보유 혜택</div>
+      <div class="profile-benefit-grid">
+        <div class="profile-benefit-card">
+          <div class="profile-benefit-label"><i class="fas fa-coins" style="margin-right:6px"></i>보유 포인트</div>
+          <div class="profile-benefit-value">${points.toLocaleString()}<span>P</span></div>
+        </div>
+        <div class="profile-benefit-card">
+          <div class="profile-benefit-label"><i class="fas fa-ticket-alt" style="margin-right:6px"></i>보유 쿠폰</div>
+          <div class="profile-benefit-value">${coupons.length}<span>장</span></div>
+        </div>
+      </div>
+      <div class="profile-coupon-list">
+        ${coupons.length === 0
+          ? `<div class="profile-coupon-empty">보유 중인 쿠폰이 없습니다</div>`
+          : coupons.map((c) => `
+            <div class="profile-coupon-item">
+              <div>
+                <div class="profile-coupon-name">${escText(c.name)}</div>
+                <div class="profile-coupon-meta">${escText(couponValueLabel(c))}${c.ends_at ? ' · ~' + escText(c.ends_at) : ''}</div>
+              </div>
+              <div class="profile-coupon-badge">사용가능</div>
+            </div>`).join('')}
+      </div>
+    </div>
+
+    <div class="info-card" style="padding-bottom:8px">
+      <div class="info-card-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span>주문/배송내역</span>
+        <button type="button" class="profile-edit-btn" onclick="navigate('orders')">전체보기</button>
+      </div>
+      <div class="profile-order-list">
+        ${recentOrders.length === 0
+          ? `<div class="profile-coupon-empty">주문/배송 내역이 없습니다</div>`
+          : recentOrders.map((o) => renderOrderCard(o)).join('')}
+      </div>
     </div>
 
     <div style="padding:0 16px 100px">
@@ -2608,6 +2631,7 @@ async function saveProfileInfo() {
   state.profilePhoneVerified = false;
   state.profileOtpSent = false;
   state.profileEditing = false;
+  state.profileInfoOpen = true;
   render();
   showToast(res.message || '회원 정보를 저장했습니다', 'success');
 }
