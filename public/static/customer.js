@@ -38,13 +38,14 @@ let state = {
   pendingStaffInvites: [],
   deepInviteId: null,
   deepInviteInfo: null,
-  manageDraft: null, // { salon_id, salon_name, owner_name, owner_phone, address, address_detail }
+  manageDraft: null, // { salon_id, salon_name, owner_name, owner_phone, address, address_detail, bank_account }
   setupDraft: {
     salon_name: '',
     owner_name: '',
     owner_phone: '',
     address: '',
     address_detail: '',
+    bank_account: '',
     salon_code: '',
     designers: [{ designer_name: '', phone: '', requested: false }],
   },
@@ -442,6 +443,7 @@ function resetSetupDraft() {
     owner_phone: state.user ? (state.user.phone || '') : '',
     address: '',
     address_detail: '',
+    bank_account: '',
     salon_code: '',
     designers: [{ designer_name: '', phone: '', requested: false }],
   };
@@ -1243,6 +1245,11 @@ function renderAdminSetup() {
           value="${escText(d.address_detail || '')}"
           placeholder="상세주소 (동·호수 등)"
           oninput="updateSetupField('address_detail', this.value)">
+        <label class="form-label">정산 계좌번호</label>
+        <input class="form-input" value="${escText(d.bank_account || '')}"
+          placeholder="예: 국민 123456-78-901234"
+          oninput="updateSetupField('bank_account', this.value)">
+        <p style="font-size:12px;color:var(--muted);margin:6px 0 0">매출 정산을 받을 예금주·은행·계좌번호를 입력하세요.</p>
         <label class="form-label">매장코드 6자리</label>
         <input class="form-input code-input" type="tel" inputmode="numeric" maxlength="6"
           value="${escText(d.salon_code)}" placeholder="예: 100001"
@@ -1288,6 +1295,12 @@ async function submitSalonSetup() {
   }
   d.address = setupBase;
   d.address_detail = setupDetail;
+  const bankAccount = String(d.bank_account || '').trim();
+  if (!bankAccount) {
+    showToast('정산 받을 계좌번호를 입력하세요', 'error');
+    return;
+  }
+  d.bank_account = bankAccount;
   if (!/^\d{6}$/.test(String(d.salon_code || '').trim())) {
     showToast('매장 코드는 6자리 숫자입니다', 'error');
     return;
@@ -1308,6 +1321,7 @@ async function submitSalonSetup() {
     owner_phone: d.owner_phone.trim(),
     address: setupBase,
     address_detail: setupDetail,
+    bank_account: bankAccount,
     salon_code: String(d.salon_code).trim(),
     designers,
   });
@@ -2144,6 +2158,7 @@ function ensureManageDraft(salon) {
       owner_phone: salon.owner_phone || '',
       address: addr.base,
       address_detail: addr.detail,
+      bank_account: salon.bank_account || '',
     };
   } else {
     // 서버에 상세주소가 생겼는데 draft만 비어 있으면 채움 (입력 중이면 유지)
@@ -2152,6 +2167,9 @@ function ensureManageDraft(salon) {
     }
     if (!state.manageDraft.address && addr.base) {
       state.manageDraft.address = addr.base;
+    }
+    if (!state.manageDraft.bank_account && salon.bank_account) {
+      state.manageDraft.bank_account = salon.bank_account;
     }
   }
   return state.manageDraft;
@@ -2537,6 +2555,12 @@ function renderStoreManage(salon) {
           value="${escText(draft.address_detail || '')}"
           placeholder="예: 301호"
           oninput="updateManageField('address_detail', this.value)">
+        <label class="form-label">정산 계좌번호</label>
+        <input id="manage-bank-account" class="form-input" type="text"
+          value="${escText(draft.bank_account || '')}"
+          placeholder="예: 국민 123456-78-901234"
+          oninput="updateManageField('bank_account', this.value)">
+        <p style="font-size:12px;color:var(--muted);margin:6px 0 0">매출 정산을 받을 예금주·은행·계좌번호</p>
         <label class="form-label">매장코드</label>
         <input class="form-input" value="${escText(salon.salon_code || '')}" disabled>
         <button class="btn-primary" style="margin-top:12px" onclick="saveSalonManage()">기본 정보 저장</button>
@@ -2579,9 +2603,14 @@ async function saveSalonManage() {
     owner_phone: String((document.getElementById('manage-owner-phone') || {}).value || draft.owner_phone || '').trim(),
     address: String((document.getElementById('manage-address') || {}).value || draft.address || '').trim(),
     address_detail: String((document.getElementById('manage-address-detail') || {}).value || draft.address_detail || '').trim(),
+    bank_account: String((document.getElementById('manage-bank-account') || {}).value || draft.bank_account || '').trim(),
   };
   if (!body.address) {
     showToast('주소 검색으로 매장 주소를 선택해주세요', 'error');
+    return;
+  }
+  if (!body.bank_account) {
+    showToast('정산 받을 계좌번호를 입력하세요', 'error');
     return;
   }
   const res = await api('/api/salons/' + salon.id, 'PUT', body);
@@ -2598,6 +2627,9 @@ async function saveSalonManage() {
     address_detail: saved.address_detail != null && String(saved.address_detail).length
       ? saved.address_detail
       : body.address_detail,
+    bank_account: saved.bank_account != null && String(saved.bank_account).length
+      ? saved.bank_account
+      : body.bank_account,
   };
   rememberSalon(merged);
   state.manageDraft = {
@@ -2607,6 +2639,7 @@ async function saveSalonManage() {
     owner_phone: merged.owner_phone || body.owner_phone,
     address: merged.address || '',
     address_detail: merged.address_detail || '',
+    bank_account: merged.bank_account || '',
   };
   if (state.user) {
     const userRes = await api('/api/users/' + state.user.id);

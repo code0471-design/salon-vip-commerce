@@ -633,13 +633,14 @@ const routes = [
       owner_phone: String(body.owner_phone).trim(),
       address: String(body.address || '').trim(),
       address_detail: String(body.address_detail || '').trim(),
-      bank_account: body.bank_account || '',
+      bank_account: String(body.bank_account || '').trim(),
       hidden_brand_ids: [],
       brand_discount_rates: {},
       product_discount_rates: {},
       product_prices: {},
       created_at: nowStamp(),
     };
+    if (!salon.bank_account) return { status: 400, error: '정산 받을 계좌번호를 입력하세요' };
     db.salons.push(salon);
     const designerNames = Array.isArray(body.designers) ? body.designers : [];
     designerNames.forEach((row) => {
