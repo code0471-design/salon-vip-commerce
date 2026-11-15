@@ -741,8 +741,6 @@ const routes = [
     const existing = db.users.find((item) => item.kakao_id === authId);
     if (existing) {
       existing.auth_provider = provider;
-      if (body.name) existing.name = body.name;
-      if (body.phone) existing.phone = body.phone;
       const ownedExisting = ownedSalon(existing);
       if (ownedExisting && !existing.current_salon_id) existing.current_salon_id = ownedExisting.id;
       save();
@@ -755,7 +753,7 @@ const routes = [
         },
       };
     }
-    if (!body.name) {
+    if (!body.name || !body.phone || !body.shipping_address) {
       return {
         data: null,
         extra: { needs_profile: true, provider, auth_id: authId },
@@ -766,8 +764,9 @@ const routes = [
       id: nextId(db.users),
       kakao_id: authId,
       auth_provider: provider,
-      name: body.name,
-      phone: body.phone || '',
+      name: String(body.name).trim(),
+      phone: String(body.phone).trim(),
+      shipping_address: String(body.shipping_address).trim(),
       current_salon_id: owned ? owned.id : null,
       mapped_designer_id: null,
       created_at: nowStamp(),
@@ -790,6 +789,7 @@ const routes = [
     if (existing) {
       if (body.name) existing.name = body.name;
       if (body.phone) existing.phone = body.phone;
+      if (body.shipping_address !== undefined) existing.shipping_address = String(body.shipping_address || '').trim();
       if (body.auth_provider) existing.auth_provider = body.auth_provider;
       const ownedExisting = ownedSalon(existing);
       if (ownedExisting && !existing.current_salon_id) existing.current_salon_id = ownedExisting.id;
@@ -803,6 +803,7 @@ const routes = [
       auth_provider: body.auth_provider || 'kakao',
       name: body.name,
       phone: body.phone || '',
+      shipping_address: String(body.shipping_address || '').trim(),
       current_salon_id: owned ? owned.id : null,
       mapped_designer_id: null,
       created_at: nowStamp(),
@@ -1113,6 +1114,10 @@ const routes = [
       product.stock_quantity -= item.qty;
     });
     if (pointsEarned > 0) user.points = (user.points || 0) + pointsEarned;
+    const shippingAddress = String(body.shipping_address || user.shipping_address || '').trim();
+    if (!shippingAddress) {
+      return { status: 400, error: '배송주소를 등록한 뒤 주문할 수 있습니다' };
+    }
     const order = {
       id: nextId(db.orders),
       user_id: user.id,
@@ -1126,6 +1131,9 @@ const routes = [
       points_used: 0,
       payment_status: 'PAID',
       shipping_status: 'READY',
+      shipping_name: user.name || '',
+      shipping_phone: user.phone || '',
+      shipping_address: shippingAddress,
       order_items: JSON.stringify(items),
       created_at: nowStamp(),
     };

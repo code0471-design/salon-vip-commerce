@@ -562,7 +562,7 @@ function renderLogin() {
           </button>
         </div>
 
-        <p class="login-flow-hint">계정 선택 → 살롱 VIP 입장 · 이후 자동 로그인</p>
+        <p class="login-flow-hint">기존 회원: 계정 선택만 · 신규: 이름·휴대폰·배송주소 후 입장</p>
 
         <div style="text-align:center;margin-top:18px">
           <button onclick="loginAsDemo()" class="demo-link" style="display:inline">데모 계정</button>
@@ -627,7 +627,8 @@ function renderSocialAccountPicker() {
 }
 
 function renderSocialProfile() {
-  const p = state.pendingSocial;
+  const p = state.pendingSocial || {};
+  const suggested = p.suggested_name || '';
   return `
     <div class="login-wrap">
       <div class="login-hero" style="padding:28px 28px 16px">
@@ -635,19 +636,23 @@ function renderSocialProfile() {
           <i class="fas fa-chevron-left"></i> 계정 선택으로
         </button>
         <h1 style="font-size:22px;font-weight:900;color:#fff;margin:12px 0 0">회원 정보</h1>
-        <p style="font-size:13px;color:rgba(255,255,255,0.65);margin-top:8px">${providerLabel(p.provider)} 새 계정 · 이름 입력 후 매장 코드로 이어집니다</p>
+        <p style="font-size:13px;color:rgba(255,255,255,0.65);margin-top:8px">${providerLabel(p.provider)} 신규 가입 · 주문 배송에 사용됩니다</p>
       </div>
       <div class="login-body">
         <div class="form-field">
           <label class="form-label">이름</label>
-          <input id="login-name" class="form-input" type="text" placeholder="이름을 입력하세요">
+          <input id="login-name" class="form-input" type="text" value="${escText(suggested)}" placeholder="이름을 입력하세요">
         </div>
         <div class="form-field">
-          <label class="form-label">전화번호 (선택)</label>
+          <label class="form-label">휴대폰번호</label>
           <input id="login-phone" class="form-input" type="tel" placeholder="010-0000-0000">
         </div>
+        <div class="form-field">
+          <label class="form-label">배송주소</label>
+          <input id="login-address" class="form-input" type="text" placeholder="예: 서울시 강남구 ○○로 12">
+        </div>
         <button class="btn-primary" style="margin-top:8px" onclick="submitSocialProfile()">
-          <i class="fas fa-arrow-right"></i> 다음 · 매장 코드
+          <i class="fas fa-arrow-right"></i> 가입하고 입장하기
         </button>
         <button type="button" class="demo-link" onclick="goBackToAccountPicker()">다른 계정으로</button>
       </div>
@@ -664,11 +669,18 @@ function startSocialLogin(provider) {
 
 async function selectSocialAccount(provider, slot, name) {
   const authId = authIdForAccount(provider, slot);
+  // 이름 없이 조회: 기존 회원이면 바로 입장, 신규면 프로필 입력
   const res = await api('/api/auth/social', 'POST', {
     provider,
     auth_id: authId,
-    name,
   });
+  if (res.needs_profile) {
+    state.pendingSocial = { provider, auth_id: authId, suggested_name: name || '' };
+    state.loginStep = 'profile';
+    history.pushState({ salonLoginStep: 'profile' }, '', location.href);
+    render();
+    return;
+  }
   if (!res.success || !res.data) {
     showToast(res.error || '로그인에 실패했습니다', 'error');
     return;
@@ -678,7 +690,7 @@ async function selectSocialAccount(provider, slot, name) {
 
 function useAnotherSocialAccount(provider) {
   const authId = authIdForAccount(provider, 'new_' + Date.now().toString(36));
-  state.pendingSocial = { provider, auth_id: authId };
+  state.pendingSocial = { provider, auth_id: authId, suggested_name: '' };
   state.loginStep = 'profile';
   history.pushState({ salonLoginStep: 'profile' }, '', location.href);
   render();
@@ -687,14 +699,23 @@ function useAnotherSocialAccount(provider) {
 async function submitSocialProfile() {
   const name = (document.getElementById('login-name') || {}).value.trim();
   const phone = (document.getElementById('login-phone') || {}).value.trim();
+  const shippingAddress = (document.getElementById('login-address') || {}).value.trim();
   if (!name) { showToast('이름을 입력해주세요', 'error'); return; }
+  if (!phone) { showToast('휴대폰번호를 입력해주세요', 'error'); return; }
+  if (!shippingAddress) { showToast('배송주소를 입력해주세요', 'error'); return; }
   if (!state.pendingSocial || !state.pendingSocial.auth_id) {
     state.loginStep = 'account';
     render();
     return;
   }
   const { provider, auth_id } = state.pendingSocial;
-  const res = await api('/api/auth/social', 'POST', { provider, auth_id, name, phone });
+  const res = await api('/api/auth/social', 'POST', {
+    provider,
+    auth_id,
+    name,
+    phone,
+    shipping_address: shippingAddress,
+  });
   if (!res.success || !res.data) {
     showToast(res.error || '가입에 실패했습니다', 'error');
     return;
@@ -1320,9 +1341,16 @@ async function placeOrder() {
     navigate('entry');
     return;
   }
+  if (!String(state.user.shipping_address || '').trim()) {
+    showToast('배송주소가 없습니다. 마이에서 확인하거나 다시 가입해 주세요', 'error');
+    closeModal();
+    navigate('profile');
+    return;
+  }
   closeModal();
   const res = await api('/api/orders', 'POST', {
     user_id: state.user.id,
+    shipping_address: state.user.shipping_address,
     items: state.cart.map(i => ({ product_id: i.product_id, qty: i.qty }))
   });
   if (res.success) {
@@ -1402,6 +1430,12 @@ function openOrderDetail(id) {
         <div style="font-size:14px;font-weight:700;color:var(--text);margin-top:2px">${o.salon_name} · ${o.designer_name||'담당 없음'}</div>
         <div style="font-size:11px;color:var(--muted);margin-top:3px">${new Date(o.created_at).toLocaleString('ko-KR')}</div>
       </div>
+      ${o.shipping_address ? `
+      <div class="cart-salon-info" style="margin-bottom:12px">
+        <div style="font-size:11px;color:var(--muted)">배송지</div>
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-top:2px">${escText(o.shipping_name || '')} · ${escText(o.shipping_phone || '')}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">${escText(o.shipping_address)}</div>
+      </div>` : ''}
       ${items.map(i => `
         <div class="cart-line">
           <span style="font-size:13px;color:var(--text)">${i.name} × ${i.qty}</span>
@@ -1488,6 +1522,7 @@ function renderProfile() {
       <div class="info-card-header">계정 정보</div>
       <div class="info-row"><span>이름</span><span>${u.name}</span></div>
       <div class="info-row"><span>전화번호</span><span>${u.phone || '-'}</span></div>
+      <div class="info-row"><span>배송주소</span><span style="text-align:right;max-width:62%">${u.shipping_address || '-'}</span></div>
       <div class="info-row"><span>보유 포인트</span><span>${(u.points || 0).toLocaleString()}P</span></div>
       <div class="info-row" style="border-bottom:none"><span>가입일</span><span>${new Date(u.created_at).toLocaleDateString('ko-KR')}</span></div>
     </div>
