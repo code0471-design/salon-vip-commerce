@@ -356,7 +356,10 @@ function publicUser(user) {
 function publicOrder(order) {
   const user = db.users.find((u) => u.id === order.user_id);
   const salon = findSalon(order.salon_id);
-  const designer = findDesigner(order.designer_id);
+  let designer = findDesigner(order.designer_id);
+  if (!designer && user && user.mapped_designer_id) {
+    designer = findDesigner(user.mapped_designer_id);
+  }
   return {
     ...order,
     user_name: user ? user.name : '',
@@ -364,6 +367,13 @@ function publicOrder(order) {
     designer_name: designer ? designer.designer_name : null,
     designer_status: designer ? designer.status : null,
     shipping_status: order.shipping_status || 'READY',
+    cancel_requested: !!order.cancel_requested,
+    shipping_name: order.shipping_name || (user ? user.name : '') || '',
+    shipping_phone: order.shipping_phone || (user ? user.phone : '') || '',
+    shipping_address: order.shipping_address || (user ? user.shipping_address : '') || '',
+    points_earned: Number(order.points_earned || 0),
+    points_used: Number(order.points_used || 0),
+    coupon_discount: Number(order.coupon_discount || 0),
   };
 }
 
@@ -1352,6 +1362,28 @@ const routes = [
     order.shipping_status = next;
     save();
     return { data: publicOrder(order) };
+  }],
+  ['POST', /^\/api\/orders\/(\d+)\/cancel-request$/, (req, id) => {
+    const order = db.orders.find((item) => item.id === Number(id));
+    if (!order) return { status: 404, error: '주문을 찾을 수 없습니다' };
+    const body = req.body || {};
+    if (body.user_id && Number(body.user_id) !== Number(order.user_id)) {
+      return { status: 403, error: '본인 주문만 취소 요청할 수 있습니다' };
+    }
+    const ship = order.shipping_status || 'READY';
+    if (order.payment_status === 'CANCELLED' || order.payment_status === 'REFUNDED') {
+      return { status: 400, error: '이미 취소된 주문입니다' };
+    }
+    if (ship !== 'READY') {
+      return { status: 400, error: '배송이 시작된 주문은 취소 요청할 수 없습니다' };
+    }
+    if (order.cancel_requested) {
+      return { data: publicOrder(order), extra: { message: '이미 취소 요청된 주문입니다' } };
+    }
+    order.cancel_requested = true;
+    order.cancel_requested_at = nowStamp();
+    save();
+    return { data: publicOrder(order), extra: { message: '취소 요청이 접수되었습니다' } };
   }],
   ['GET', /^\/api\/orders\/stats$/, () => ({ data: orderStats() })],
   ['GET', /^\/api\/orders$/, (req) => {

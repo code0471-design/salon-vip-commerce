@@ -2308,6 +2308,37 @@ function orderShippingLabel(status) {
   return map[status] || status || '상품준비중';
 }
 
+function orderDesignerLabel(o) {
+  if (o && o.designer_name) return o.designer_name;
+  if (state.user && Number(state.user.id) === Number(o && o.user_id) && state.user.designer_name) {
+    return state.user.designer_name;
+  }
+  return '';
+}
+
+function canRequestOrderCancel(o) {
+  if (!o) return false;
+  if (o.payment_status === 'CANCELLED' || o.payment_status === 'REFUNDED') return false;
+  if (o.cancel_requested) return false;
+  const ship = o.shipping_status || 'READY';
+  return ship === 'READY';
+}
+
+async function requestOrderCancel(orderId) {
+  if (!state.user) return;
+  if (!confirm('이 주문의 취소를 요청할까요?')) return;
+  const res = await api('/api/orders/' + orderId + '/cancel-request', 'POST', { user_id: state.user.id });
+  if (!res.success) {
+    showToast(res.error || '취소 요청에 실패했습니다', 'error');
+    return;
+  }
+  const idx = state.orders.findIndex((o) => Number(o.id) === Number(orderId));
+  if (idx >= 0) state.orders[idx] = res.data;
+  else state.orders.unshift(res.data);
+  render();
+  showToast(res.message || '취소 요청이 접수되었습니다', 'success');
+}
+
 function renderOrderCard(o) {
   const items = JSON.parse(o.order_items || '[]');
   const statusMap = { PAID:'결제완료', PENDING:'결제대기', CANCELLED:'취소됨', REFUNDED:'환불됨' };
@@ -2321,7 +2352,7 @@ function renderOrderCard(o) {
         <span class="order-status-badge status-${o.payment_status}">${statusMap[o.payment_status]||o.payment_status}</span>
       </div>
       <div class="order-product-title">${escText(productTitle)}</div>
-      <div class="order-salon-sub">${escText(o.salon_name || '')}${o.designer_name ? ' · ' + escText(o.designer_name) : ''}</div>
+      <div class="order-salon-sub">${escText(o.salon_name || '')}${orderDesignerLabel(o) ? ' · ' + escText(orderDesignerLabel(o)) : ''}</div>
       ${o.points_earned ? `<div class="order-points">+${Number(o.points_earned).toLocaleString()}P 적립</div>` : ''}
       <div class="order-footer">
         <span style="font-size:12px;color:var(--muted)">총 ${items.reduce((s,i)=>s+i.qty,0)}개</span>
@@ -2357,6 +2388,27 @@ function renderOrderDetailPage() {
   const statusMap = { PAID:'결제완료', PENDING:'결제대기', CANCELLED:'취소됨', REFUNDED:'환불됨' };
   const money = orderMoney(o);
   const isOwner = !!(state.user && state.user.is_owner);
+  const designerName = orderDesignerLabel(o);
+  const shipAddr = o.shipping_address
+    || (state.user && Number(state.user.id) === Number(o.user_id) ? state.user.shipping_address : '')
+    || '';
+  const shipName = o.shipping_name
+    || (state.user && Number(state.user.id) === Number(o.user_id) ? state.user.name : '')
+    || '';
+  const shipPhone = o.shipping_phone
+    || (state.user && Number(state.user.id) === Number(o.user_id) ? state.user.phone : '')
+    || '';
+  const goodsAmount = items.reduce((s, i) => s + (Number(i.price) || 0) * (Number(i.qty) || 0), 0)
+    || Number(o.total_amount || 0) + Number(o.coupon_discount || 0) + Number(o.points_used || 0);
+  const couponDisc = Number(o.coupon_discount || money.coupon || 0);
+  const pointsUsed = Number(o.points_used || 0);
+  const paidAmount = Math.max(0, Number(o.total_amount || 0));
+  const pointsEarned = Number(o.points_earned || 0);
+  const canCancel = canRequestOrderCancel(o);
+  const shipStatus = o.cancel_requested && (o.shipping_status || 'READY') === 'READY'
+    ? '취소요청중'
+    : orderShippingLabel(o.shipping_status);
+
   return `
     <div class="od-page">
       <div class="od-topbar">
@@ -2377,22 +2429,6 @@ function renderOrderDetailPage() {
         </div>
 
         <div class="info-card od-card">
-          <div class="info-card-header">배송 정보</div>
-          <div class="info-row"><span>배송상태</span><span>${escText(orderShippingLabel(o.shipping_status))}</span></div>
-          <div class="info-row"><span>매장</span><span>${escText(o.salon_name || '-')}</span></div>
-          <div class="info-row" style="border-bottom:none"><span>담당</span><span>${escText(o.designer_name || '담당 없음')}</span></div>
-        </div>
-
-        ${o.shipping_address ? `
-        <div class="info-card od-card">
-          <div class="info-card-header">배송지</div>
-          <div style="padding:12px 16px 14px">
-            <div style="font-size:14px;font-weight:700;color:var(--text)">${escText(o.shipping_name || '')}${o.shipping_phone ? ' · ' + escText(o.shipping_phone) : ''}</div>
-            <div style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5">${escText(o.shipping_address)}</div>
-          </div>
-        </div>` : ''}
-
-        <div class="info-card od-card">
           <div class="info-card-header">주문 상품</div>
           ${items.map((i) => `
             <div class="od-item-row">
@@ -2402,11 +2438,38 @@ function renderOrderDetailPage() {
               </div>
               <div class="od-item-price">${((Number(i.price) || 0) * (Number(i.qty) || 0)).toLocaleString()}원</div>
             </div>`).join('') || `<div class="profile-coupon-empty">상품 정보가 없습니다</div>`}
+          <div class="info-row"><span>매장</span><span>${escText(o.salon_name || '-')}</span></div>
+          <div class="info-row" style="border-bottom:none"><span>담당</span><span>${escText(designerName || '담당 없음')}</span></div>
+        </div>
+
+        <div class="info-card od-card">
+          <div class="info-card-header">배송지</div>
+          <div class="info-row"><span>배송상태</span><span>${escText(shipStatus)}</span></div>
+          ${shipAddr ? `
+          <div style="padding:4px 16px 14px">
+            <div style="font-size:14px;font-weight:700;color:var(--text)">${escText(shipName)}${shipPhone ? ' · ' + escText(shipPhone) : ''}</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5">${escText(shipAddr)}</div>
+          </div>` : `<div class="profile-coupon-empty" style="margin:8px 16px 14px">배송지 정보가 없습니다</div>`}
+        </div>
+
+        <div class="info-card od-card">
+          <div class="info-card-header">결제정보</div>
+          <div class="info-row"><span>상품금액</span><span>${goodsAmount.toLocaleString()}원</span></div>
+          <div class="info-row"><span>쿠폰할인</span><span>${couponDisc ? '-' + couponDisc.toLocaleString() + '원' : '0원'}</span></div>
+          <div class="info-row"><span>포인트사용</span><span>${pointsUsed ? '-' + pointsUsed.toLocaleString() + 'P' : '0P'}</span></div>
+          <div class="info-row"><span>결제상태</span><span>${statusMap[o.payment_status] || o.payment_status}</span></div>
           <div class="od-total-row">
-            <span>합계</span>
-            <span>${(o.total_amount || 0).toLocaleString()}원</span>
+            <span>결제금액</span>
+            <span>${paidAmount.toLocaleString()}원</span>
           </div>
-          ${o.points_earned ? `<div class="od-earn">+${Number(o.points_earned).toLocaleString()}P 적립</div>` : ''}
+        </div>
+
+        <div class="info-card od-card">
+          <div class="info-card-header">구매 포인트 적립</div>
+          <div class="info-row" style="border-bottom:none">
+            <span>적립 예정/완료</span>
+            <span class="od-earn-inline">+${pointsEarned.toLocaleString()}P</span>
+          </div>
         </div>
 
         ${isOwner && o.payment_status === 'PAID' ? `
@@ -2418,6 +2481,14 @@ function renderOrderDetailPage() {
             <div style="font-size:12px;color:var(--muted);margin-top:2px">쿠폰 ${won(money.coupon)} · 살롱가 ${won(Math.max(0, money.sale - money.storePayout))}</div>
           </div>
         </div>` : ''}
+
+        <div style="padding:8px 16px 24px">
+          ${canCancel ? `
+          <button type="button" class="od-cancel-btn" onclick="requestOrderCancel(${o.id})">취소요청</button>
+          ` : (o.cancel_requested ? `
+          <div class="od-cancel-note">취소 요청이 접수되었습니다. 매장 확인 후 처리됩니다.</div>
+          ` : '')}
+        </div>
       </div>
     </div>
   `;
