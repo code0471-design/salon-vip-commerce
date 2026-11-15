@@ -18,6 +18,7 @@ let state = {
   selectedCategory: '전체',
   selectedBrandId: 0, // 0 = 전체 브랜드
   cart: [],
+  cartPrefs: null, // { useCoupon, couponId, usePoints, pointsUse } — 장바구니에서 쿠폰·포인트 1회 적용
   wishlist: (() => {
     try {
       const raw = JSON.parse(localStorage.getItem('salon-vip-wishlist') || '[]');
@@ -155,6 +156,7 @@ function clearSessionOnly() {
   state.resignConfirmId = null;
   state.manageDraft = null;
   state.cart = [];
+  state.cartPrefs = null;
   state.pendingSocial = null;
   state.loginStep = 'social';
   resetOnboarding();
@@ -761,9 +763,9 @@ function renderCartPage() {
         <button class="btn-primary" style="width:auto;padding:12px 24px" onclick="navigate('entry')">살롱 VIP 입장하기</button>
       </div>`;
   }
-  const total = state.cart.reduce((s, i) => s + i.price * i.qty, 0);
   const itemCount = state.cart.reduce((s, i) => s + Number(i.qty || 0), 0);
   if (state.cart.length === 0) {
+    state.cartPrefs = null;
     return `
       <div class="page-pad" style="padding-top:48px;text-align:center">
         <i class="fas fa-shopping-bag" style="font-size:32px;color:var(--muted);opacity:0.3"></i>
@@ -771,6 +773,10 @@ function renderCartPage() {
         <button class="btn-primary" style="width:auto;padding:12px 24px;margin-top:12px" onclick="navigate('brands')">상품 보러가기</button>
       </div>`;
   }
+  const deal = cartDealBreakdown();
+  const couponOptions = deal.availableCoupons || [];
+  const prefs = deal.prefs || ensureCartPrefs();
+  const userPts = Math.max(0, Number(state.user && state.user.points) || 0);
   return `
     <div class="page-pad cart-page" style="padding-bottom:120px">
       <h2 class="page-title">장바구니</h2>
@@ -780,12 +786,14 @@ function renderCartPage() {
           const product = findCatalogProduct(i.product_id);
           const img = (product && product.image_url) || ORDER_FALLBACK_IMG;
           const pid = Number(i.product_id) || 0;
+          const unit = cartLineSale(i);
+          const covered = deal.coupon ? couponAppliesToProduct(deal.coupon, product) : false;
           return `
           <div class="cart-item">
             <img class="cart-thumb" src="${img}" alt="" ${pid ? `onclick="openProductDetail(${pid})"` : ''} onerror="this.src='${ORDER_FALLBACK_IMG}'">
             <div class="cart-item-body">
-              <div class="cart-item-name"${pid ? ` onclick="openProductDetail(${pid})"` : ''}>${escText(i.name || '상품')}</div>
-              <div class="cart-item-unit">${Number(i.price || 0).toLocaleString()}원</div>
+              <div class="cart-item-name"${pid ? ` onclick="openProductDetail(${pid})"` : ''}>${escText(i.name || (product && product.name) || '상품')}</div>
+              <div class="cart-item-unit">${unit.toLocaleString()}원${covered && deal.useCoupon ? ' · 쿠폰대상' : ''}</div>
               <div class="cart-item-actions">
                 <div class="cart-qty">
                   <button type="button" class="qty-btn" onclick="updateCartQty(${i.product_id},-1)" aria-label="수량 감소">−</button>
@@ -795,16 +803,52 @@ function renderCartPage() {
                 <button type="button" class="cart-remove" onclick="removeFromCart(${i.product_id});render()">삭제</button>
               </div>
             </div>
-            <div class="cart-item-price">${(Number(i.price || 0) * Number(i.qty || 0)).toLocaleString()}원</div>
+            <div class="cart-item-price">${(unit * Number(i.qty || 0)).toLocaleString()}원</div>
           </div>`;
         }).join('')}
       </div>
-      <div class="cart-total-row">
-        <span>합계</span>
-        <span class="cart-total-val">${total.toLocaleString()}원</span>
+      <div class="cart-deal-box">
+        <div class="cart-deal-row">
+          <label class="cart-deal-check">
+            <input type="checkbox" ${prefs.useCoupon && couponOptions.length ? 'checked' : ''}
+              ${couponOptions.length ? '' : 'disabled'}
+              onchange="setCartCouponEnabled(this.checked)">
+            <span>쿠폰 적용</span>
+          </label>
+          <span class="cart-deal-amt">${deal.couponAmt ? '-' + deal.couponAmt.toLocaleString() + '원' : '0원'}</span>
+        </div>
+        ${couponOptions.length ? `
+        <select class="form-input cart-deal-select" onchange="setCartCouponId(this.value)" ${prefs.useCoupon ? '' : 'disabled'}>
+          ${couponOptions.map((row) => `
+            <option value="${row.coupon.id}" ${prefs.useCoupon && Number(prefs.couponId) === Number(row.coupon.id) ? 'selected' : ''}>
+              ${escText(row.coupon.name)} (−${row.amount.toLocaleString()}원 · 대상 ${row.eligibleCount}개)
+            </option>`).join('')}
+        </select>
+        <p class="cart-deal-hint">${deal.useCoupon
+          ? `대상 상품 ${deal.eligibleCount}개 합계 ${deal.eligible.toLocaleString()}원에 쿠폰이 한 번 적용됩니다`
+          : '쿠폰은 대상 상품 합계에 한 번만 적용됩니다'}</p>
+        ` : `<p class="cart-deal-hint">사용 가능한 쿠폰이 없습니다</p>`}
+        <div class="cart-deal-row" style="margin-top:10px">
+          <label class="cart-deal-check">
+            <input type="checkbox" ${prefs.usePoints && userPts > 0 ? 'checked' : ''}
+              ${userPts > 0 ? '' : 'disabled'}
+              onchange="setCartPointsEnabled(this.checked)">
+            <span>포인트 사용${userPts ? ` (보유 ${userPts.toLocaleString()}P)` : ''}</span>
+          </label>
+          <span class="cart-deal-amt">${deal.pointsAmt ? '-' + deal.pointsAmt.toLocaleString() + 'P' : '0P'}</span>
+        </div>
+      </div>
+      <div class="cart-summary">
+        <div class="cart-summary-row"><span>상품 합계</span><span>${deal.goods.toLocaleString()}원</span></div>
+        ${deal.couponAmt ? `<div class="cart-summary-row"><span>쿠폰 할인</span><span>-${deal.couponAmt.toLocaleString()}원</span></div>` : ''}
+        ${deal.pointsAmt ? `<div class="cart-summary-row"><span>포인트 사용</span><span>-${deal.pointsAmt.toLocaleString()}P</span></div>` : ''}
+        <div class="cart-total-row">
+          <span>결제 금액</span>
+          <span class="cart-total-val">${deal.pay.toLocaleString()}원</span>
+        </div>
       </div>
       <button class="btn-primary cart-pay-btn" onclick="placeOrder()">
-        결제하기 ${total.toLocaleString()}원
+        결제하기 ${deal.pay.toLocaleString()}원
       </button>
     </div>
   `;
@@ -1836,13 +1880,51 @@ function productSalePrice(p) {
   return Math.max(0, Number(p && p.original_price) || sellingPrice(p) || 0);
 }
 
+function couponAppliesToProduct(coupon, p) {
+  if (!coupon || !p) return false;
+  if (coupon.apply_scope === 'BRAND') {
+    return Number(coupon.brand_id) === Number(p.brand_id);
+  }
+  if (coupon.apply_scope === 'CATEGORY') {
+    const cat = coupon.category || coupon.category_name || '';
+    return String(p.category || '') === String(cat);
+  }
+  return true; // ALL
+}
+
+function cartLineSale(item) {
+  const p = findCatalogProduct(item && item.product_id);
+  if (p) return productSalePrice(p);
+  return Math.max(0, Number(item && item.price) || 0);
+}
+
+function cartGoodsTotal() {
+  return (state.cart || []).reduce((sum, item) => sum + cartLineSale(item) * (Number(item.qty) || 0), 0);
+}
+
+function cartEligibleTotal(coupon) {
+  return (state.cart || []).reduce((sum, item) => {
+    const p = findCatalogProduct(item.product_id);
+    if (!couponAppliesToProduct(coupon, p)) return sum;
+    return sum + cartLineSale(item) * (Number(item.qty) || 0);
+  }, 0);
+}
+
+function cartEligibleCount(coupon) {
+  return (state.cart || []).reduce((count, item) => {
+    const p = findCatalogProduct(item.product_id);
+    if (!couponAppliesToProduct(coupon, p)) return count;
+    return count + (Number(item.qty) || 0);
+  }, 0);
+}
+
 function listAvailableCoupons(p, sale) {
   const price = sale != null ? sale : productSalePrice(p);
   const held = new Set(userHeldCouponIds());
   const active = (state.coupons || []).filter((c) => c && c.status === 'ACTIVE');
   const scoped = active.filter((c) => {
+    if (!couponAppliesToProduct(c, p)) return false;
     if (Number(c.min_order_amount || 0) > price) return false;
-    if (c.apply_scope === 'BRAND' && Number(c.brand_id) !== Number(p.brand_id)) return false;
     return true;
   });
   const owned = scoped.filter((c) => held.has(Number(c.id)));
@@ -1851,6 +1933,153 @@ function listAvailableCoupons(p, sale) {
     .map((c) => ({ coupon: c, amount: couponDiscountAmount(c, price) }))
     .filter((row) => row.amount > 0)
     .sort((a, b) => b.amount - a.amount);
+}
+
+function listCartCoupons() {
+  const held = new Set(userHeldCouponIds());
+  const active = (state.coupons || []).filter((c) => c && c.status === 'ACTIVE');
+  const scoped = active.filter((c) => {
+    const eligible = cartEligibleTotal(c);
+    if (eligible <= 0) return false;
+    if (Number(c.min_order_amount || 0) > eligible) return false;
+    return true;
+  });
+  const owned = scoped.filter((c) => held.has(Number(c.id)));
+  const pool = owned.length ? owned : scoped;
+  return pool
+    .map((c) => ({
+      coupon: c,
+      amount: couponDiscountAmount(c, cartEligibleTotal(c)),
+      eligible: cartEligibleTotal(c),
+      eligibleCount: cartEligibleCount(c),
+    }))
+    .filter((row) => row.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+}
+
+function ensureCartPrefs(forceReset) {
+  const available = listCartCoupons();
+  const best = available[0] || null;
+  const goods = cartGoodsTotal();
+  const bestAmt = best ? best.amount : 0;
+  const maxPts = Math.min(
+    Math.max(0, Number(state.user && state.user.points) || 0),
+    Math.max(0, goods - bestAmt)
+  );
+  if (forceReset || !state.cartPrefs) {
+    state.cartPrefs = {
+      useCoupon: !!best,
+      couponId: best ? Number(best.coupon.id) : null,
+      usePoints: maxPts > 0,
+      pointsUse: maxPts,
+    };
+    return state.cartPrefs;
+  }
+  if (state.cartPrefs.useCoupon) {
+    const still = available.find((row) => Number(row.coupon.id) === Number(state.cartPrefs.couponId));
+    if (!still) {
+      state.cartPrefs.couponId = best ? Number(best.coupon.id) : null;
+      state.cartPrefs.useCoupon = !!best;
+    }
+  }
+  const couponAmt = state.cartPrefs.useCoupon
+    ? (available.find((row) => Number(row.coupon.id) === Number(state.cartPrefs.couponId)) || { amount: 0 }).amount
+    : 0;
+  const cap = Math.min(
+    Math.max(0, Number(state.user && state.user.points) || 0),
+    Math.max(0, goods - couponAmt)
+  );
+  if (!state.cartPrefs.usePoints) state.cartPrefs.pointsUse = 0;
+  else state.cartPrefs.pointsUse = Math.min(cap, Math.max(0, Number(state.cartPrefs.pointsUse) || 0));
+  if (state.cartPrefs.usePoints && state.cartPrefs.pointsUse === 0 && cap > 0) {
+    state.cartPrefs.pointsUse = cap;
+  }
+  return state.cartPrefs;
+}
+
+function cartDealBreakdown() {
+  const prefs = ensureCartPrefs();
+  const goods = cartGoodsTotal();
+  const available = listCartCoupons();
+  let coupon = null;
+  let couponAmt = 0;
+  let eligible = 0;
+  let eligibleCount = 0;
+  if (prefs.useCoupon && prefs.couponId) {
+    const row = available.find((item) => Number(item.coupon.id) === Number(prefs.couponId));
+    if (row) {
+      coupon = row.coupon;
+      couponAmt = row.amount;
+      eligible = row.eligible;
+      eligibleCount = row.eligibleCount;
+    }
+  }
+  const afterCoupon = Math.max(0, goods - couponAmt);
+  const userPts = Math.max(0, Number(state.user && state.user.points) || 0);
+  const pointsAmt = prefs.usePoints
+    ? Math.min(userPts, afterCoupon, Math.max(0, Number(prefs.pointsUse) || 0))
+    : 0;
+  return {
+    goods,
+    coupon,
+    couponAmt,
+    eligible,
+    eligibleCount,
+    availableCoupons: available,
+    useCoupon: !!coupon && couponAmt > 0,
+    usePoints: pointsAmt > 0,
+    pointsAmt,
+    pay: Math.max(0, afterCoupon - pointsAmt),
+    prefs,
+  };
+}
+
+function setCartCouponEnabled(on) {
+  const prefs = ensureCartPrefs();
+  prefs.useCoupon = !!on;
+  if (prefs.useCoupon && !prefs.couponId) {
+    const best = listCartCoupons()[0];
+    prefs.couponId = best ? Number(best.coupon.id) : null;
+    if (!prefs.couponId) prefs.useCoupon = false;
+  }
+  const deal = cartDealBreakdown();
+  const cap = Math.min(
+    Math.max(0, Number(state.user && state.user.points) || 0),
+    Math.max(0, deal.goods - deal.couponAmt)
+  );
+  if (prefs.usePoints) prefs.pointsUse = Math.min(cap, prefs.pointsUse || cap);
+  render();
+}
+
+function setCartCouponId(couponId) {
+  const prefs = ensureCartPrefs();
+  const id = couponId === '' || couponId == null ? null : Number(couponId);
+  if (!id) {
+    prefs.useCoupon = false;
+    prefs.couponId = null;
+  } else {
+    prefs.useCoupon = true;
+    prefs.couponId = id;
+  }
+  const deal = cartDealBreakdown();
+  const cap = Math.min(
+    Math.max(0, Number(state.user && state.user.points) || 0),
+    Math.max(0, deal.goods - deal.couponAmt)
+  );
+  if (prefs.usePoints) prefs.pointsUse = Math.min(cap, prefs.pointsUse || cap);
+  render();
+}
+
+function setCartPointsEnabled(on) {
+  const prefs = ensureCartPrefs();
+  prefs.usePoints = !!on;
+  const deal = cartDealBreakdown();
+  const cap = Math.min(
+    Math.max(0, Number(state.user && state.user.points) || 0),
+    Math.max(0, deal.goods - deal.couponAmt)
+  );
+  prefs.pointsUse = prefs.usePoints ? cap : 0;
+  render();
 }
 
 function pickBestCoupon(p, sale) {
@@ -2361,26 +2590,28 @@ function addToCart(productId, qtyOrOpts, maybeOpts) {
   if (typeof qtyOrOpts === 'object' && qtyOrOpts) opts = qtyOrOpts;
   else if (qtyOrOpts != null) qty = Math.max(1, Number(qtyOrOpts) || 1);
   if (maybeOpts) opts = maybeOpts;
-  const fromDetail = state.currentPage === 'product' && Number(state.selectedProductId) === Number(productId);
-  const deal = maxDiscountBreakdown(p, { interactive: fromDetail });
+  const sale = productSalePrice(p);
   const existing = state.cart.find(i => i.product_id === productId);
   if (existing) {
     existing.qty += qty;
-    existing.price = deal.maxPrice;
-    existing.coupon_id = deal.useCoupon && deal.coupon ? deal.coupon.id : null;
-    existing.coupon_discount = deal.couponAmt || 0;
-    existing.points_used = deal.pointsAmt || 0;
+    existing.price = sale;
+    existing.name = p.name;
+    existing.coupon_id = null;
+    existing.coupon_discount = 0;
+    existing.points_used = 0;
   } else {
     state.cart.push({
       product_id: p.id,
       name: p.name,
-      price: deal.maxPrice,
+      price: sale,
       qty,
-      coupon_id: deal.useCoupon && deal.coupon ? deal.coupon.id : null,
-      coupon_discount: deal.couponAmt || 0,
-      points_used: deal.pointsAmt || 0,
+      coupon_id: null,
+      coupon_discount: 0,
+      points_used: 0,
     });
   }
+  // 장바구니에서 대상 합계에 쿠폰·포인트를 다시 계산
+  ensureCartPrefs(true);
   if (!opts.silent) {
     render();
     showToast('장바구니에 담겼습니다', 'success');
@@ -2393,11 +2624,15 @@ function updateCartQty(productId, delta) {
     item.qty += delta;
     if (item.qty <= 0) state.cart = state.cart.filter(i => i.product_id !== productId);
   }
+  if (!state.cart.length) state.cartPrefs = null;
+  else ensureCartPrefs();
   render();
 }
 
 function removeFromCart(productId) {
   state.cart = state.cart.filter(i => i.product_id !== productId);
+  if (!state.cart.length) state.cartPrefs = null;
+  else ensureCartPrefs();
 }
 
 // ---- Cart (bottom tab page) ----
@@ -2424,25 +2659,24 @@ async function placeOrder() {
     return;
   }
   closeModal();
-  const couponDiscount = state.cart.reduce((s, i) => s + (Number(i.coupon_discount) || 0), 0);
-  const pointsUsed = state.cart.reduce((s, i) => s + (Number(i.points_used) || 0), 0);
-  const couponId = (state.cart.find((i) => i.coupon_id) || {}).coupon_id || null;
+  const deal = cartDealBreakdown();
   const res = await api('/api/orders', 'POST', {
     user_id: state.user.id,
     shipping_address: state.user.shipping_address,
-    coupon_id: couponId,
-    coupon_discount: couponDiscount,
-    points_used: pointsUsed,
+    coupon_id: deal.coupon ? deal.coupon.id : null,
+    coupon_discount: deal.couponAmt,
+    points_used: deal.pointsAmt,
     items: state.cart.map((i) => ({
       product_id: i.product_id,
       qty: i.qty,
-      price: i.price,
-      coupon_discount: Number(i.coupon_discount) || 0,
-      points_used: Number(i.points_used) || 0,
+      price: cartLineSale(i),
+      coupon_discount: 0,
+      points_used: 0,
     })),
   });
   if (res.success) {
     state.cart = [];
+    state.cartPrefs = null;
     if (res.user) saveUser(res.user);
     await loadUserOrders();
     if (ownerSalon()) await loadStoreLedger();
