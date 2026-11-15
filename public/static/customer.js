@@ -27,7 +27,6 @@ let state = {
   selectedProductId: null,
   productBackPage: 'home',
   priceBreakdownOpen: true,
-  channelFriendRegistered: localStorage.getItem('salon-vip-channel-friend') === '1',
   orders: [],
   storeOrders: [],
   storeSettlement: null,
@@ -1719,11 +1718,9 @@ function couponDiscountAmount(coupon, sale) {
 }
 
 function userHeldCouponIds() {
-  const fromUser = Array.isArray(state.user && state.user.coupon_ids)
-    ? state.user.coupon_ids.map(Number)
+  return Array.isArray(state.user && state.user.coupon_ids)
+    ? state.user.coupon_ids.map(Number).filter(Boolean)
     : [];
-  if (state.channelFriendRegistered && !fromUser.includes(1)) fromUser.push(1);
-  return fromUser;
 }
 
 function pickBestCoupon(p, sale) {
@@ -1734,11 +1731,12 @@ function pickBestCoupon(p, sale) {
     if (c.apply_scope === 'BRAND' && Number(c.brand_id) !== Number(p.brand_id)) return false;
     return true;
   });
-  const owned = scoped.filter((c) => held.has(Number(c.id)));
-  const pool = owned.length ? owned : [];
+  // 보유 쿠폰 우선, 없으면 적용 가능 쿠폰 중 최대 할인(최대할인가)
+  const pool = scoped.filter((c) => held.has(Number(c.id)));
+  const candidates = pool.length ? pool : scoped;
   let best = null;
   let bestAmt = 0;
-  pool.forEach((c) => {
+  candidates.forEach((c) => {
     const amt = couponDiscountAmount(c, sale);
     if (amt > bestAmt) { best = c; bestAmt = amt; }
   });
@@ -1774,22 +1772,9 @@ function togglePriceBreakdown() {
   render();
 }
 
-function registerChannelFriend() {
-  state.channelFriendRegistered = true;
-  try { localStorage.setItem('salon-vip-channel-friend', '1'); } catch (_) {}
-  if (state.user) {
-    const ids = Array.isArray(state.user.coupon_ids) ? state.user.coupon_ids.map(Number) : [];
-    if (!ids.includes(1)) ids.push(1);
-    state.user.coupon_ids = ids;
-    saveUser(state.user);
-  }
-  showToast('채널친구 쿠폰이 적용되었습니다', 'success');
-  render();
-}
-
 function renderMaxDiscountBox(p, deal) {
   const open = state.priceBreakdownOpen !== false;
-  const couponLabel = deal.coupon ? deal.coupon.name : '채널친구 등록';
+  const couponLabel = deal.coupon ? ('쿠폰 · ' + deal.coupon.name) : '쿠폰';
   return `
     <button type="button" class="pd-max-toggle" onclick="togglePriceBreakdown()">
       <span class="pd-max-price">${deal.maxPrice.toLocaleString()}원</span>
@@ -1803,10 +1788,7 @@ function renderMaxDiscountBox(p, deal) {
         <span>${deal.sale.toLocaleString()}원</span>
       </div>
       <div class="pd-row">
-        <span class="pd-coupon-label">
-          ${escText(couponLabel)}
-          ${!deal.hasCoupon ? `<button type="button" class="pd-register-link" onclick="registerChannelFriend()">등록하기</button>` : ''}
-        </span>
+        <span>${escText(couponLabel)}</span>
         <span>${deal.couponAmt ? '-' + deal.couponAmt.toLocaleString() + '원' : '0원'}</span>
       </div>
       <div class="pd-points-box">
