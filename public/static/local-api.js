@@ -89,17 +89,43 @@
     return { designer, resigned };
   }
 
+  function inviteUrlFor(designerId) {
+    if (typeof location !== 'undefined' && location.origin) {
+      const path = String(location.pathname || '/').replace(/index\.html$/i, '');
+      const base = location.origin + (path.endsWith('/') ? path : path.replace(/\/?$/, '/'));
+      return base + '?invite=' + designerId;
+    }
+    return 'https://code0471-design.github.io/salon-vip-commerce/?invite=' + designerId;
+  }
+
+  function buildInviteSms(salon, designer, matchUser) {
+    const salonName = salon ? salon.salon_name : '매장';
+    const url = inviteUrlFor(designer.id);
+    if (matchUser) {
+      return `[살롱VIP] ${salonName} 담당자 초대\n${url}\n링크를 열어 승인하세요.`;
+    }
+    return `[살롱VIP] ${salonName} 담당자 초대\n${url}\n같은 번호로 가입 후 승인하세요.`;
+  }
+
   function pendingStaffInvitesFor(user) {
     const phone = phoneDigits(user && user.phone);
     if (!phone) return [];
+    const owned = ownedSalon(user);
     return db.designers
-      .filter((d) => d.status === 'INVITED' && phoneDigits(d.phone) === phone)
+      .filter((d) => {
+        if (d.status !== 'INVITED') return false;
+        if (phoneDigits(d.phone) !== phone) return false;
+        // 원장은 본인 매장 초대의 승인자 아님 (초대 받는 담당자만)
+        if (owned && Number(d.salon_id) === Number(owned.id)) return false;
+        return true;
+      })
       .map((d) => {
         const salon = findSalon(d.salon_id);
         return {
           ...publicDesigner(d),
           salon_name: salon ? salon.salon_name : '',
           salon_id: d.salon_id,
+          invite_url: inviteUrlFor(d.id),
         };
       });
   }
@@ -709,10 +735,10 @@
       const matchUser = db.users.find((u) => phoneDigits(u.phone) === phoneDigits(phone));
       const salon = findSalon(designer.salon_id);
       let demoSms = '';
+      let inviteUrl = '';
       if (designer.status === 'INVITED') {
-        demoSms = matchUser
-          ? `[살롱VIP] ${salon ? salon.salon_name : '매장'} 담당자 초대. 앱에서 승인하면 새 매장 담당자로 등록됩니다.`
-          : `[살롱VIP] ${salon ? salon.salon_name : '매장'} 담당자 초대. 앱에서 같은 번호로 가입·인증하면 완료됩니다.`;
+        inviteUrl = inviteUrlFor(designer.id);
+        demoSms = buildInviteSms(salon, designer, matchUser);
       }
       save();
       return {
@@ -720,7 +746,25 @@
         extra: {
           message: designer.status === 'INVITED' ? '담당자에게 초대 요청을 보냈습니다' : '담당자가 추가되었습니다',
           demo_sms: demoSms,
+          invite_url: inviteUrl,
           existing_member: !!matchUser,
+        },
+      };
+    }],
+    ['GET', /^\/api\/designers\/(\d+)\/invite-info$/, (req, id) => {
+      const designer = findDesigner(id);
+      if (!designer) return { status: 404, error: '초대를 찾을 수 없습니다' };
+      const salon = findSalon(designer.salon_id);
+      const phone = phoneDigits(designer.phone);
+      return {
+        data: {
+          id: designer.id,
+          status: designer.status,
+          designer_name: designer.designer_name,
+          salon_id: designer.salon_id,
+          salon_name: salon ? salon.salon_name : '',
+          phone_hint: phone ? phone.slice(-4) : '',
+          invite_url: inviteUrlFor(designer.id),
         },
       };
     }],
@@ -732,13 +776,15 @@
       designer.invited_at = nowStamp();
       const salon = findSalon(designer.salon_id);
       const matchUser = db.users.find((u) => phoneDigits(u.phone) === phoneDigits(designer.phone));
-      const demoSms = matchUser
-        ? `[살롱VIP] ${salon ? salon.salon_name : '매장'} 담당자 초대. 앱에서 승인하면 등록됩니다.`
-        : `[살롱VIP] ${salon ? salon.salon_name : '매장'} 담당자 초대. 앱에서 같은 번호로 가입·인증하면 완료됩니다.`;
+      const demoSms = buildInviteSms(salon, designer, matchUser);
       save();
       return {
         data: publicDesigner(designer),
-        extra: { message: '초대 문자를 다시 보냈습니다', demo_sms: demoSms },
+        extra: {
+          message: '초대 문자를 다시 보냈습니다',
+          demo_sms: demoSms,
+          invite_url: inviteUrlFor(designer.id),
+        },
       };
     }],
     ['POST', /^\/api\/designers\/(\d+)\/accept$/, (req, id) => {
