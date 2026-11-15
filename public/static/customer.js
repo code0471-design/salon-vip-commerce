@@ -1909,13 +1909,16 @@ function renderProfile() {
 
     <div class="profile-stats">
       <div class="profile-stat-item">
-        <div style="font-size:22px;font-weight:800;color:var(--text)">${orderCount}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">총 주문</div>
+        <div class="pval">${orderCount}</div>
+        <div class="plbl">총 주문</div>
       </div>
-      <div style="width:1px;background:var(--border)"></div>
       <div class="profile-stat-item">
-        <div style="font-size:17px;font-weight:800;color:var(--rose)">${totalSpent.toLocaleString()}원</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">총 이용금액</div>
+        <div class="pval rose">${totalSpent.toLocaleString()}원</div>
+        <div class="plbl">총 이용금액</div>
+      </div>
+      <div class="profile-stat-item">
+        <div class="pval">${(u.points || 0).toLocaleString()}P</div>
+        <div class="plbl">보유 포인트</div>
       </div>
     </div>
 
