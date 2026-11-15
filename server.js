@@ -1139,59 +1139,18 @@ const routes = [
     const designerId = body.designer_id ? Number(body.designer_id) : null;
     if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
     if (!designerId) return { status: 400, error: '담당자를 선택해주세요' };
-    const designer = db.designers.find((d) =>
-      d.id === Number(designerId) && d.salon_id === salon.id && d.status === 'ACTIVE');
-    if (!designer) return { status: 400, error: '담당자를 찾을 수 없습니다' };
+    // 고객 앱에 매장 이동 UX 없음. 소속이 바뀌는 경우에도 주문은 user_id로 유지(assignSalon이 주문 미수정).
     if (user.current_salon_id && Number(user.current_salon_id) !== Number(salon.id)) {
-      const from = findSalon(user.current_salon_id);
-      return {
-        data: {
-          needs_confirm: true,
-          from_salon_id: from ? from.id : user.current_salon_id,
-          from_salon_name: from ? from.salon_name : '이전 매장',
-          to_salon_id: salon.id,
-          to_salon_name: salon.salon_name,
-          designer_id: designer.id,
-          designer_name: designer.designer_name,
-          order_count: db.orders.filter((o) => Number(o.user_id) === Number(user.id)).length,
-        },
-        extra: { message: '매장 변경 확인이 필요합니다' },
-      };
+      return { status: 400, error: '이미 등록된 매장이 있습니다' };
     }
     const result = assignSalon(user, salon.id, designerId);
     if (result.error) return { status: 400, error: result.error };
     return { data: result.user, extra: { message: `${salon.salon_name} · 담당자 등록이 완료되었습니다` } };
   }],
-  ['POST', /^\/api\/users\/(\d+)\/confirm-switch$/, (req, id) => {
-    const user = db.users.find((u) => u.id === Number(id));
-    if (!user) return { status: 404, error: '고객을 찾을 수 없습니다' };
-    const body = req.body || {};
-    let salon = body.salon_id ? findSalon(body.salon_id) : null;
-    if (!salon && body.salon_code) salon = findSalonByCode(body.salon_code);
-    const designerId = body.designer_id ? Number(body.designer_id) : null;
-    if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
-    if (!designerId) return { status: 400, error: '담당자를 선택해주세요' };
-    const beforeIds = db.orders
-      .filter((o) => Number(o.user_id) === Number(user.id))
-      .map((o) => ({ id: o.id, salon_id: o.salon_id }));
-    const result = assignSalon(user, salon.id, designerId);
-    if (result.error) return { status: 400, error: result.error };
-    const after = db.orders.filter((o) => Number(o.user_id) === Number(user.id));
-    if (after.length !== beforeIds.length
-      || beforeIds.some((row) => {
-        const kept = after.find((o) => o.id === row.id);
-        return !kept || Number(kept.salon_id) !== Number(row.salon_id);
-      })) {
-      return { status: 500, error: '주문 내역 보존에 실패했습니다' };
-    }
-    return {
-      data: result.user,
-      extra: {
-        message: `${salon.salon_name}으로 이동했습니다 · 이전 주문 ${after.length}건은 그대로 유지됩니다`,
-        orders: userOrders(user.id),
-      },
-    };
-  }],
+  ['POST', /^\/api\/users\/(\d+)\/confirm-switch$/, () => ({
+    status: 400,
+    error: '매장 변경은 고객 앱에서 지원하지 않습니다',
+  })],
 
   ['GET', /^\/api\/brands$/, () => ({ data: db.brands })],
   ['POST', /^\/api\/brands$/, (req) => {

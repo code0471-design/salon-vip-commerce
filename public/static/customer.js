@@ -42,7 +42,6 @@ let state = {
   salesStaff: '',
   scanResult: null,
   switchInfo: null,
-  allowSalonSwitch: false,
   selectedSalon: null,
   selectedDesigner: null,
   salonCodeInput: '',
@@ -750,8 +749,7 @@ function renderCartPage() {
       </div>`;
   }
   const total = state.cart.reduce((s, i) => s + i.price * i.qty, 0);
-  const salonAmt = Math.round(total * 0.3);
-  const ownerProfit = cartStoreProfit();
+  const itemCount = state.cart.reduce((s, i) => s + Number(i.qty || 0), 0);
   if (state.cart.length === 0) {
     return `
       <div class="page-pad" style="padding-top:48px;text-align:center">
@@ -761,46 +759,39 @@ function renderCartPage() {
       </div>`;
   }
   return `
-    <div class="page-pad" style="padding-bottom:120px">
+    <div class="page-pad cart-page" style="padding-bottom:120px">
       <h2 class="page-title">장바구니</h2>
-      <div class="cart-salon-info" style="margin:12px 0 16px">
-        <div style="font-size:11px;color:var(--muted);margin-bottom:3px">담당 살롱 · 디자이너</div>
-        <div style="font-size:14px;font-weight:700;color:var(--text)">
-          ${state.user.salon_name || '미등록'} · ${state.user.designer_name || '담당 없음'}
-        </div>
-      </div>
-      ${state.cart.map((i) => `
-        <div class="cart-line">
-          <div style="flex:1">
-            <div style="font-size:14px;font-weight:600;color:var(--text)">${i.name}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:4px">
-              <button type="button" class="qty-btn" onclick="updateCartQty(${i.product_id},-1)">−</button>
-              <span style="margin:0 8px">${i.qty}</span>
-              <button type="button" class="qty-btn" onclick="updateCartQty(${i.product_id},1)">+</button>
-              · ${i.price.toLocaleString()}원
+      <p class="cart-sub">${itemCount}개 상품 · ${escText(state.user.salon_name || '')}${state.user.designer_name ? ' · ' + escText(state.user.designer_name) : ''}</p>
+      <div class="cart-list">
+        ${state.cart.map((i) => {
+          const product = findCatalogProduct(i.product_id);
+          const img = (product && product.image_url) || ORDER_FALLBACK_IMG;
+          const pid = Number(i.product_id) || 0;
+          return `
+          <div class="cart-item">
+            <img class="cart-thumb" src="${img}" alt="" ${pid ? `onclick="openProductDetail(${pid})"` : ''} onerror="this.src='${ORDER_FALLBACK_IMG}'">
+            <div class="cart-item-body">
+              <div class="cart-item-name"${pid ? ` onclick="openProductDetail(${pid})"` : ''}>${escText(i.name || '상품')}</div>
+              <div class="cart-item-unit">${Number(i.price || 0).toLocaleString()}원</div>
+              <div class="cart-item-actions">
+                <div class="cart-qty">
+                  <button type="button" class="qty-btn" onclick="updateCartQty(${i.product_id},-1)" aria-label="수량 감소">−</button>
+                  <span class="cart-qty-num">${i.qty}</span>
+                  <button type="button" class="qty-btn" onclick="updateCartQty(${i.product_id},1)" aria-label="수량 증가">+</button>
+                </div>
+                <button type="button" class="cart-remove" onclick="removeFromCart(${i.product_id});render()">삭제</button>
+              </div>
             </div>
-          </div>
-          <div style="text-align:right">
-            <div style="font-size:14px;font-weight:700;color:var(--rose)">${(i.price * i.qty).toLocaleString()}원</div>
-            <button type="button" class="demo-link" style="margin-top:4px" onclick="removeFromCart(${i.product_id});render()">삭제</button>
-          </div>
-        </div>`).join('')}
+            <div class="cart-item-price">${(Number(i.price || 0) * Number(i.qty || 0)).toLocaleString()}원</div>
+          </div>`;
+        }).join('')}
+      </div>
       <div class="cart-total-row">
         <span>합계</span>
         <span class="cart-total-val">${total.toLocaleString()}원</span>
       </div>
-      ${state.user && (state.user.is_owner || state.user.is_staff) ? `<div class="rev-breakdown">
-        <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:8px">매장 수익</div>
-        <div style="font-size:16px;font-weight:700;color:var(--text)">${won(ownerProfit)}</div>
-      </div>` : `<div class="rev-breakdown">
-        <div style="font-size:11px;font-weight:700;color:#16a34a;margin-bottom:8px">수익 배분</div>
-        <div class="rev-grid">
-          <div class="rev-item"><div style="font-size:10px;color:var(--muted)">플랫폼</div><div style="font-size:13px;font-weight:700">${Math.round(total * 0.4).toLocaleString()}원</div></div>
-          <div class="rev-item"><div style="font-size:10px;color:var(--muted)">매장</div><div style="font-size:13px;font-weight:700">${salonAmt.toLocaleString()}원</div></div>
-        </div>
-      </div>`}
-      <button class="btn-primary" style="margin-top:8px" onclick="placeOrder()">
-        <i class="fas fa-credit-card"></i> 결제하기 ${total.toLocaleString()}원
+      <button class="btn-primary cart-pay-btn" onclick="placeOrder()">
+        결제하기 ${total.toLocaleString()}원
       </button>
     </div>
   `;
@@ -1250,7 +1241,6 @@ function resetOnboarding() {
   state.selectedDesigner = null;
   state.onboardingStep = 'code';
   state.switchInfo = null;
-  state.allowSalonSwitch = false;
 }
 
 function renderOnboardingGate() {
@@ -1534,12 +1524,8 @@ async function loginAsDemo() {
 function renderScan() {
   if (!state.user) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
 
-  if (state.switchInfo && state.switchInfo.needs_confirm) {
-    return renderSalonSwitchConfirm();
-  }
-
-  // 이미 매장이 있으면 기본은 내 매장 화면. 매장 변경 모드일 때만 코드 입력.
-  if (state.user.current_salon_id && !state.selectedSalon && !state.allowSalonSwitch) {
+  // 이미 매장이 있으면 내 매장 화면. 담당자만 같은 매장 안에서 수정 가능.
+  if (state.user.current_salon_id && !state.selectedSalon) {
     if (!needsSalonBinding()) return renderBoundSalonPage();
     startDesignerChange();
     return `<div class="scan-page"><p style="font-size:13px;color:var(--muted)">담당자 선택을 준비하는 중…</p></div>`;
@@ -1549,17 +1535,14 @@ function renderScan() {
   const designers = (salon && salon.designers) || [];
   const activeDesigners = designers.filter((d) => d.status !== 'RESIGNED');
   const step = salon ? 'designer' : 'code';
-  const switching = !!(state.user.current_salon_id && state.allowSalonSwitch);
 
   return `
     <div class="scan-page">
       <h2 style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px">
-        ${switching ? '다른 매장으로 이동' : '매장 · 담당자 등록'}
+        매장 · 담당자 등록
       </h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:18px">
-        ${switching
-          ? '새 매장 코드와 담당자를 선택하세요. 이전 매장에서 한 주문 내역은 그대로 남습니다.'
-          : '매장 방문·QR로 받은 6자리 코드가 있어야 입장됩니다. 코드 입력 후 담당자를 선택하세요.'}
+        매장 방문·QR로 받은 6자리 코드가 있어야 입장됩니다. 코드 입력 후 담당자를 선택하세요.
       </p>
 
       <div class="onboard-steps">
@@ -1592,7 +1575,9 @@ function renderScan() {
             <div style="font-weight:800;font-size:16px;color:var(--text)">${salon.salon_name}</div>
             <div style="font-size:12px;color:var(--muted);margin-top:2px">매장 코드 ${salon.salon_code || '-'}</div>
           </div>
-          <button type="button" class="ghost-text-btn" onclick="resetSalonCodeStep()">다시 입력</button>
+          ${!state.user.current_salon_id
+            ? `<button type="button" class="ghost-text-btn" onclick="resetOnboarding();render()">다시 입력</button>`
+            : ''}
         </div>
 
         <div class="designer-section">
@@ -1615,70 +1600,9 @@ function renderScan() {
         </div>
 
         <button class="btn-primary" style="margin-top:8px" onclick="confirmScan()" ${!state.selectedDesigner ? 'disabled' : ''}>
-          <i class="fas fa-check"></i> ${switching ? '매장 이동 확인' : '담당자 등록 완료'}
+          <i class="fas fa-check"></i> 담당자 등록 완료
         </button>
       `}
-    </div>
-  `;
-}
-
-function resetSalonCodeStep() {
-  const keepSwitch = state.allowSalonSwitch;
-  state.selectedSalon = null;
-  state.selectedDesigner = null;
-  state.salonCodeInput = '';
-  state.onboardingStep = 'code';
-  state.switchInfo = null;
-  state.allowSalonSwitch = keepSwitch;
-  render();
-}
-
-function startSalonSwitch() {
-  state.allowSalonSwitch = true;
-  state.selectedSalon = null;
-  state.selectedDesigner = null;
-  state.salonCodeInput = '';
-  state.switchInfo = null;
-  state.onboardingStep = 'code';
-  navigate('scan');
-}
-
-function cancelSalonSwitch() {
-  state.switchInfo = null;
-  state.allowSalonSwitch = false;
-  state.selectedSalon = null;
-  state.selectedDesigner = null;
-  render();
-}
-
-function renderSalonSwitchConfirm() {
-  const info = state.switchInfo || {};
-  return `
-    <div class="scan-page">
-      <h2 style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px">매장 이동 확인</h2>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:18px">
-        소속 매장만 바뀝니다. 이전 주문 ${Number(info.order_count || 0)}건은 주문 내역에 그대로 남습니다.
-      </p>
-      <div class="salon-confirm-card" style="margin-bottom:10px">
-        <div class="salon-icon-wrap"><i class="fas fa-store" style="color:var(--muted)"></i></div>
-        <div style="flex:1">
-          <div style="font-size:11px;color:var(--muted)">현재</div>
-          <div style="font-weight:800;font-size:15px;color:var(--text)">${escText(info.from_salon_name || '-')}</div>
-        </div>
-      </div>
-      <div style="text-align:center;color:var(--muted);margin:4px 0 10px"><i class="fas fa-arrow-down"></i></div>
-      <div class="salon-confirm-card">
-        <div class="salon-icon-wrap"><i class="fas fa-scissors" style="color:var(--accent)"></i></div>
-        <div style="flex:1">
-          <div style="font-size:11px;color:var(--muted)">이동</div>
-          <div style="font-weight:800;font-size:15px;color:var(--text)">${escText(info.to_salon_name || '-')}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px">담당 · ${escText(info.designer_name || '-')}</div>
-        </div>
-      </div>
-      <button class="btn-primary" style="margin-top:16px" onclick="confirmSalonSwitch()">
-        <i class="fas fa-check"></i> 매장 이동하기
-      </button>
-      <button class="btn-secondary" style="margin-top:10px" onclick="cancelSalonSwitch()">취소</button>
     </div>
   `;
 }
@@ -1689,7 +1613,7 @@ function renderBoundSalonPage() {
     <div class="scan-page">
       <h2 style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px">내 매장</h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:18px">
-        현재 소속 매장입니다. 다른 매장으로 옮겨도 이전 주문 내역은 계속 볼 수 있습니다.
+        등록된 매장입니다. 담당자만 같은 매장 안에서 변경할 수 있습니다.
       </p>
       <div class="salon-confirm-card">
         <div class="salon-icon-wrap"><i class="fas fa-scissors" style="color:var(--accent)"></i></div>
@@ -1700,9 +1624,6 @@ function renderBoundSalonPage() {
       </div>
       <button class="btn-secondary" style="margin-top:16px" onclick="startDesignerChange()">
         <i class="fas fa-user-edit" style="margin-right:8px"></i>같은 매장 담당자만 변경
-      </button>
-      <button class="btn-secondary" style="margin-top:10px" onclick="startSalonSwitch()">
-        <i class="fas fa-exchange-alt" style="margin-right:8px"></i>다른 매장으로 이동
       </button>
     </div>
   `;
@@ -1769,40 +1690,15 @@ async function confirmScan() {
     salon_code: state.selectedSalon.salon_code,
     designer_id: state.selectedDesigner
   });
-  if (!res.success) {
+  if (res.success) {
+    saveUser(res.data);
+    resetOnboarding();
+    await loadAppData();
+    navigate('home');
+    showToast(res.message || '등록이 완료되었습니다', 'success');
+  } else {
     showToast(res.error || '등록에 실패했습니다', 'error');
-    return;
   }
-  if (res.data && res.data.needs_confirm) {
-    state.switchInfo = res.data;
-    render();
-    return;
-  }
-  saveUser(res.data);
-  resetOnboarding();
-  await loadAppData();
-  navigate('home');
-  showToast(res.message || '등록이 완료되었습니다', 'success');
-}
-
-async function confirmSalonSwitch() {
-  if (!state.user || !state.switchInfo) return;
-  const info = state.switchInfo;
-  const res = await api(`/api/users/${state.user.id}/confirm-switch`, 'POST', {
-    salon_id: info.to_salon_id,
-    designer_id: info.designer_id,
-  });
-  if (!res.success) {
-    showToast(res.error || '매장 이동에 실패했습니다', 'error');
-    return;
-  }
-  saveUser(res.data);
-  if (Array.isArray(res.orders)) state.orders = res.orders;
-  resetOnboarding();
-  await loadAppData();
-  await loadUserOrders();
-  navigate('orders');
-  showToast(res.message || '매장을 이동했습니다. 주문 내역은 그대로입니다', 'success');
 }
 
 // ============================================================
