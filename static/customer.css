@@ -989,6 +989,36 @@ body {
   font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.5px; text-transform: uppercase;
   border-bottom: 1px solid var(--border);
 }
+.profile-edit-btn {
+  border: 1px solid var(--border); background: #fff; border-radius: 999px;
+  padding: 6px 12px; font-size: 12px; font-weight: 700; color: var(--text); cursor: pointer;
+}
+.profile-benefit-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  padding: 14px 16px 8px;
+}
+.profile-benefit-card {
+  background: var(--light); border: 1px solid var(--border); border-radius: 12px;
+  padding: 12px;
+}
+.profile-benefit-label { font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+.profile-benefit-value { font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: -0.4px; }
+.profile-benefit-value span { font-size: 13px; font-weight: 700; margin-left: 2px; color: var(--muted); }
+.profile-coupon-list { padding: 4px 16px 14px; display: flex; flex-direction: column; gap: 8px; }
+.profile-coupon-empty {
+  padding: 14px 12px; text-align: center; font-size: 13px; color: var(--muted);
+  background: #fafafa; border-radius: 10px;
+}
+.profile-coupon-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: #fff;
+}
+.profile-coupon-name { font-size: 14px; font-weight: 700; color: var(--text); }
+.profile-coupon-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.profile-coupon-badge {
+  flex-shrink: 0; font-size: 11px; font-weight: 700; color: #e11d48;
+  background: #fff1f3; border-radius: 999px; padding: 5px 9px;
+}
 .info-row {
   display: flex; justify-content: space-between; align-items: center;
   padding: 12px 16px; border-bottom: 1px solid #f5f3f0;
