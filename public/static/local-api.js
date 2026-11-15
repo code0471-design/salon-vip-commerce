@@ -1129,7 +1129,10 @@
         discount_type: body.discount_type === 'RATE' ? 'RATE' : 'AMOUNT',
         discount_value: Number(body.discount_value || 0),
         min_order_amount: Number(body.min_order_amount || 0),
-        apply_scope: body.apply_scope === 'BRAND' || body.brand_id ? 'BRAND' : 'ALL',
+        apply_scope: body.apply_scope === 'CATEGORY' || body.category
+          ? 'CATEGORY'
+          : (body.apply_scope === 'BRAND' || body.brand_id ? 'BRAND' : 'ALL'),
+        category: body.category || null,
         brand_id: body.brand_id ? Number(body.brand_id) : null,
         issue_target: body.issue_target === 'ORDER_COUNT' ? 'ORDER_COUNT' : 'ALL',
         order_count_min: body.order_count_min === '' || body.order_count_min == null ? null : Number(body.order_count_min),
@@ -1160,7 +1163,18 @@
       if (body.discount_value !== undefined) coupon.discount_value = Number(body.discount_value || 0);
       if (body.min_order_amount !== undefined) coupon.min_order_amount = Number(body.min_order_amount || 0);
       if (body.brand_id !== undefined) coupon.brand_id = body.brand_id ? Number(body.brand_id) : null;
-      coupon.apply_scope = coupon.brand_id ? 'BRAND' : 'ALL';
+      if (body.category !== undefined) coupon.category = body.category || null;
+      if (body.apply_scope === 'CATEGORY' || coupon.category) {
+        coupon.apply_scope = 'CATEGORY';
+        coupon.brand_id = null;
+      } else if (body.apply_scope === 'BRAND' || coupon.brand_id) {
+        coupon.apply_scope = 'BRAND';
+        coupon.category = null;
+      } else {
+        coupon.apply_scope = 'ALL';
+        coupon.brand_id = null;
+        coupon.category = null;
+      }
       if (body.issue_target !== undefined) coupon.issue_target = body.issue_target === 'ORDER_COUNT' ? 'ORDER_COUNT' : 'ALL';
       if (body.starts_at !== undefined) coupon.starts_at = body.starts_at;
       if (body.ends_at !== undefined) coupon.ends_at = body.ends_at;
@@ -1431,7 +1445,26 @@
       salon.salon_code = fromSelf || fromSeed || defaultSalonCode(salon);
       ProductCatalog.ensureSalonPricing(salon);
     });
-    db.coupons = db.coupons || seed.coupons || [];
+    db.coupons = db.coupons || [];
+    (seed.coupons || []).forEach((seedCoupon) => {
+      const local = db.coupons.find((c) => Number(c.id) === Number(seedCoupon.id));
+      if (!local) {
+        db.coupons.push(JSON.parse(JSON.stringify(seedCoupon)));
+        return;
+      }
+      if (seedCoupon.apply_scope && !local.apply_scope) local.apply_scope = seedCoupon.apply_scope;
+      if (seedCoupon.category && !local.category) local.category = seedCoupon.category;
+      if (seedCoupon.apply_scope === 'CATEGORY') {
+        local.apply_scope = 'CATEGORY';
+        local.category = seedCoupon.category || local.category;
+        local.brand_id = null;
+      }
+      if (seedCoupon.status === 'ACTIVE' && local.status !== 'STOPPED') local.status = 'ACTIVE';
+      if (seedCoupon.ends_at && (!local.ends_at || local.ends_at < seedCoupon.ends_at)) {
+        local.ends_at = seedCoupon.ends_at;
+      }
+    });
+    if (!db.coupons.length) db.coupons = JSON.parse(JSON.stringify(seed.coupons || []));
     db.point_grants = db.point_grants || seed.point_grants || [];
     db.banners = db.banners || seed.banners || [];
     db.banners.forEach((banner) => {
@@ -1444,6 +1477,7 @@
       if (!coupon.issue_target) coupon.issue_target = 'ALL';
       if (coupon.issued_count == null) coupon.issued_count = 0;
       if (coupon.used_count == null) coupon.used_count = 0;
+      if (coupon.apply_scope === 'CATEGORY' && !coupon.category) coupon.category = '샴푸';
     });
     db.products.forEach((product) => ProductCatalog.fillProductDefaults(product));
     db.orders.forEach((order) => {
