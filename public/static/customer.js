@@ -726,20 +726,17 @@ function providerLabel(provider) {
 }
 
 function providerAccounts(provider) {
-  // 실제 OAuth 연동 전: 계정 선택 UI 데모. auth_id는 시드 기존 회원과 고정 매칭.
+  // 데모: 폰에선 보통 계정 1개처럼 보이게 제공자당 1명만. auth_id는 시드 기존 회원 고정.
   const device = getDeviceId().slice(-4);
   const map = {
     kakao: [
       { slot: 'minsu', name: '김민수', handle: 'minsu@kakao.com', auth_id: 'kakao_demo_minsu', existing: true },
-      { slot: 'seoyeon', name: '이서연', handle: 'seoyeon@kakao.com', auth_id: 'kakao_004', existing: true },
     ],
     google: [
       { slot: 'jihoon', name: '박지훈', handle: 'jihoon@gmail.com', auth_id: 'kakao_003', existing: true },
-      { slot: 'yujin', name: '최유진', handle: 'yujin@gmail.com', auth_id: null, existing: false },
     ],
     naver: [
       { slot: 'mirae', name: '김미래', handle: 'mirae@naver.com', auth_id: 'kakao_002', existing: true },
-      { slot: 'sohee', name: '한소희', handle: 'sohee@naver.com', auth_id: null, existing: false },
     ],
     apple: [
       { slot: 'sejin', name: '오세진', handle: 'sejin_' + device + '@privaterelay.appleid.com', auth_id: null, existing: false },
@@ -790,8 +787,6 @@ function renderLogin() {
           </button>
         </div>
 
-        <p class="login-flow-hint">기존 회원: 계정 선택만 · 신규: 이름·휴대폰·배송주소 후 입장</p>
-
         <div style="text-align:center;margin-top:18px">
           <button onclick="loginAsDemo()" class="demo-link" style="display:inline">데모 계정</button>
           <span style="color:#ccc;margin:0 8px">·</span>
@@ -838,17 +833,16 @@ function renderSocialAccountPicker() {
             <button type="button" class="account-pick-row" onclick="selectSocialAccount('${p.provider}','${a.slot}','${a.name.replace(/'/g, '')}')">
               <div class="account-pick-avatar">${a.name.slice(0, 1)}</div>
               <div class="account-pick-meta">
-                <div class="account-pick-name">${a.name}${a.existing ? ' <span class="account-existing-chip">기존 회원</span>' : ' <span class="account-new-chip">신규</span>'}</div>
-                <div class="account-pick-handle">${a.handle}${a.existing ? ' · 선택만 하면 입장' : ' · 가입 정보 입력'}</div>
+                <div class="account-pick-name">${a.name}</div>
+                <div class="account-pick-handle">${a.handle}</div>
               </div>
               <i class="fas fa-chevron-right" style="color:#ccc;font-size:12px"></i>
             </button>
           `).join('')}
         </div>
         <button type="button" class="account-pick-other" onclick="useAnotherSocialAccount('${p.provider}')">
-          다른 ${label} 계정으로 신규 가입
+          다른 ${label} 계정 사용
         </button>
-        <p class="login-flow-hint" style="margin-top:14px">데모: 기존 회원은 계정만 선택하면 바로 입장합니다. 실서비스에서는 ${label} 로그인 창이 열립니다.</p>
       </div>
     </div>
   `;
