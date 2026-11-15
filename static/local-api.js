@@ -1392,6 +1392,8 @@
           if (!user.current_salon_id) user.current_salon_id = demo.current_salon_id;
           if (!user.mapped_designer_id) user.mapped_designer_id = demo.mapped_designer_id;
           user.phone_verified = true;
+          if (!Array.isArray(user.coupon_ids) || !user.coupon_ids.length) user.coupon_ids = [1];
+          if (!(Number(user.points) > 0)) user.points = demo.name === '김민수' ? 12000 : 8000;
         } else {
           db.users.push({
             id: nextId(db.users),
@@ -1404,7 +1406,8 @@
             current_salon_id: demo.current_salon_id,
             mapped_designer_id: demo.mapped_designer_id,
             created_at: nowStamp(),
-            points: 0,
+            points: demo.name === '김민수' ? 12000 : 8000,
+            coupon_ids: [1],
           });
         }
       });
