@@ -53,6 +53,7 @@ let state = {
 
 const AUTH_STORE_KEY = 'salon_auth';
 const DEVICE_ID_KEY = 'salon_device_id';
+const LAST_PROVIDER_KEY = 'salon_last_provider';
 
 // ---- Session Storage for demo user ----
 function loadUser() {
@@ -83,6 +84,7 @@ function rememberAuth(provider, authId, remember) {
     auth_id: authId,
     remember: !!remember,
   }));
+  if (provider) rememberLastProvider(provider);
 }
 
 function readAuth() {
@@ -91,6 +93,26 @@ function readAuth() {
   } catch (e) {
     return null;
   }
+}
+
+function rememberLastProvider(provider) {
+  if (!provider) return;
+  localStorage.setItem(LAST_PROVIDER_KEY, String(provider));
+}
+
+function readLastProvider() {
+  return localStorage.getItem(LAST_PROVIDER_KEY) || (readAuth() && readAuth().provider) || '';
+}
+
+function renderSocialBtn(provider, label, extraClass, iconHtml) {
+  const recent = readLastProvider() === provider;
+  return `
+    <div class="social-btn-wrap">
+      ${recent ? '<span class="recent-use-bubble">최근 사용</span>' : ''}
+      <button type="button" class="social-btn ${extraClass}" onclick="startSocialLogin('${provider}')">
+        <span class="social-ico">${iconHtml}</span>${label}
+      </button>
+    </div>`;
 }
 
 function clearSessionOnly() {
@@ -773,24 +795,16 @@ function renderLogin() {
         <p class="login-sub">소셜 계정으로 가입하면, 매장 코드 등록 후 VIP 쇼핑이 연결됩니다.</p>
 
         <div class="social-login-stack">
-          <button type="button" class="social-btn social-kakao" onclick="startSocialLogin('kakao')">
-            <span class="social-ico">K</span>카카오로 시작하기
-          </button>
-          <button type="button" class="social-btn social-google" onclick="startSocialLogin('google')">
-            <span class="social-ico">G</span>Google로 시작하기
-          </button>
-          <button type="button" class="social-btn social-naver" onclick="startSocialLogin('naver')">
-            <span class="social-ico">N</span>네이버로 시작하기
-          </button>
-          <button type="button" class="social-btn social-apple" onclick="startSocialLogin('apple')">
-            <span class="social-ico"><i class="fab fa-apple"></i></span>Apple로 시작하기
-          </button>
+          ${renderSocialBtn('kakao', '카카오로 시작하기', 'social-kakao', 'K')}
+          ${renderSocialBtn('google', 'Google로 시작하기', 'social-google', 'G')}
+          ${renderSocialBtn('naver', '네이버로 시작하기', 'social-naver', 'N')}
+          ${renderSocialBtn('apple', 'Apple로 시작하기', 'social-apple', '<i class="fab fa-apple"></i>')}
         </div>
 
         <div style="text-align:center;margin-top:18px">
           <button onclick="loginAsDemo()" class="demo-link" style="display:inline">데모 계정</button>
           <span style="color:#ccc;margin:0 8px">·</span>
-          <button onclick="loginAsOwner()" class="demo-link" style="display:inline">원장</button>
+          <button onclick="loginAsOwner()" class="demo-link" style="display:inline">내 매장 원장</button>
           <span style="color:#ccc;margin:0 8px">·</span>
           <button onclick="loginAsStaff()" class="demo-link" style="display:inline">담당자</button>
         </div>
@@ -1056,6 +1070,7 @@ async function submitSocialProfile() {
 
 async function finishSocialAuth(res, provider, authId) {
   rememberAuth(provider, authId, true);
+  rememberLastProvider(provider);
   saveUser(res.data);
   state.pendingSocial = null;
   state.loginStep = 'social';
@@ -1302,6 +1317,9 @@ async function submitSalonSetup() {
   }
   if (res.data && res.data.user) saveUser(res.data.user);
   if (res.data && res.data.salon) rememberSalon(res.data.salon);
+  const auth = readAuth();
+  if (auth && auth.provider) rememberLastProvider(auth.provider);
+  else rememberLastProvider('kakao');
   await loadAppData();
   state.adminTab = 'manage';
   navigate('store');
@@ -1315,17 +1333,19 @@ async function submitSalonSetup() {
 }
 
 async function loginAsOwner() {
-  const res = await api('/api/users', 'POST', {
-    kakao_id: 'owner-salon-1',
-    name: '김지수',
-    phone: '010-1234-5678',
-  });
-  if (res.success) {
-    saveUser(res.data);
-    await loadAppData();
-    navigate('home');
-    showToast('프로헤어 강남점 원장 · 헤더 관리자 버튼을 확인하세요', 'success');
+  const res = await api('/api/auth/demo-owner', 'POST', {});
+  if (!res.success || !res.data) {
+    showToast(res.error || '원장 계정을 찾지 못했습니다', 'error');
+    return;
   }
+  const provider = res.provider || res.data.auth_provider || 'kakao';
+  const authId = res.auth_id || res.data.kakao_id || '';
+  if (authId) rememberAuth(provider, authId, true);
+  else rememberLastProvider(provider);
+  saveUser(res.data);
+  await loadAppData();
+  navigate('home');
+  showToast(res.message || ((res.salon_name || res.data.salon_name || '매장') + ' 원장으로 로그인했습니다'), 'success');
 }
 
 async function loginAsStaff() {

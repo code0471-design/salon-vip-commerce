@@ -1036,7 +1036,32 @@ body {
   font-family: var(--font);
 }
 
-.social-login-stack { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.social-login-stack { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+.social-btn-wrap { position: relative; }
+.recent-use-bubble {
+  position: absolute;
+  top: -10px;
+  right: 12px;
+  z-index: 2;
+  background: #1a1a2e;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 10px;
+  border-radius: 999px;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+  pointer-events: none;
+}
+.recent-use-bubble::after {
+  content: '';
+  position: absolute;
+  left: 18px;
+  bottom: -5px;
+  border: 5px solid transparent;
+  border-top-color: #1a1a2e;
+  border-bottom: 0;
+}
 .social-btn {
   width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
   border: none; border-radius: 12px; padding: 14px 16px;

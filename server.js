@@ -968,6 +968,36 @@ const routes = [
     }
     return { data: { phone: phoneDigits(body.phone), verified: true }, extra: { message: '휴대폰 인증이 완료되었습니다' } };
   }],
+  ['POST', /^\/api\/auth\/demo-owner$/, () => {
+    const ranked = (db.salons || []).slice().sort((a, b) => {
+      const ta = String(a.created_at || '');
+      const tb = String(b.created_at || '');
+      if (ta !== tb) return tb.localeCompare(ta);
+      return Number(b.id || 0) - Number(a.id || 0);
+    });
+    for (const salon of ranked) {
+      const byPhone = (db.users || []).find((u) => phoneKey(u.phone) && phoneKey(u.phone) === phoneKey(salon.owner_phone));
+      const byOwned = (db.users || []).find((u) => {
+        const owned = ownedSalon(u);
+        return owned && Number(owned.id) === Number(salon.id);
+      });
+      const user = byPhone || byOwned;
+      if (!user) continue;
+      user.auth_provider = user.auth_provider || 'kakao';
+      if (!user.current_salon_id) user.current_salon_id = salon.id;
+      save();
+      return {
+        data: publicUser(user),
+        extra: {
+          message: (salon.salon_name || '매장') + ' 원장으로 로그인했습니다',
+          salon_name: salon.salon_name || '',
+          provider: user.auth_provider || 'kakao',
+          auth_id: user.kakao_id || '',
+        },
+      };
+    }
+    return { status: 404, error: '개설된 원장 계정이 없습니다. 먼저 관리자로 매장을 만들어 주세요.' };
+  }],
   ['POST', /^\/api\/auth\/social$/, (req) => {
     const body = req.body || {};
     const provider = String(body.provider || '').trim().toLowerCase();
