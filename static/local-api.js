@@ -259,8 +259,10 @@
     const user = db.users.find((u) => u.id === order.user_id);
     const salon = findSalon(order.salon_id);
     let designer = findDesigner(order.designer_id);
+    // 소속 매장이 바뀌어도 과거 주문 담당자는 그 주문 매장 기준으로만 보정
     if (!designer && user && user.mapped_designer_id) {
-      designer = findDesigner(user.mapped_designer_id);
+      const mapped = findDesigner(user.mapped_designer_id);
+      if (mapped && Number(mapped.salon_id) === Number(order.salon_id)) designer = mapped;
     }
     return {
       ...order,
@@ -352,10 +354,14 @@
     const designer = db.designers.find((d) =>
       d.id === Number(designerId) && d.salon_id === salon.id && d.status === 'ACTIVE');
     if (!designer) return { error: '담당자를 찾을 수 없습니다' };
+    // 소속만 갱신. 과거 주문(user_id / order.salon_id)은 절대 수정·삭제하지 않음.
+    if (user.current_salon_id && Number(user.current_salon_id) !== Number(salon.id)) {
+      user.previous_salon_id = user.current_salon_id;
+    }
     user.current_salon_id = salon.id;
     user.mapped_designer_id = designer.id;
     save();
-    return { user: publicUser(user) };
+    return { user: publicUser(user), order_count: userOrders(user.id).length };
   }
 
   function recentSettlementMonths(count) {
@@ -1021,17 +1027,59 @@
       const designerId = body.designer_id ? Number(body.designer_id) : null;
       if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
       if (!designerId) return { status: 400, error: '담당자를 선택해주세요' };
-      if (user.current_salon_id && user.current_salon_id !== salon.id) {
-        return { status: 400, error: '이미 등록된 매장이 있습니다. 고객당 매장은 1곳만 가능합니다' };
+      const designer = db.designers.find((d) =>
+        d.id === Number(designerId) && d.salon_id === salon.id && d.status === 'ACTIVE');
+      if (!designer) return { status: 400, error: '담당자를 찾을 수 없습니다' };
+      if (user.current_salon_id && Number(user.current_salon_id) !== Number(salon.id)) {
+        const from = findSalon(user.current_salon_id);
+        return {
+          data: {
+            needs_confirm: true,
+            from_salon_id: from ? from.id : user.current_salon_id,
+            from_salon_name: from ? from.salon_name : '이전 매장',
+            to_salon_id: salon.id,
+            to_salon_name: salon.salon_name,
+            designer_id: designer.id,
+            designer_name: designer.designer_name,
+            order_count: db.orders.filter((o) => Number(o.user_id) === Number(user.id)).length,
+          },
+          extra: { message: '매장 변경 확인이 필요합니다' },
+        };
       }
       const result = assignSalon(user, salon.id, designerId);
       if (result.error) return { status: 400, error: result.error };
       return { data: result.user, extra: { message: `${salon.salon_name} · 담당자 등록이 완료되었습니다` } };
     }],
-    ['POST', /^\/api\/users\/(\d+)\/confirm-switch$/, () => ({
-      status: 400,
-      error: '매장 변경은 불가합니다. 고객당 매장은 1곳만 가능합니다',
-    })],
+    ['POST', /^\/api\/users\/(\d+)\/confirm-switch$/, (req, id) => {
+      const user = db.users.find((u) => u.id === Number(id));
+      if (!user) return { status: 404, error: '고객을 찾을 수 없습니다' };
+      const body = req.body || {};
+      let salon = body.salon_id ? findSalon(body.salon_id) : null;
+      if (!salon && body.salon_code) salon = findSalonByCode(body.salon_code);
+      const designerId = body.designer_id ? Number(body.designer_id) : null;
+      if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
+      if (!designerId) return { status: 400, error: '담당자를 선택해주세요' };
+      const beforeIds = db.orders
+        .filter((o) => Number(o.user_id) === Number(user.id))
+        .map((o) => ({ id: o.id, salon_id: o.salon_id }));
+      const result = assignSalon(user, salon.id, designerId);
+      if (result.error) return { status: 400, error: result.error };
+      const after = db.orders.filter((o) => Number(o.user_id) === Number(user.id));
+      if (after.length !== beforeIds.length
+        || beforeIds.some((row) => {
+          const kept = after.find((o) => o.id === row.id);
+          return !kept || Number(kept.salon_id) !== Number(row.salon_id);
+        })) {
+        return { status: 500, error: '주문 내역 보존에 실패했습니다' };
+      }
+      return {
+        data: result.user,
+        extra: {
+          message: `${salon.salon_name}으로 이동했습니다 · 이전 주문 ${after.length}건은 그대로 유지됩니다`,
+          orders: userOrders(user.id),
+        },
+      };
+    }],
     ['GET', /^\/api\/brands$/, () => ({ data: db.brands })],
     ['POST', /^\/api\/brands$/, (req) => {
       const body = req.body || {};
