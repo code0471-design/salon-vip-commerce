@@ -1260,12 +1260,12 @@
       if (!user.current_salon_id) return { status: 400, error: '먼저 매장 코드를 등록해주세요' };
       const salon = findSalon(user.current_salon_id);
       if (!salon) return { status: 400, error: '등록된 살롱을 찾을 수 없습니다' };
-      // 담당자는 있으면 귀속, 없어도 주문은 진행 (고객 결제 화면에서 담당자 선택 문구 노출 금지)
+      // 담당자는 매핑되어 있으면 귀속(퇴사여도 표시명과 일치). 없어도 주문은 진행.
       let designer = null;
       if (user.mapped_designer_id) {
         designer = db.designers.find((d) =>
-          d.id === Number(user.mapped_designer_id) && d.salon_id === salon.id && d.status === 'ACTIVE')
-          || null;
+          d.id === Number(user.mapped_designer_id) && Number(d.salon_id) === Number(salon.id)
+          && d.status !== 'INVITED') || null;
       }
       const items = [];
       for (const item of body.items || []) {
@@ -1424,6 +1424,31 @@
     (db.users || []).forEach((user) => {
       if (user.points == null) user.points = 0;
     });
+    // 고객에게 아직 담당으로 매핑된 디자이너는 ACTIVE로 맞춤 (이수진 RESIGNED ↔ UI 표기 불일치 방지)
+    (function ensureMappedDesignersActive() {
+      (seed.designers || []).forEach((seedDesigner) => {
+        const local = (db.designers || []).find((d) => Number(d.id) === Number(seedDesigner.id));
+        if (!local) {
+          db.designers.push(JSON.parse(JSON.stringify(seedDesigner)));
+          return;
+        }
+        if (seedDesigner.status && local.status !== seedDesigner.status) {
+          // 시드가 ACTIVE인데 로컬만 RESIGNED면 복구 (데모 담당 이수진)
+          if (seedDesigner.status === 'ACTIVE' && local.status === 'RESIGNED') {
+            local.status = 'ACTIVE';
+            delete local.resigned_at;
+          }
+        }
+      });
+      (db.users || []).forEach((user) => {
+        if (!user.mapped_designer_id) return;
+        const d = (db.designers || []).find((row) => Number(row.id) === Number(user.mapped_designer_id));
+        if (d && d.status === 'RESIGNED' && Number(d.salon_id) === Number(user.current_salon_id)) {
+          d.status = 'ACTIVE';
+          delete d.resigned_at;
+        }
+      });
+    })();
     // 데모 소셜 계정(김민수 등)을 시드와 고정 auth_id로 맞춤 — 매번 신규가입 화면 방지
     (function ensureDemoSocialUsers() {
       const demos = [
@@ -1461,7 +1486,8 @@
           if (!user.phone) user.phone = demo.phone;
           if (!user.shipping_address) user.shipping_address = demo.shipping_address;
           if (!user.current_salon_id) user.current_salon_id = demo.current_salon_id;
-          if (!user.mapped_designer_id) user.mapped_designer_id = demo.mapped_designer_id;
+          // 데모 담당은 시드와 항상 맞춤 (이수진 등)
+          user.mapped_designer_id = demo.mapped_designer_id;
           user.phone_verified = true;
           if (!Array.isArray(user.coupon_ids) || !user.coupon_ids.length) user.coupon_ids = [1];
           if (!(Number(user.points) > 0)) user.points = demo.name === '김민수' ? 12000 : 8000;
