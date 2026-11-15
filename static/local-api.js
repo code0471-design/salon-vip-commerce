@@ -1424,6 +1424,15 @@
     (db.users || []).forEach((user) => {
       if (user.points == null) user.points = 0;
     });
+    // 시드 디자이너 휴대폰·상태 보강
+    (function ensureDesignerSeedFields() {
+      (seed.designers || []).forEach((seedDesigner) => {
+        const local = (db.designers || []).find((d) => Number(d.id) === Number(seedDesigner.id));
+        if (!local) return;
+        if (!local.phone && seedDesigner.phone) local.phone = seedDesigner.phone;
+        if (!local.created_at && seedDesigner.created_at) local.created_at = seedDesigner.created_at;
+      });
+    })();
     // 고객에게 아직 담당으로 매핑된 디자이너는 ACTIVE로 맞춤 (이수진 RESIGNED ↔ UI 표기 불일치 방지)
     (function ensureMappedDesignersActive() {
       (seed.designers || []).forEach((seedDesigner) => {
