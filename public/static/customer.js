@@ -2436,6 +2436,12 @@ async function placeOrder() {
     showToast(res.message || '주문이 완료되었습니다', 'success');
     setTimeout(() => navigate('orders'), 1500);
   } else {
+    const err = String(res.error || '');
+    if (/담당자/.test(err)) {
+      // 결제 PG 미연동 데모: 담당자 관련 문구는 고객에게 보여 주지 않음
+      showToast('결제 연동 준비 중입니다', 'error');
+      return;
+    }
     showToast(res.error || '주문 실패', 'error');
   }
 }
