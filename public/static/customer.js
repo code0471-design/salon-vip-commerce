@@ -99,6 +99,7 @@ function clearSessionOnly() {
   state.storeView = '';
   state.adminTab = 'sales';
   state.manageDesigners = [];
+  state.manageDraft = null;
   state.cart = [];
   state.pendingSocial = null;
   state.loginStep = 'social';
