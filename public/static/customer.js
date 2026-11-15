@@ -2374,21 +2374,55 @@ async function requestOrderCancel(orderId) {
   showToast(res.message || '취소 요청이 접수되었습니다', 'success');
 }
 
+const ORDER_FALLBACK_IMG = 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=300&q=80';
+
+function orderItemImage(item) {
+  const product = item && item.product_id != null ? findCatalogProduct(item.product_id) : null;
+  return (product && product.image_url) || ORDER_FALLBACK_IMG;
+}
+
+function openProductFromOrder(productId, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const id = Number(productId);
+  if (!id || !findCatalogProduct(id)) {
+    showToast('상품을 찾을 수 없습니다', 'error');
+    return;
+  }
+  openProductDetail(id);
+}
+
 function renderOrderCard(o) {
   const items = JSON.parse(o.order_items || '[]');
   const badge = orderStatusBadge(o);
-  const productTitle = items.length
-    ? (items.slice(0, 2).map((i) => i.name).join(' · ') + (items.length > 2 ? ` 외 ${items.length - 2}건` : ''))
-    : '상품 정보 없음';
   const couponDisc = Number(o.coupon_discount || 0);
   const pointsUsed = Number(o.points_used || 0);
+  const shown = items.slice(0, 3);
+  const extra = Math.max(0, items.length - shown.length);
   return `
     <div class="order-card">
       <div class="order-card-top">
         <span style="font-size:11px;color:var(--muted)">#${o.id} · ${new Date(o.created_at).toLocaleDateString('ko-KR')}</span>
         <span class="order-status-badge status-${badge.cls}">${escText(badge.label)}</span>
       </div>
-      <div class="order-product-title">${escText(productTitle)}</div>
+      <div class="order-product-list">
+        ${shown.length ? shown.map((i) => {
+          const pid = Number(i.product_id) || 0;
+          const img = orderItemImage(i);
+          const clickable = pid ? `onclick="openProductFromOrder(${pid}, event)"` : '';
+          return `
+          <div class="order-product-row${pid ? ' is-link' : ''}" ${clickable}>
+            <img class="order-thumb" src="${img}" alt="" onerror="this.src='${ORDER_FALLBACK_IMG}'">
+            <div class="order-product-meta">
+              <div class="order-product-title">${escText(i.name || '상품')}</div>
+              <div class="order-product-qty">수량 ${Number(i.qty || 0)}개</div>
+            </div>
+          </div>`;
+        }).join('') : `<div class="order-product-title">상품 정보 없음</div>`}
+        ${extra ? `<div class="order-product-extra">외 ${extra}건</div>` : ''}
+      </div>
       <div class="order-salon-sub">${escText(o.salon_name || '')}${orderDesignerLabel(o) ? ' · ' + escText(orderDesignerLabel(o)) : ''}</div>
       <div class="order-meta-line">
         ${escText(orderPaymentLabel(o.payment_status))} · ${escText(orderShippingLabel(o.shipping_status))}
@@ -2478,7 +2512,6 @@ function renderOrderDetailPage() {
   const canCancel = canRequestOrderCancel(o);
   const orderNo = String(o.id);
   const payOpen = state.orderPayOpen !== false;
-  const fallbackImg = 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=300&q=80';
 
   return `
     <div class="od-page od-page-ref">
@@ -2497,14 +2530,16 @@ function renderOrderDetailPage() {
           </div>
           ${items.map((i) => {
             const product = findCatalogProduct(i.product_id);
-            const img = (product && product.image_url) || fallbackImg;
+            const img = orderItemImage(i);
             const line = (Number(i.price) || 0) * (Number(i.qty) || 0);
             const original = product ? Number(product.original_price || 0) * (Number(i.qty) || 0) : 0;
+            const pid = Number(i.product_id) || 0;
+            const openAttr = pid ? `onclick="openProductFromOrder(${pid}, event)"` : '';
             return `
-            <div class="od-product-row">
-              <img class="od-thumb" src="${img}" alt="" onerror="this.src='${fallbackImg}'">
+            <div class="od-product-row${pid ? ' is-link' : ''}">
+              <img class="od-thumb" src="${img}" alt="" ${openAttr} onerror="this.src='${ORDER_FALLBACK_IMG}'">
               <div class="od-product-meta">
-                <div class="od-product-name">${escText(i.name || '상품')}</div>
+                <div class="od-product-name"${openAttr}>${escText(i.name || '상품')}</div>
                 <div class="od-qty-chip">수량 ${Number(i.qty || 0)}개</div>
                 <div class="od-price-row">
                   <span class="od-price-now">${line.toLocaleString()}원</span>
