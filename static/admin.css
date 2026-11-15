@@ -107,6 +107,34 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 
 /* ---- Page ---- */
 .page { padding: 28px; }
+.data-source-banner {
+  margin: 12px 28px 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.data-source-banner i { margin-top: 2px; flex-shrink: 0; }
+.data-source-banner.pages {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e3a8a;
+}
+.data-source-banner.local {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+}
+.data-source-banner a { color: inherit; font-weight: 700; text-decoration: underline; }
+.data-source-banner code {
+  font-size: 12px;
+  background: rgba(0,0,0,0.06);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
 
 /* ---- Stats Grid ---- */
 .stats-grid {
