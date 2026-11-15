@@ -31,12 +31,58 @@
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   }
 
+  function normalizeSalonCode(value) {
+    return String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+  }
+
+  function defaultSalonCode(salon) {
+    return 'S' + String(salon.id).padStart(3, '0');
+  }
+
   function findSalon(id) {
     return db.salons.find((s) => s.id === Number(id));
   }
 
+  function findSalonByCode(code) {
+    const normalized = normalizeSalonCode(code);
+    if (!normalized) return null;
+    return db.salons.find((s) => normalizeSalonCode(s.salon_code) === normalized) || null;
+  }
+
   function findDesigner(id) {
     return db.designers.find((d) => d.id === Number(id));
+  }
+
+  function activeDesignersForSalon(salonId) {
+    return db.designers
+      .filter((d) => d.salon_id === Number(salonId) && d.status === 'ACTIVE')
+      .map((d) => ({
+        id: d.id,
+        designer_name: d.designer_name,
+        profile_img: d.profile_img,
+        status: d.status,
+      }));
+  }
+
+  function uniqueSalonCode(preferred, excludeId) {
+    let base = normalizeSalonCode(preferred) || 'SALON';
+    let candidate = base;
+    let n = 1;
+    while (db.salons.some((s) => s.id !== excludeId && normalizeSalonCode(s.salon_code) === candidate)) {
+      n += 1;
+      candidate = `${base}${n}`;
+    }
+    return candidate;
+  }
+
+  function orderPointsEarned(items) {
+    const blocked = new Set((db.point_blocked_ids || []).map(Number));
+    return items.reduce((sum, item) => {
+      const product = db.products.find((p) => p.id === item.product_id);
+      if (!product || blocked.has(product.id) || product.point_use_disabled) return sum;
+      const rate = Math.max(0, Number(product.earn_points_rate) || 0);
+      return sum + Math.floor(item.price * item.qty * rate / 100);
+    }, 0);
   }
 
   function phoneKey(value) {
@@ -168,12 +214,12 @@
   function assignSalon(user, salonId, designerId) {
     const salon = findSalon(salonId);
     if (!salon) return { error: '살롱을 찾을 수 없습니다' };
-    let designer = null;
-    if (designerId) {
-      designer = db.designers.find((d) => d.id === Number(designerId) && d.salon_id === salon.id && d.status === 'ACTIVE');
-    }
+    if (!designerId) return { error: '담당자를 선택해주세요' };
+    const designer = db.designers.find((d) =>
+      d.id === Number(designerId) && d.salon_id === salon.id && d.status === 'ACTIVE');
+    if (!designer) return { error: '담당자를 찾을 수 없습니다' };
     user.current_salon_id = salon.id;
-    user.mapped_designer_id = designer ? designer.id : null;
+    user.mapped_designer_id = designer.id;
     save();
     return { user: publicUser(user) };
   }
@@ -323,12 +369,26 @@
       return { data: { id: product.id, deleted_at: product.deleted_at } };
     }],
     ['GET', /^\/api\/salons$/, () => ({ data: db.salons.map(publicSalon) })],
+    ['GET', /^\/api\/salons\/lookup$/, (req) => {
+      const code = normalizeSalonCode(req.query.get('code'));
+      if (!code) return { status: 400, error: '매장 코드를 입력해주세요' };
+      const salon = findSalonByCode(code);
+      if (!salon) return { status: 404, error: '매장 코드를 찾을 수 없습니다' };
+      return {
+        data: {
+          salon: publicSalon(salon),
+          designers: activeDesignersForSalon(salon.id),
+        },
+      };
+    }],
     ['POST', /^\/api\/salons$/, (req) => {
       const body = req.body || {};
       if (!body.salon_name || !body.owner_name || !body.owner_phone) return { status: 400, error: '필수 항목을 입력하세요' };
+      const salonId = nextId(db.salons);
       const salon = {
-        id: nextId(db.salons),
+        id: salonId,
         salon_name: body.salon_name,
+        salon_code: uniqueSalonCode(body.salon_code || defaultSalonCode({ id: salonId }), salonId),
         logo_url: `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(body.salon_name)}`,
         owner_name: body.owner_name,
         owner_phone: body.owner_phone,
@@ -350,6 +410,11 @@
       ['salon_name', 'owner_name', 'owner_phone', 'bank_account'].forEach((key) => {
         if (body[key] !== undefined) salon[key] = body[key];
       });
+      if (body.salon_code !== undefined) {
+        const code = normalizeSalonCode(body.salon_code);
+        if (!code) return { status: 400, error: '매장 코드를 입력해주세요' };
+        salon.salon_code = uniqueSalonCode(code, salon.id);
+      }
       save();
       return { data: publicSalon(salon) };
     }],
@@ -418,7 +483,18 @@
       const designers = db.designers
         .filter((d) => d.salon_id === salon.id)
         .map((d) => ({ id: d.id, designer_name: d.designer_name, profile_img: d.profile_img, status: d.status }));
-      return { data: { salon: { id: salon.id, salon_name: salon.salon_name, logo_url: salon.logo_url }, designers, qr_url: `/scan?salon=${salon.id}` } };
+      return {
+        data: {
+          salon: {
+            id: salon.id,
+            salon_name: salon.salon_name,
+            salon_code: salon.salon_code,
+            logo_url: salon.logo_url,
+          },
+          designers,
+          qr_url: `/scan?code=${encodeURIComponent(salon.salon_code || '')}`,
+        },
+      };
     }],
     ['GET', /^\/api\/salons\/(\d+)\/stats$/, (req, id) => {
       const salon = findSalon(id);
@@ -520,10 +596,12 @@
     ['POST', /^\/api\/users\/(\d+)\/scan-qr$/, (req, id) => {
       const user = db.users.find((u) => u.id === Number(id));
       if (!user) return { status: 404, error: '고객을 찾을 수 없습니다' };
-      const salonId = Number(req.body.salon_id);
-      const designerId = req.body.designer_id ? Number(req.body.designer_id) : null;
-      const salon = findSalon(salonId);
+      const body = req.body || {};
+      let salon = body.salon_id ? findSalon(body.salon_id) : null;
+      if (!salon && body.salon_code) salon = findSalonByCode(body.salon_code);
+      const designerId = body.designer_id ? Number(body.designer_id) : null;
       if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
+      if (!designerId) return { status: 400, error: '담당자를 선택해주세요' };
       if (user.current_salon_id && user.current_salon_id !== salon.id) {
         const from = findSalon(user.current_salon_id);
         return {
@@ -541,14 +619,14 @@
       }
       const result = assignSalon(user, salon.id, designerId);
       if (result.error) return { status: 400, error: result.error };
-      return { data: result.user, extra: { message: `${salon.salon_name} 살롱으로 등록되었습니다` } };
+      return { data: result.user, extra: { message: `${salon.salon_name} · 담당자 등록이 완료되었습니다` } };
     }],
     ['POST', /^\/api\/users\/(\d+)\/confirm-switch$/, (req, id) => {
       const user = db.users.find((u) => u.id === Number(id));
       if (!user) return { status: 404, error: '고객을 찾을 수 없습니다' };
       const result = assignSalon(user, req.body.to_salon_id, req.body.designer_id);
       if (result.error) return { status: 400, error: result.error };
-      return { data: result.user, extra: { message: '메인 살롱이 변경되었습니다' } };
+      return { data: result.user, extra: { message: '메인 살롱과 담당자가 변경되었습니다' } };
     }],
     ['GET', /^\/api\/brands$/, () => ({ data: db.brands })],
     ['POST', /^\/api\/brands$/, (req) => {
@@ -745,16 +823,26 @@
     ['POST', /^\/api\/orders$/, (req) => {
       const body = req.body || {};
       const user = db.users.find((u) => u.id === Number(body.user_id));
-      const salon = findSalon(body.salon_id);
-      if (!user || !salon) return { status: 400, error: '고객 또는 살롱 정보가 없습니다' };
-      if (!user.current_salon_id) return { status: 400, error: '먼저 살롱을 등록해주세요' };
+      if (!user) return { status: 400, error: '고객 정보가 없습니다' };
+      if (!user.current_salon_id) return { status: 400, error: '먼저 매장 코드를 등록해주세요' };
+      const salon = findSalon(user.current_salon_id);
+      if (!salon) return { status: 400, error: '등록된 살롱을 찾을 수 없습니다' };
+      const isOwner = !!ownedSalon(user);
+      let designer = null;
+      if (user.mapped_designer_id) {
+        designer = db.designers.find((d) =>
+          d.id === Number(user.mapped_designer_id) && d.salon_id === salon.id && d.status === 'ACTIVE');
+      }
+      if (!isOwner && !designer) {
+        return { status: 400, error: '담당자를 선택한 뒤 주문할 수 있습니다' };
+      }
       const items = [];
       for (const item of body.items || []) {
         const product = db.products.find((p) => p.id === Number(item.product_id) && p.is_active);
-      if (!product) return { status: 400, error: '상품을 찾을 수 없습니다' };
-      const block = productSaleBlock(salon, product);
-      if (block) return { status: 400, error: `${product.name}은 ${block}` };
-      const qty = Number(item.qty || 1);
+        if (!product) return { status: 400, error: '상품을 찾을 수 없습니다' };
+        const block = productSaleBlock(salon, product);
+        if (block) return { status: 400, error: `${product.name}은 ${block}` };
+        const qty = Number(item.qty || 1);
         if (product.stock_quantity < qty) return { status: 400, error: `${product.name} 재고가 부족합니다` };
         const price = ProductCatalog.storeSellingPrice(salon, product);
         const salonPrice = ProductCatalog.salonCost(product);
@@ -769,14 +857,15 @@
         });
       }
       if (!items.length) return { status: 400, error: '주문 상품이 없습니다' };
-      const designer = db.designers.find((d) => d.id === Number(body.designer_id) && d.salon_id === salon.id && d.status === 'ACTIVE');
       const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
       const split = splitAmount(total, Boolean(designer));
       const storePayout = items.reduce((sum, item) => sum + (item.price - item.salon_price) * item.qty, 0);
+      const pointsEarned = orderPointsEarned(items);
       items.forEach((item) => {
         const product = db.products.find((p) => p.id === item.product_id);
         product.stock_quantity -= item.qty;
       });
+      if (pointsEarned > 0) user.points = (user.points || 0) + pointsEarned;
       const order = {
         id: nextId(db.orders),
         user_id: user.id,
@@ -786,6 +875,8 @@
         platform_amount: split.platform,
         salon_commission_amount: storePayout,
         designer_commission_amount: split.designer,
+        points_earned: pointsEarned,
+        points_used: 0,
         payment_status: 'PAID',
         shipping_status: 'READY',
         order_items: JSON.stringify(items),
@@ -793,7 +884,15 @@
       };
       db.orders.push(order);
       save();
-      return { data: publicOrder(order), extra: { message: '주문이 완료되었습니다' } };
+      return {
+        data: publicOrder(order),
+        extra: {
+          message: pointsEarned > 0
+            ? `주문이 완료되었습니다 · ${pointsEarned.toLocaleString()}P 적립`
+            : '주문이 완료되었습니다',
+          user: publicUser(user),
+        },
+      };
     }],
   ];
 
@@ -823,6 +922,10 @@
     });
     (db.salons || []).forEach((salon) => {
       if (!Array.isArray(salon.hidden_brand_ids)) salon.hidden_brand_ids = [];
+      const seedSalon = (seed.salons || []).find((item) => item.id === salon.id);
+      const fromSelf = normalizeSalonCode(salon.salon_code);
+      const fromSeed = normalizeSalonCode(seedSalon && seedSalon.salon_code);
+      salon.salon_code = fromSelf || fromSeed || defaultSalonCode(salon);
       ProductCatalog.ensureSalonPricing(salon);
     });
     db.coupons = db.coupons || seed.coupons || [];
@@ -840,7 +943,13 @@
       if (coupon.used_count == null) coupon.used_count = 0;
     });
     db.products.forEach((product) => ProductCatalog.fillProductDefaults(product));
-    db.orders.forEach((order) => { if (!order.shipping_status) order.shipping_status = 'READY'; });
+    db.orders.forEach((order) => {
+      if (!order.shipping_status) order.shipping_status = 'READY';
+      if (order.points_earned == null) order.points_earned = 0;
+    });
+    (db.users || []).forEach((user) => {
+      if (user.points == null) user.points = 0;
+    });
     save();
   })();
 

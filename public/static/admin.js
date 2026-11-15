@@ -329,6 +329,7 @@ function renderSalons() {
         <thead>
           <tr>
             <th>살롱명</th>
+            <th>매장 코드</th>
             <th>원장</th>
             <th>연락처</th>
             <th>계좌</th>
@@ -344,6 +345,7 @@ function renderSalons() {
               <div style="font-weight:600">${s.salon_name}</div>
               <div style="font-size:11px;color:#9ca3af">ID ${s.id}</div>
             </td>
+            <td><code style="font-weight:700;letter-spacing:0.04em">${s.salon_code || '-'}</code></td>
             <td>${s.owner_name || ''}</td>
             <td>${s.owner_phone || ''}</td>
             <td>${s.bank_account || '-'}</td>
@@ -356,7 +358,7 @@ function renderSalons() {
                 <button class="btn btn-sm btn-primary" onclick="openEditSalonModal(${s.id})">편집</button>
               </div>
             </td>
-          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:24px">살롱이 없습니다</td></tr>'}
+          </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">살롱이 없습니다</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -367,6 +369,7 @@ async function openAddSalonModal() {
   showModal(`
     <h3 style="font-size:18px;font-weight:800;margin-bottom:20px">살롱 추가</h3>
     <div class="form-group"><label class="form-label">살롱명 *</label><input class="form-input" id="m-salon-name" placeholder="살롱 이름"></div>
+    <div class="form-group"><label class="form-label">매장 코드</label><input class="form-input" id="m-salon-code" placeholder="예: GANGNAM (비우면 자동 생성)" style="text-transform:uppercase;letter-spacing:0.06em"></div>
     <div class="form-group"><label class="form-label">오너 이름 *</label><input class="form-input" id="m-owner-name" placeholder="대표자명"></div>
     <div class="form-group"><label class="form-label">연락처 *</label><input class="form-input" id="m-owner-phone" type="tel" placeholder="010-0000-0000"></div>
     <div class="form-group"><label class="form-label">계좌번호</label><input class="form-input" id="m-bank" placeholder="은행명 000-0000-0000"></div>
@@ -380,6 +383,7 @@ async function openAddSalonModal() {
 async function submitAddSalon() {
   const body = {
     salon_name: document.getElementById('m-salon-name').value,
+    salon_code: document.getElementById('m-salon-code').value,
     owner_name: document.getElementById('m-owner-name').value,
     owner_phone: document.getElementById('m-owner-phone').value,
     bank_account: document.getElementById('m-bank').value
@@ -387,7 +391,7 @@ async function submitAddSalon() {
   if (!body.salon_name || !body.owner_name || !body.owner_phone) { showToast('필수 항목을 입력하세요', 'error'); return; }
   const res = await api('/api/salons', 'POST', body);
   if (res.success) {
-    closeModal(); showToast('살롱이 추가되었습니다', 'success');
+    closeModal(); showToast(`살롱이 추가되었습니다 · 코드 ${res.data.salon_code}`, 'success');
     await loadPageData('salons');
   }
 }
@@ -418,13 +422,17 @@ async function viewSalonStats(id) {
 
 async function openQRModal(salonId) {
   const salon = adminState.salons.find(s => s.id === salonId);
+  const code = salon?.salon_code || '';
   showModal(`
     <div class="qr-display">
       <i class="fas fa-qrcode" style="font-size:100px;margin-bottom:16px;display:block;opacity:0.9"></i>
       <h3 style="font-size:18px;font-weight:800;margin-bottom:4px">${salon?.salon_name}</h3>
-      <p style="font-size:13px;opacity:0.7;margin-bottom:16px">이 QR 코드를 고객에게 제공하세요</p>
-      <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 16px;font-size:14px;font-family:monospace">
-        /scan?salon=${salonId}
+      <p style="font-size:13px;opacity:0.7;margin-bottom:12px">매장 코드를 고객에게 안내하세요</p>
+      <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:14px 18px;font-size:22px;font-weight:800;letter-spacing:0.14em;margin-bottom:12px">
+        ${code || '-'}
+      </div>
+      <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 16px;font-size:13px;font-family:monospace">
+        /scan?code=${encodeURIComponent(code)}
       </div>
     </div>
     <button class="btn btn-outline" style="width:100%;margin-top:16px" onclick="closeModal()">닫기</button>
@@ -437,6 +445,7 @@ async function openEditSalonModal(id) {
   showModal(`
     <h3 style="font-size:18px;font-weight:800;margin-bottom:20px">살롱 편집</h3>
     <div class="form-group"><label class="form-label">살롱명</label><input class="form-input" id="m-salon-name" value="${salon.salon_name}"></div>
+    <div class="form-group"><label class="form-label">매장 코드</label><input class="form-input" id="m-salon-code" value="${salon.salon_code || ''}" style="text-transform:uppercase;letter-spacing:0.06em"></div>
     <div class="form-group"><label class="form-label">오너 이름</label><input class="form-input" id="m-owner-name" value="${salon.owner_name}"></div>
     <div class="form-group"><label class="form-label">연락처</label><input class="form-input" id="m-owner-phone" value="${salon.owner_phone}"></div>
     <div class="form-group"><label class="form-label">계좌번호</label><input class="form-input" id="m-bank" value="${salon.bank_account || ''}"></div>
@@ -450,6 +459,7 @@ async function openEditSalonModal(id) {
 async function submitEditSalon(id) {
   const body = {
     salon_name: document.getElementById('m-salon-name').value,
+    salon_code: document.getElementById('m-salon-code').value,
     owner_name: document.getElementById('m-owner-name').value,
     owner_phone: document.getElementById('m-owner-phone').value,
     bank_account: document.getElementById('m-bank').value
