@@ -300,7 +300,7 @@
       "owner_name": "이민준",
       "owner_phone": "010-9876-5432",
       "bank_account": "신한은행 987-654-321",
-      "salon_code": "MAPO",
+      "salon_code": "100002",
       "created_at": "2026-08-10 06:09:35"
     },
     {
@@ -310,7 +310,7 @@
       "owner_name": "박수연",
       "owner_phone": "010-5555-7777",
       "bank_account": "우리은행 555-777-999",
-      "salon_code": "HONGDAE",
+      "salon_code": "100003",
       "created_at": "2026-08-10 06:09:35"
     },
     {
@@ -320,7 +320,7 @@
       "owner_name": "김지수",
       "owner_phone": "010-1234-5678",
       "bank_account": "국민은행 123-456-789",
-      "salon_code": "GANGNAM",
+      "salon_code": "100001",
       "created_at": "2026-08-10 06:09:34"
     }
   ],
@@ -368,7 +368,8 @@
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=ysl",
       "status": "ACTIVE",
       "commission_rate": 0.15,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "phone": "010-2222-3333"
     },
     {
       "id": 3,
@@ -453,13 +454,16 @@
     },
     {
       "id": 1,
-      "kakao_id": "kakao_001",
-      "name": "홍길동",
+      "kakao_id": "kakao_demo_minsu",
+      "name": "김민수",
       "phone": "010-1111-2222",
       "current_salon_id": 1,
       "mapped_designer_id": 1,
       "created_at": "2026-08-10 06:09:35",
-      "points": 0
+      "points": 0,
+      "auth_provider": "kakao",
+      "shipping_address": "(06236) 서울 강남구 테헤란로 152 301호",
+      "phone_verified": true
     },
     {
       "id": 2,
