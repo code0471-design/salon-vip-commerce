@@ -1240,8 +1240,19 @@ body {
 .order-salon { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
 .order-designer { font-size: 11px; color: var(--muted); margin-bottom: 8px; }
 .order-footer { display: flex; justify-content: space-between; align-items: center; }
+.order-footer-sales { align-items: flex-end; gap: 12px; }
+.order-payout { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.order-payout-label {
+  font-size: 11px; font-weight: 700; color: #6b7280; letter-spacing: -0.01em;
+}
+.order-payout-amt {
+  font-size: 18px; font-weight: 900; color: #0f0f1a; letter-spacing: -0.03em; line-height: 1.2;
+}
+.order-payout-meta {
+  font-size: 11px; color: var(--muted); margin-top: 2px;
+}
 .order-items-preview { font-size: 11px; color: var(--muted); max-width: 60%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.order-amount { font-size: 16px; font-weight: 800; color: var(--rose); }
+.order-amount { font-size: 15px; font-weight: 700; color: var(--rose); }
 
 .settle-card {
   background: var(--primary);
@@ -1254,9 +1265,11 @@ body {
 .settle-sub { font-size: 12px; color: rgba(255,255,255,0.62); }
 .settle-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
 .settle-metric { background: rgba(255,255,255,0.08); border-radius: 12px; padding: 10px 12px; }
-.settle-metric.emph { background: rgba(255,255,255,0.16); }
+.settle-metric.emph { background: rgba(255,255,255,0.16); grid-column: 1 / -1; }
 .settle-metric span { display: block; font-size: 11px; color: rgba(255,255,255,0.55); }
 .settle-metric strong { display: block; margin-top: 3px; font-size: 15px; font-weight: 600; }
+.settle-metric.emph span { font-size: 12px; color: rgba(232,201,142,0.9); font-weight: 700; }
+.settle-metric.emph strong { font-size: 22px; font-weight: 800; letter-spacing: -0.03em; color: #fff; }
 .settle-formula { margin-top: 10px; font-size: 11px; line-height: 1.5; color: rgba(255,255,255,0.62); }
 .section-label { font-size: 15px; font-weight: 800; margin: 22px 0 10px; color: var(--text); }
 .past-settle {
