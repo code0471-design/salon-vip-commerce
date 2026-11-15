@@ -55,6 +55,7 @@ let state = {
   manageDraft: null, // { salon_id, salon_name, owner_name, owner_phone, address, address_detail, bank_account }
   profilePhoneVerified: false,
   profileOtpSent: false,
+  profileEditing: false,
   setupDraft: {
     salon_name: '',
     owner_name: '',
@@ -2384,12 +2385,43 @@ function phoneDigitsLocal(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
+function userOwnedCoupons() {
+  const ids = new Set(userHeldCouponIds());
+  return (state.coupons || [])
+    .filter((c) => c && c.status === 'ACTIVE' && ids.has(Number(c.id)))
+    .slice()
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ko'));
+}
+
+function couponValueLabel(coupon) {
+  if (!coupon) return '';
+  if (coupon.discount_type === 'RATE') return Number(coupon.discount_value || 0) + '% 할인';
+  return Number(coupon.discount_value || 0).toLocaleString() + '원 할인';
+}
+
+function startProfileEdit() {
+  state.profileEditing = true;
+  state.profilePhoneVerified = false;
+  state.profileOtpSent = false;
+  render();
+}
+
+function cancelProfileEdit() {
+  state.profileEditing = false;
+  state.profilePhoneVerified = false;
+  state.profileOtpSent = false;
+  render();
+}
+
 function renderProfile() {
   if (!state.user) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
   const u = state.user;
   const totalSpent = state.orders.filter(o => o.payment_status === 'PAID').reduce((s,o) => s + o.total_amount, 0);
   const orderCount = state.orders.filter(o => o.payment_status === 'PAID').length;
   const ship = String(u.shipping_address || '');
+  const points = Number(u.points || 0);
+  const coupons = userOwnedCoupons();
+  const editing = !!state.profileEditing;
 
   return `
     <div class="profile-hero">
@@ -2410,8 +2442,34 @@ function renderProfile() {
         <div class="plbl">총 이용금액</div>
       </div>
       <div class="profile-stat-item">
-        <div class="pval">${(u.points || 0).toLocaleString()}P</div>
+        <div class="pval">${points.toLocaleString()}P</div>
         <div class="plbl">보유 포인트</div>
+      </div>
+    </div>
+
+    <div class="info-card">
+      <div class="info-card-header">보유 혜택</div>
+      <div class="profile-benefit-grid">
+        <div class="profile-benefit-card">
+          <div class="profile-benefit-label"><i class="fas fa-coins" style="margin-right:6px"></i>보유 포인트</div>
+          <div class="profile-benefit-value">${points.toLocaleString()}<span>P</span></div>
+        </div>
+        <div class="profile-benefit-card">
+          <div class="profile-benefit-label"><i class="fas fa-ticket-alt" style="margin-right:6px"></i>보유 쿠폰</div>
+          <div class="profile-benefit-value">${coupons.length}<span>장</span></div>
+        </div>
+      </div>
+      <div class="profile-coupon-list">
+        ${coupons.length === 0
+          ? `<div class="profile-coupon-empty">보유 중인 쿠폰이 없습니다</div>`
+          : coupons.map((c) => `
+            <div class="profile-coupon-item">
+              <div>
+                <div class="profile-coupon-name">${escText(c.name)}</div>
+                <div class="profile-coupon-meta">${escText(couponValueLabel(c))}${c.ends_at ? ' · ~' + escText(c.ends_at) : ''}</div>
+              </div>
+              <div class="profile-coupon-badge">사용가능</div>
+            </div>`).join('')}
       </div>
     </div>
 
@@ -2428,8 +2486,12 @@ function renderProfile() {
       </div>
     </div>
 
-    <div class="info-card setup-form" style="padding-bottom:16px">
-      <div class="info-card-header">계정 정보</div>
+    <div class="info-card${editing ? ' setup-form' : ''}" style="padding-bottom:16px">
+      <div class="info-card-header" style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+        <span>기본 정보</span>
+        ${editing ? '' : `<button type="button" class="profile-edit-btn" onclick="startProfileEdit()">수정</button>`}
+      </div>
+      ${editing ? `
       <div style="padding:12px 16px 0">
         <label class="form-label">이름</label>
         <input id="profile-name" class="form-input" type="text" value="${escText(u.name || '')}">
@@ -2454,10 +2516,18 @@ function renderProfile() {
         </div>
         <input id="profile-address-detail" class="form-input" type="text" style="margin-top:8px"
           placeholder="상세주소 (동·호수 등)">
-        <div class="info-row" style="padding-left:0;padding-right:0;margin-top:8px"><span>보유 포인트</span><span>${(u.points || 0).toLocaleString()}P</span></div>
-        <div class="info-row" style="padding-left:0;padding-right:0;border-bottom:none"><span>가입일</span><span>${u.created_at ? new Date(u.created_at).toLocaleDateString('ko-KR') : '-'}</span></div>
-        <button class="btn-primary" style="margin-top:8px" onclick="saveProfileInfo()">회원 정보 저장</button>
+        <div class="info-row" style="padding-left:0;padding-right:0;border-bottom:none;margin-top:8px"><span>가입일</span><span>${u.created_at ? new Date(u.created_at).toLocaleDateString('ko-KR') : '-'}</span></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button type="button" class="btn-secondary" style="flex:1" onclick="cancelProfileEdit()">취소</button>
+          <button type="button" class="btn-primary" style="flex:1.4;margin:0" onclick="saveProfileInfo()">저장</button>
+        </div>
       </div>
+      ` : `
+      <div class="info-row"><span>이름</span><span>${escText(u.name || '-')}</span></div>
+      <div class="info-row"><span>전화번호</span><span>${escText(u.phone || '-')}</span></div>
+      <div class="info-row"><span>배송주소</span><span style="text-align:right;max-width:62%">${escText(ship || '-')}</span></div>
+      <div class="info-row" style="border-bottom:none"><span>가입일</span><span>${u.created_at ? new Date(u.created_at).toLocaleDateString('ko-KR') : '-'}</span></div>
+      `}
     </div>
 
     <div style="padding:0 16px 100px">
@@ -2537,6 +2607,7 @@ async function saveProfileInfo() {
   saveUser(res.data);
   state.profilePhoneVerified = false;
   state.profileOtpSent = false;
+  state.profileEditing = false;
   render();
   showToast(res.message || '회원 정보를 저장했습니다', 'success');
 }
