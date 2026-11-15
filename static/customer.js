@@ -39,7 +39,7 @@ let state = {
     owner_phone: '',
     address: '',
     salon_code: '',
-    designers: [{ designer_name: '', phone: '' }],
+    designers: [{ designer_name: '', phone: '', requested: false }],
   },
   loading: false
 };
@@ -216,7 +216,7 @@ function resetSetupDraft() {
     owner_phone: state.user ? (state.user.phone || '') : '',
     address: '',
     salon_code: '',
-    designers: [{ designer_name: '', phone: '' }],
+    designers: [{ designer_name: '', phone: '', requested: false }],
   };
 }
 
@@ -868,17 +868,29 @@ function updateSetupDesigner(index, key, value) {
 }
 
 function addSetupDesignerRow() {
-  state.setupDraft.designers.push({ designer_name: '', phone: '' });
+  state.setupDraft.designers.push({ designer_name: '', phone: '', requested: false });
   render();
 }
 
 function removeSetupDesignerRow(index) {
   if (state.setupDraft.designers.length <= 1) {
-    state.setupDraft.designers = [{ designer_name: '', phone: '' }];
+    state.setupDraft.designers = [{ designer_name: '', phone: '', requested: false }];
   } else {
     state.setupDraft.designers.splice(index, 1);
   }
   render();
+}
+
+function requestSetupDesigner(index) {
+  const row = state.setupDraft.designers[index];
+  if (!row) return;
+  const name = String(row.designer_name || '').trim();
+  const phone = String(row.phone || '').trim();
+  if (!name) { showToast('담당자 이름을 입력하세요', 'error'); return; }
+  if (!phone) { showToast('담당자 휴대폰번호를 입력하세요', 'error'); return; }
+  row.requested = true;
+  render();
+  showToast(`${name}님에게 초대 요청이 예약되었습니다. 매장 생성 시 문자가 발송됩니다`, 'success');
 }
 
 function renderAdminSetup() {
@@ -921,15 +933,19 @@ function renderAdminSetup() {
           oninput="updateSetupField('salon_code', this.value.replace(/\\D/g,'').slice(0,6)); this.value=state.setupDraft.salon_code">
         <div class="setup-designer-block">
           <div class="setup-designer-head">
-            <label class="form-label" style="margin:0">담당자 추가</label>
+            <label class="form-label" style="margin:0">담당자 초대</label>
             <button type="button" class="ghost-text-btn" onclick="addSetupDesignerRow()">+ 추가</button>
           </div>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 10px">이름·휴대폰 입력 후 <strong>요청</strong>을 누르세요. 매장 생성 시 초대 문자가 갑니다.</p>
           ${d.designers.map((row, i) => `
-            <div class="setup-designer-row">
+            <div class="setup-designer-row ${row.requested ? 'requested' : ''}">
               <input class="form-input" placeholder="담당자 이름" value="${escText(row.designer_name)}"
-                oninput="updateSetupDesigner(${i}, 'designer_name', this.value)">
-              <input class="form-input" type="tel" placeholder="휴대폰(선택)" value="${escText(row.phone || '')}"
-                oninput="updateSetupDesigner(${i}, 'phone', this.value)">
+                oninput="updateSetupDesigner(${i}, 'designer_name', this.value); state.setupDraft.designers[${i}].requested=false">
+              <input class="form-input" type="tel" placeholder="휴대폰번호" value="${escText(row.phone || '')}"
+                oninput="updateSetupDesigner(${i}, 'phone', this.value); state.setupDraft.designers[${i}].requested=false">
+              <button type="button" class="setup-request-btn ${row.requested ? 'on' : ''}" onclick="requestSetupDesigner(${i})">
+                ${row.requested ? '요청됨' : '요청'}
+              </button>
               <button type="button" class="setup-remove" onclick="removeSetupDesignerRow(${i})" aria-label="삭제"><i class="fas fa-times"></i></button>
             </div>`).join('')}
         </div>
@@ -952,8 +968,14 @@ async function submitSalonSetup() {
     showToast('매장 코드는 6자리 숫자입니다', 'error');
     return;
   }
+  const pendingInvite = (d.designers || []).filter((row) =>
+    String(row.designer_name || '').trim() && String(row.phone || '').trim() && !row.requested);
+  if (pendingInvite.length) {
+    showToast('담당자 이름·번호를 넣었다면 각 줄의 요청 버튼을 눌러주세요', 'error');
+    return;
+  }
   const designers = (d.designers || [])
-    .filter((row) => row.designer_name && String(row.designer_name).trim())
+    .filter((row) => row.requested && row.designer_name && String(row.designer_name).trim() && row.phone)
     .map((row) => ({ designer_name: String(row.designer_name).trim(), phone: String(row.phone || '').trim() }));
   const res = await api('/api/salons/setup', 'POST', {
     user_id: state.user.id,
@@ -976,7 +998,10 @@ async function submitSalonSetup() {
   await loadManageDesigners();
   await loadStoreLedger();
   render();
-  showToast(res.message || '매장이 개설되었습니다', 'success');
+  const inviteMsg = designers.length
+    ? ` · 담당자 ${designers.length}명에게 초대 요청 발송`
+    : '';
+  showToast((res.message || '매장이 개설되었습니다') + inviteMsg, 'success');
 }
 
 async function loginAsOwner() {
