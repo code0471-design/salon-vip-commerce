@@ -1254,6 +1254,41 @@ body {
 .order-items-preview { font-size: 11px; color: var(--muted); max-width: 60%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .order-amount { font-size: 15px; font-weight: 700; color: var(--rose); }
 
+.month-chip-row {
+  display: flex; gap: 8px; margin: 4px 0 12px; overflow-x: auto;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.month-chip-row::-webkit-scrollbar { display: none; }
+.month-chip {
+  flex: 0 0 auto;
+  height: 36px; padding: 0 14px; border-radius: 999px;
+  border: 1.5px solid var(--border); background: #fff;
+  color: #4b5563; font-size: 13px; font-weight: 800;
+  cursor: pointer; font-family: var(--font); white-space: nowrap;
+}
+.month-chip.on {
+  background: #0f0f1a; border-color: #0f0f1a; color: #e8c98e;
+}
+.month-chip:active { transform: scale(0.98); }
+.sales-month-sheet { max-width: 360px; text-align: left; padding-top: 24px; }
+.sales-month-sheet .confirm-title,
+.sales-month-sheet .confirm-sub { text-align: center; }
+.sales-month-list {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-top: 14px; max-height: 240px; overflow-y: auto;
+}
+.sales-month-option {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-radius: 12px;
+  border: 1.5px solid var(--border); background: #fff;
+  font-size: 14px; font-weight: 700; color: var(--text);
+  cursor: pointer; font-family: var(--font);
+}
+.sales-month-option i { color: transparent; font-size: 12px; }
+.sales-month-option.on {
+  border-color: #0f0f1a; background: #f7f7f8;
+}
+.sales-month-option.on i { color: #0f0f1a; }
 .settle-card {
   background: var(--primary);
   color: white;

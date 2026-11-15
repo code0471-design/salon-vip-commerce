@@ -41,6 +41,8 @@ let state = {
   storeSettlement: null,
   storeView: '',
   priceBrand: 0,
+  salesMonth: '', // YYYY-MM; empty = 이번달
+  salesMonthPickerOpen: false,
   salesStaff: '',
   scanResult: null,
   switchInfo: null,
@@ -146,6 +148,8 @@ function clearSessionOnly() {
   state.storeOrders = [];
   state.storeSettlement = null;
   state.storeView = '';
+  state.salesMonth = '';
+  state.salesMonthPickerOpen = false;
   state.adminTab = 'sales';
   state.manageDesigners = [];
   state.resignConfirmId = null;
@@ -297,6 +301,7 @@ function renderShell() {
     ${renderCartQtySheet()}
     ${renderCartAddedSheet()}
     ${renderResignConfirm()}
+    ${renderSalesMonthPicker()}
   `;
 }
 
@@ -3107,6 +3112,98 @@ function currentPeriod() {
   return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
 }
 
+function prevPeriod(from) {
+  const base = String(from || currentPeriod());
+  const [year, month] = base.split('-').map(Number);
+  if (!year || !month) return currentPeriod();
+  const d = new Date(year, month - 2, 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+function selectedSalesPeriod() {
+  return state.salesMonth || currentPeriod();
+}
+
+function setSalesMonth(period) {
+  const next = String(period || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(next)) return;
+  state.salesMonth = next === currentPeriod() ? '' : next;
+  state.salesMonthPickerOpen = false;
+  state.salesStaff = '';
+  render();
+}
+
+function openSalesMonthPicker() {
+  state.salesMonthPickerOpen = true;
+  render();
+}
+
+function closeSalesMonthPicker() {
+  state.salesMonthPickerOpen = false;
+  render();
+}
+
+function salesMonthChipMode(period) {
+  const thisMonth = currentPeriod();
+  const lastMonth = prevPeriod(thisMonth);
+  if (period === thisMonth) return 'this';
+  if (period === lastMonth) return 'prev';
+  return 'other';
+}
+
+function availableSalesMonths() {
+  const fromApi = (state.storeSettlement && state.storeSettlement.months) || [];
+  const fromRows = ((state.storeSettlement && state.storeSettlement.rows) || [])
+    .filter((row) => Number(row.orders) > 0)
+    .map((row) => row.period);
+  const fromOrders = (state.storeOrders || []).map((order) => String(order.created_at || '').slice(0, 7)).filter(Boolean);
+  return [...new Set([currentPeriod(), prevPeriod(), ...fromApi, ...fromRows, ...fromOrders])]
+    .filter((m) => /^\d{4}-\d{2}$/.test(m))
+    .sort()
+    .reverse();
+}
+
+function renderSalesMonthPicker() {
+  if (!state.salesMonthPickerOpen) return '';
+  const selected = selectedSalesPeriod();
+  const months = availableSalesMonths();
+  return `
+    <div class="confirm-overlay" onclick="closeSalesMonthPicker()">
+      <div class="confirm-card sales-month-sheet" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+        <h3 class="confirm-title" style="margin-bottom:6px">다른달 선택</h3>
+        <p class="confirm-sub" style="margin-bottom:14px">확인할 정산·판매 월을 고르세요</p>
+        <label class="form-label" style="text-align:left;margin-top:0">직접 선택</label>
+        <input type="month" class="form-input" value="${escText(selected)}"
+          max="${escText(currentPeriod())}"
+          onchange="if(this.value) setSalesMonth(this.value)">
+        <div class="sales-month-list">
+          ${months.map((m) => `
+            <button type="button" class="sales-month-option${m === selected ? ' on' : ''}" onclick="setSalesMonth('${m}')">
+              <span>${monthLabel(m)}${m === currentPeriod() ? ' · 이번달' : (m === prevPeriod() ? ' · 지난달' : '')}</span>
+              <i class="fas fa-check"></i>
+            </button>`).join('')}
+        </div>
+        <button type="button" class="confirm-btn cancel" style="width:100%;margin-top:12px" onclick="closeSalesMonthPicker()">닫기</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderSalesMonthChips(period) {
+  const mode = salesMonthChipMode(period);
+  const thisMonth = currentPeriod();
+  const lastMonth = prevPeriod(thisMonth);
+  return `
+    <div class="month-chip-row">
+      <button type="button" class="month-chip${mode === 'this' ? ' on' : ''}" onclick="setSalesMonth('${thisMonth}')">이번달</button>
+      <button type="button" class="month-chip${mode === 'prev' ? ' on' : ''}" onclick="setSalesMonth('${lastMonth}')">지난달</button>
+      <button type="button" class="month-chip${mode === 'other' ? ' on' : ''}" onclick="openSalesMonthPicker()">
+        ${mode === 'other' ? monthLabel(period) : '다른달 선택'}
+      </button>
+    </div>
+  `;
+}
+
 function settleView(row) {
   const sale = Number(row && row.sales) || 0;
   const coupon = Number(row && row.coupon_discount) || 0;
@@ -3493,12 +3590,21 @@ function renderStore() {
   const brands = state.brands || [];
   const blockedCount = brands.filter((brand) => brandBlocksStore(brand, salon.id)).length;
   const hiddenCount = brands.filter((brand) => hidden.has(brand.id) && !brandBlocksStore(brand, salon.id)).length;
-  const period = (state.storeSettlement && state.storeSettlement.month) || currentPeriod();
+  const period = selectedSalesPeriod();
   const rows = (state.storeSettlement && state.storeSettlement.rows) || [];
-  const current = rows.find((row) => row.period === period) || { period, orders: 0, sales: 0, payout: 0, status: 'PENDING' };
+  const current = rows.find((row) => row.period === period) || {
+    period,
+    orders: 0,
+    sales: 0,
+    payout: 0,
+    coupon_discount: 0,
+    status: period >= currentPeriod() ? 'PENDING' : 'CONFIRMED',
+  };
   const statusLabel = { PENDING: '정산예정', CONFIRMED: '정산확정', PAID: '지급완료' };
-  const past = rows.filter((row) => row.period !== period && row.orders > 0);
-  const sales = (state.storeOrders || []).slice().sort((a, b) => b.id - a.id);
+  const sales = (state.storeOrders || [])
+    .filter((order) => String(order.created_at || '').slice(0, 7) === period)
+    .slice()
+    .sort((a, b) => b.id - a.id);
   return `
     <div style="padding:20px 16px 28px">
       <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">관리자</h2>
@@ -3518,27 +3624,14 @@ function renderStore() {
         </span>
         <i class="fas fa-chevron-right"></i>
       </button>
+      ${renderSalesMonthChips(period)}
       <div class="settle-card">
         <div class="settle-kicker">${monthLabel(current.period)} 정산 · ${statusLabel[current.status] || '정산예정'}</div>
         ${renderSettleMetrics(current)}
       </div>
-      ${past.length ? `
-        <div class="section-label">지난 정산</div>
-        ${past.map((row) => `
-          <div class="past-settle">
-            <div>
-              <div style="font-weight:700">${monthLabel(row.period)}</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px">${row.orders}건 · 총매출 ${won(row.sales)} · 실결제 ${won(Math.max(0, (row.sales || 0) - (row.coupon_discount || 0)))}</div>
-            </div>
-            <div style="text-align:right">
-              <div style="font-weight:700">${won(row.payout)}</div>
-              <div style="font-size:11px;color:var(--muted);margin-top:2px">${statusLabel[row.status] || ''}</div>
-            </div>
-          </div>`).join('')}
-      ` : ''}
-      <div class="section-label">판매 내역</div>
+      <div class="section-label">판매 내역 · ${monthLabel(period)}</div>
       ${sales.length === 0
-        ? `<p style="font-size:13px;color:var(--muted);padding:8px 0 12px">아직 판매 내역이 없습니다.</p>`
+        ? `<p style="font-size:13px;color:var(--muted);padding:8px 0 12px">${monthLabel(period)} 판매 내역이 없습니다.</p>`
         : `${renderStaffFilters(sales)}
           <div class="order-list" style="padding:0">
             ${sales.filter((order) => !state.salesStaff || (order.designer_name || '담당 없음') === state.salesStaff).map((order) => {
