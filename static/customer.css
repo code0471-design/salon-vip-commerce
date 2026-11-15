@@ -164,6 +164,18 @@ body {
   color: #b91c1c; font-size: 12px; font-weight: 600;
   cursor: pointer; font-family: var(--font);
 }
+.otp-row { display: flex; gap: 8px; align-items: stretch; }
+.otp-row .form-input { flex: 1; }
+.otp-send-btn {
+  width: auto !important; white-space: nowrap; padding: 0 14px !important;
+  margin: 0 !important; flex-shrink: 0;
+}
+.designer-status-chip {
+  display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; vertical-align: middle;
+}
+.designer-status-chip.wait { background: #fff7ed; color: #c2410c; }
+.designer-status-chip.ok { background: #ecfdf5; color: #047857; }
 .setup-form .form-label { margin-top: 12px; }
 .setup-form .form-label:first-child { margin-top: 0; }
 .setup-designer-block { margin-top: 14px; }

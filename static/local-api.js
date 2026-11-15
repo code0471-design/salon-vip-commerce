@@ -31,6 +31,51 @@
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
   }
 
+  const otpStore = new Map();
+
+  function phoneDigits(value) {
+    return String(value || '').replace(/\D/g, '');
+  }
+
+  function issueOtp(phone) {
+    const digits = phoneDigits(phone);
+    if (digits.length < 10 || digits.length > 11) return null;
+    const code = String(1000 + Math.floor(Math.random() * 9000));
+    otpStore.set(digits, { code, expires: Date.now() + 5 * 60 * 1000, verified: false });
+    return code;
+  }
+
+  function verifyOtp(phone, code) {
+    const digits = phoneDigits(phone);
+    const row = otpStore.get(digits);
+    if (!row) return false;
+    if (Date.now() > row.expires) return false;
+    if (String(code || '').trim() !== row.code) return false;
+    row.verified = true;
+    otpStore.set(digits, row);
+    return true;
+  }
+
+  function isPhoneVerified(phone) {
+    const row = otpStore.get(phoneDigits(phone));
+    return !!(row && row.verified && Date.now() <= row.expires + 30 * 60 * 1000);
+  }
+
+  function acceptDesignerInvites(user) {
+    const phone = phoneDigits(user.phone);
+    if (!phone) return [];
+    const accepted = [];
+    db.designers.forEach((d) => {
+      if (d.status !== 'INVITED') return;
+      if (phoneDigits(d.phone) !== phone) return;
+      d.status = 'ACTIVE';
+      d.joined_at = nowStamp();
+      user.staff_designer_id = d.id;
+      accepted.push(d);
+    });
+    return accepted;
+  }
+
   function normalizeSalonCode(value) {
   const digits = String(value || '').replace(/\D/g, '');
   return /^\d{6}$/.test(digits) ? digits : '';
@@ -123,11 +168,11 @@
     const designer = findDesigner(user.mapped_designer_id);
     const owned = ownedSalon(user);
     const staffDesigner = db.designers.find((d) => {
-      if (d.status === 'RESIGNED') return false;
+      if (d.status === 'RESIGNED' || d.status === 'INVITED') return false;
       if (user.staff_designer_id && d.id === Number(user.staff_designer_id)) return true;
       if (user.kakao_id && user.kakao_id === `designer-${d.id}`) return true;
-      const phone = String(user.phone || '').replace(/\D/g, '');
-      const dPhone = String(d.phone || '').replace(/\D/g, '');
+      const phone = phoneDigits(user.phone);
+      const dPhone = phoneDigits(d.phone);
       return !!(phone && dPhone && phone === dPhone);
     });
     const staffSalon = staffDesigner ? findSalon(staffDesigner.salon_id) : null;
@@ -431,14 +476,17 @@
         designerNames.forEach((row) => {
           const rawName = typeof row === 'string' ? row : (row && row.designer_name);
           if (!rawName || !String(rawName).trim()) return;
+          const phone = String((row && row.phone) || '').trim();
+          if (!phoneDigits(phone) || phoneDigits(phone).length < 10) return;
           const name = String(rawName).includes('디자이너') ? String(rawName).trim() : String(rawName).trim() + ' 디자이너';
           db.designers.push({
             id: nextId(db.designers),
             salon_id: salonId,
             designer_name: name,
-            phone: (row && row.phone) || '',
+            phone,
             profile_img: 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + encodeURIComponent(name),
-            status: 'ACTIVE',
+            status: 'INVITED',
+            invited_at: nowStamp(),
             commission_rate: 0.15,
             created_at: nowStamp(),
           });
@@ -599,20 +647,57 @@
       const body = req.body || {};
       if (!body.designer_name || !body.salon_id) return { status: 400, error: '필수 항목을 입력하세요' };
       if (!findSalon(body.salon_id)) return { status: 404, error: '살롱을 찾을 수 없습니다' };
+      const phone = String(body.phone || '').trim();
+      if (!phoneDigits(phone) || phoneDigits(phone).length < 10) {
+        return { status: 400, error: '담당자 휴대폰번호를 입력해주세요' };
+      }
       const name = String(body.designer_name).includes('디자이너') ? body.designer_name : `${body.designer_name} 디자이너`;
+      const inviteOnly = body.invite !== false;
       const designer = {
         id: nextId(db.designers),
         salon_id: Number(body.salon_id),
         designer_name: name,
-        phone: String(body.phone || '').trim(),
-        profile_img: `https://api.dicebear.com/7.x/avataaars/svg?seed=${nextId(db.designers)}`,
-        status: 'ACTIVE',
+        phone,
+        profile_img: `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(name)}`,
+        status: inviteOnly ? 'INVITED' : 'ACTIVE',
         commission_rate: Number(body.commission_rate || 0.15),
+        invited_at: inviteOnly ? nowStamp() : null,
         created_at: nowStamp(),
       };
       db.designers.push(designer);
+      const matchUser = db.users.find((u) => phoneDigits(u.phone) === phoneDigits(phone));
+      let demoSms = '';
+      if (matchUser && designer.status === 'INVITED') {
+        designer.status = 'ACTIVE';
+        designer.joined_at = nowStamp();
+        matchUser.staff_designer_id = designer.id;
+        demoSms = '이미 가입된 번호라 바로 담당자로 연결했습니다';
+      } else if (designer.status === 'INVITED') {
+        const salon = findSalon(designer.salon_id);
+        demoSms = `[살롱VIP] ${salon ? salon.salon_name : '매장'} 담당자 초대. 앱에서 같은 번호로 가입·인증하면 완료됩니다.`;
+      }
       save();
-      return { data: publicDesigner(designer) };
+      return {
+        data: publicDesigner(designer),
+        extra: {
+          message: designer.status === 'INVITED' ? '담당자에게 초대 요청을 보냈습니다' : '담당자가 추가되었습니다',
+          demo_sms: demoSms,
+        },
+      };
+    }],
+    ['POST', /^\/api\/designers\/(\d+)\/invite$/, (req, id) => {
+      const designer = findDesigner(id);
+      if (!designer) return { status: 404, error: '디자이너를 찾을 수 없습니다' };
+      if (!phoneDigits(designer.phone)) return { status: 400, error: '담당자 휴대폰번호가 없습니다' };
+      designer.status = 'INVITED';
+      designer.invited_at = nowStamp();
+      const salon = findSalon(designer.salon_id);
+      const demoSms = `[살롱VIP] ${salon ? salon.salon_name : '매장'} 담당자 초대. 앱에서 같은 번호로 가입·인증하면 완료됩니다.`;
+      save();
+      return {
+        data: publicDesigner(designer),
+        extra: { message: '초대 문자를 다시 보냈습니다', demo_sms: demoSms },
+      };
     }],
     ['POST', /^\/api\/designers\/(\d+)\/resign$/, (req, id) => {
       const designer = findDesigner(id);
@@ -637,6 +722,26 @@
       if (salonId) users = users.filter((u) => u.current_salon_id === Number(salonId));
       users = users.slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
       return { data: users.map(publicUser) };
+    }],
+    ['POST', /^\/api\/auth\/otp\/send$/, (req) => {
+      const phone = String((req.body || {}).phone || '').trim();
+      const code = issueOtp(phone);
+      if (!code) return { status: 400, error: '휴대폰번호를 정확히 입력해주세요' };
+      return {
+        data: { phone: phoneDigits(phone), expires_in: 300 },
+        extra: {
+          message: '인증번호를 발송했습니다',
+          demo_code: code,
+          demo_note: '데모: 실제 문자 대신 화면에 인증번호를 표시합니다',
+        },
+      };
+    }],
+    ['POST', /^\/api\/auth\/otp\/verify$/, (req) => {
+      const body = req.body || {};
+      if (!verifyOtp(body.phone, body.code)) {
+        return { status: 400, error: '인증번호가 올바르지 않거나 만료되었습니다' };
+      }
+      return { data: { phone: phoneDigits(body.phone), verified: true }, extra: { message: '휴대폰 인증이 완료되었습니다' } };
     }],
     ['POST', /^\/api\/auth\/social$/, (req) => {
       const body = req.body || {};
@@ -667,6 +772,9 @@
           extra: { needs_profile: true, provider, auth_id: authId },
         };
       }
+      if (!isPhoneVerified(body.phone)) {
+        return { status: 400, error: '휴대폰 문자 인증을 완료해주세요' };
+      }
       const owned = ownedSalon({ phone: body.phone });
       const user = {
         id: nextId(db.users),
@@ -675,10 +783,12 @@
         name: String(body.name).trim(),
         phone: String(body.phone).trim(),
         shipping_address: String(body.shipping_address).trim(),
+        phone_verified: true,
         current_salon_id: owned ? owned.id : null,
         mapped_designer_id: null,
         created_at: nowStamp(),
       };
+      const invited = acceptDesignerInvites(user);
       db.users.push(user);
       save();
       return {
@@ -687,6 +797,8 @@
           is_new: true,
           is_returning: false,
           salon_bound: !!(user.current_salon_id && user.mapped_designer_id),
+          staff_invites_accepted: invited.length,
+          message: invited.length ? '담당자 초대가 수락되었습니다' : undefined,
         },
       };
     }],

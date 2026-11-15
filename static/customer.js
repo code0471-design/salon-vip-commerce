@@ -29,6 +29,8 @@ let state = {
   onboardingStep: 'code', // code | designer
   loginStep: 'social', // social | account | profile
   pendingSocial: null, // { provider, auth_id, name?, phone? }
+  phoneVerified: false,
+  otpSent: false,
   adminTab: 'sales', // sales | manage
   manageDesigners: [],
   setupDraft: {
@@ -636,7 +638,7 @@ function renderSocialProfile() {
           <i class="fas fa-chevron-left"></i> 계정 선택으로
         </button>
         <h1 style="font-size:22px;font-weight:900;color:#fff;margin:12px 0 0">회원 정보</h1>
-        <p style="font-size:13px;color:rgba(255,255,255,0.65);margin-top:8px">${providerLabel(p.provider)} 신규 가입 · 주문 배송에 사용됩니다</p>
+        <p style="font-size:13px;color:rgba(255,255,255,0.65);margin-top:8px">${providerLabel(p.provider)} 신규 가입 · 문자 인증 후 배송에 사용됩니다</p>
       </div>
       <div class="login-body">
         <div class="form-field">
@@ -645,7 +647,19 @@ function renderSocialProfile() {
         </div>
         <div class="form-field">
           <label class="form-label">휴대폰번호</label>
-          <input id="login-phone" class="form-input" type="tel" placeholder="010-0000-0000">
+          <div class="otp-row">
+            <input id="login-phone" class="form-input" type="tel" placeholder="010-0000-0000"
+              oninput="state.phoneVerified=false; state.otpSent=false">
+            <button type="button" class="btn-secondary otp-send-btn" onclick="sendSignupOtp()">인증요청</button>
+          </div>
+        </div>
+        <div class="form-field">
+          <label class="form-label">인증번호</label>
+          <div class="otp-row">
+            <input id="login-otp" class="form-input" type="tel" inputmode="numeric" maxlength="4" placeholder="4자리">
+            <button type="button" class="btn-secondary otp-send-btn" onclick="verifySignupOtp()">확인</button>
+          </div>
+          <p id="otp-hint" class="code-hint">${state.phoneVerified ? '휴대폰 인증 완료' : (state.otpSent ? '인증번호를 입력하세요' : '인증요청 후 문자를 확인하세요')}</p>
         </div>
         <div class="form-field">
           <label class="form-label">배송주소</label>
@@ -658,6 +672,37 @@ function renderSocialProfile() {
       </div>
     </div>
   `;
+}
+
+async function sendSignupOtp() {
+  const phone = ((document.getElementById('login-phone') || {}).value || '').trim();
+  if (!phone) { showToast('휴대폰번호를 입력해주세요', 'error'); return; }
+  const res = await api('/api/auth/otp/send', 'POST', { phone });
+  if (!res.success) {
+    showToast(res.error || '인증번호 발송 실패', 'error');
+    return;
+  }
+  state.otpSent = true;
+  state.phoneVerified = false;
+  const hint = document.getElementById('otp-hint');
+  if (hint) hint.textContent = res.demo_code ? `데모 인증번호: ${res.demo_code}` : '인증번호를 입력하세요';
+  showToast(res.demo_code ? `데모 인증번호 ${res.demo_code}` : (res.message || '인증번호를 발송했습니다'), 'success');
+}
+
+async function verifySignupOtp() {
+  const phone = ((document.getElementById('login-phone') || {}).value || '').trim();
+  const code = ((document.getElementById('login-otp') || {}).value || '').trim();
+  if (!phone || !code) { showToast('휴대폰번호와 인증번호를 입력하세요', 'error'); return; }
+  const res = await api('/api/auth/otp/verify', 'POST', { phone, code });
+  if (!res.success) {
+    state.phoneVerified = false;
+    showToast(res.error || '인증 실패', 'error');
+    return;
+  }
+  state.phoneVerified = true;
+  const hint = document.getElementById('otp-hint');
+  if (hint) hint.textContent = '휴대폰 인증 완료';
+  showToast(res.message || '휴대폰 인증이 완료되었습니다', 'success');
 }
 
 function startSocialLogin(provider) {
@@ -676,6 +721,8 @@ async function selectSocialAccount(provider, slot, name) {
   });
   if (res.needs_profile) {
     state.pendingSocial = { provider, auth_id: authId, suggested_name: name || '' };
+    state.phoneVerified = false;
+    state.otpSent = false;
     state.loginStep = 'profile';
     history.pushState({ salonLoginStep: 'profile' }, '', location.href);
     render();
@@ -691,6 +738,8 @@ async function selectSocialAccount(provider, slot, name) {
 function useAnotherSocialAccount(provider) {
   const authId = authIdForAccount(provider, 'new_' + Date.now().toString(36));
   state.pendingSocial = { provider, auth_id: authId, suggested_name: '' };
+  state.phoneVerified = false;
+  state.otpSent = false;
   state.loginStep = 'profile';
   history.pushState({ salonLoginStep: 'profile' }, '', location.href);
   render();
@@ -702,6 +751,7 @@ async function submitSocialProfile() {
   const shippingAddress = (document.getElementById('login-address') || {}).value.trim();
   if (!name) { showToast('이름을 입력해주세요', 'error'); return; }
   if (!phone) { showToast('휴대폰번호를 입력해주세요', 'error'); return; }
+  if (!state.phoneVerified) { showToast('휴대폰 문자 인증을 완료해주세요', 'error'); return; }
   if (!shippingAddress) { showToast('배송주소를 입력해주세요', 'error'); return; }
   if (!state.pendingSocial || !state.pendingSocial.auth_id) {
     state.loginStep = 'account';
@@ -720,7 +770,12 @@ async function submitSocialProfile() {
     showToast(res.error || '가입에 실패했습니다', 'error');
     return;
   }
+  state.phoneVerified = false;
+  state.otpSent = false;
   await finishSocialAuth(res, provider, auth_id);
+  if (res.staff_invites_accepted) {
+    showToast('담당자 초대가 수락되었습니다', 'success');
+  }
 }
 
 async function finishSocialAuth(res, provider, authId) {
@@ -1532,6 +1587,11 @@ function renderProfile() {
     </div>
 
     <div style="padding:0 16px 100px">
+      ${!u.is_owner ? `
+      <button class="btn-secondary" style="margin-bottom:10px" onclick="openAdminSetup()">
+        <i class="fas fa-store" style="margin-right:8px"></i>매장 개설하기 (관리자)
+      </button>
+      <p style="font-size:12px;color:var(--muted);margin:-2px 0 12px;padding:0 2px">고객으로 먼저 입장했어도, 여기서 내 매장을 개설할 수 있습니다.</p>` : ''}
       ${u.current_salon_id ? `
       <button class="btn-secondary" style="margin-bottom:10px" onclick="navigate('scan'); startDesignerChange()">
         <i class="fas fa-user-edit" style="margin-right:8px"></i>같은 매장 담당자만 변경
@@ -2088,18 +2148,24 @@ function renderStoreManage(salon) {
         : designers.map((d) => `
           <div class="manage-designer-row">
             <div>
-              <div style="font-weight:700">${escText((d.designer_name || '').replace(' 디자이너', ''))}</div>
+              <div style="font-weight:700">${escText((d.designer_name || '').replace(' 디자이너', ''))}
+                <span class="designer-status-chip ${d.status === 'INVITED' ? 'wait' : 'ok'}">${d.status === 'INVITED' ? '초대 대기' : '등록 완료'}</span>
+              </div>
               <div style="font-size:12px;color:var(--muted);margin-top:2px">${escText(d.phone || '연락처 없음')}</div>
             </div>
-            <button type="button" class="ghost-text-btn" onclick="resignDesigner(${d.id})">삭제</button>
+            <div style="display:flex;gap:8px;align-items:center">
+              ${d.status === 'INVITED' ? `<button type="button" class="ghost-text-btn" onclick="resendDesignerInvite(${d.id})">재요청</button>` : ''}
+              <button type="button" class="ghost-text-btn" onclick="resignDesigner(${d.id})">삭제</button>
+            </div>
           </div>`).join('')}
       <div class="code-card setup-form" style="margin-top:12px">
-        <div class="section-label" style="margin-top:0">담당자 추가</div>
+        <div class="section-label" style="margin-top:0">담당자 초대</div>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 10px">요청을 보내면 담당자 휴대폰으로 초대 문자가 갑니다. 같은 번호로 가입·문자인증을 마치면 담당자 등록이 완료됩니다.</p>
         <label class="form-label">이름</label>
         <input id="manage-new-designer-name" class="form-input" placeholder="담당자 이름">
-        <label class="form-label">휴대폰(선택)</label>
+        <label class="form-label">휴대폰</label>
         <input id="manage-new-designer-phone" class="form-input" type="tel" placeholder="010-0000-0000">
-        <button class="btn-secondary" style="margin-top:12px;width:100%" onclick="addManageDesigner()">담당자 추가</button>
+        <button class="btn-secondary" style="margin-top:12px;width:100%" onclick="addManageDesigner()">요청 보내기</button>
       </div>
     </div>`;
 }
@@ -2136,18 +2202,36 @@ async function addManageDesigner() {
     showToast('담당자 이름을 입력하세요', 'error');
     return;
   }
+  if (!phone) {
+    showToast('담당자 휴대폰번호를 입력하세요', 'error');
+    return;
+  }
   const res = await api('/api/designers', 'POST', {
     salon_id: salon.id,
     designer_name: name,
     phone,
+    invite: true,
   });
   if (!res.success) {
-    showToast(res.error || '추가하지 못했습니다', 'error');
+    showToast(res.error || '요청하지 못했습니다', 'error');
     return;
   }
   await loadManageDesigners();
   render();
-  showToast('담당자를 추가했습니다', 'success');
+  if (res.demo_sms) showToast(res.demo_sms, 'success');
+  else showToast(res.message || '초대 요청을 보냈습니다', 'success');
+}
+
+async function resendDesignerInvite(id) {
+  const res = await api('/api/designers/' + id + '/invite', 'POST', {});
+  if (!res.success) {
+    showToast(res.error || '재요청에 실패했습니다', 'error');
+    return;
+  }
+  await loadManageDesigners();
+  render();
+  if (res.demo_sms) showToast(res.demo_sms, 'success');
+  else showToast(res.message || '초대 문자를 다시 보냈습니다', 'success');
 }
 
 async function resignDesigner(id) {
