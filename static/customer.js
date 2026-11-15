@@ -23,6 +23,11 @@ let state = {
       return Array.isArray(raw) ? raw.map(Number).filter(Boolean) : [];
     } catch (_) { return []; }
   })(),
+  coupons: [],
+  selectedProductId: null,
+  productBackPage: 'home',
+  priceBreakdownOpen: true,
+  channelFriendRegistered: localStorage.getItem('salon-vip-channel-friend') === '1',
   orders: [],
   storeOrders: [],
   storeSettlement: null,
@@ -198,7 +203,9 @@ function renderShell() {
   // 매장명: 로그인 상태면 매장명, 없으면 브랜드명
   const salonName = state.user?.salon_name || null;
   const cartCount = state.cart.reduce((s, i) => s + i.qty, 0);
+  const isProduct = state.currentPage === 'product';
   return `
+    ${isProduct ? '' : `
     <header class="app-header">
       ${salonName
         ? `<div class="header-salon-name">${salonName}<span class="brand-dot"></span></div>`
@@ -209,11 +216,11 @@ function renderShell() {
         ${state.user ? `<span class="header-user-chip">${state.user.name}님</span>` : ''}
         <i class="fas fa-bell header-icon"></i>
       </div>
-    </header>
-    <main class="page-content" id="page-content">
+    </header>`}
+    <main class="page-content${isProduct ? ' page-content-flush' : ''}" id="page-content">
       ${renderPage()}
     </main>
-    ${state.user && !['entry', 'admin-setup'].includes(state.currentPage) ? renderBottomNav(cartCount) : ''}
+    ${state.user && !['entry', 'admin-setup', 'product'].includes(state.currentPage) ? renderBottomNav(cartCount) : ''}
   `;
 }
 
@@ -504,6 +511,7 @@ function renderPage() {
     case 'shop':         return renderShop();
     case 'orders':       return renderOrders();
     case 'profile':      return renderProfile();
+    case 'product':      return renderProductPage();
     default:             return renderHome();
   }
 }
@@ -745,7 +753,7 @@ function freeShipHint(p) {
 }
 
 function renderBestCard(p) {
-  const price = sellingPrice(p);
+  const deal = maxDiscountBreakdown(p);
   const brand = productBrandName(p);
   const wished = isWishlisted(p.id);
   const inCart = state.cart.find((i) => i.product_id === p.id);
@@ -766,9 +774,9 @@ function renderBestCard(p) {
       <div class="best-card-body">
         <div class="pc-brand">${escText(brand)}</div>
         <div class="best-name">${escText(p.name)}</div>
-        <div class="pc-base-price">${(p.original_price || 0).toLocaleString()}원</div>
+        <div class="pc-base-price">${deal.sale.toLocaleString()}원</div>
         <div class="pc-deal-row">
-          <span class="pc-deal-price">${price.toLocaleString()}원</span>
+          <span class="pc-deal-price">${deal.maxPrice.toLocaleString()}원</span>
           <span class="pc-deal-label">나의 최대할인가</span>
         </div>
         <div class="pc-ship-hint">${escText(freeShipHint(p))}</div>
@@ -1665,7 +1673,7 @@ function renderShop() {
 }
 
 function renderProductCard(p) {
-  const price = sellingPrice(p);
+  const deal = maxDiscountBreakdown(p);
   const brand = productBrandName(p);
   const wished = isWishlisted(p.id);
   const inCart = state.cart.find((i) => i.product_id === p.id);
@@ -1686,9 +1694,9 @@ function renderProductCard(p) {
       <div class="product-card-body">
         <div class="pc-brand">${escText(brand)}</div>
         <div class="pc-name">${escText(p.name)}</div>
-        <div class="pc-base-price">${(p.original_price || 0).toLocaleString()}원</div>
+        <div class="pc-base-price">${deal.sale.toLocaleString()}원</div>
         <div class="pc-deal-row">
-          <span class="pc-deal-price">${price.toLocaleString()}원</span>
+          <span class="pc-deal-price">${deal.maxPrice.toLocaleString()}원</span>
           <span class="pc-deal-label">나의 최대할인가</span>
         </div>
         <div class="pc-ship-hint">${escText(freeShipHint(p))}</div>
@@ -1701,62 +1709,197 @@ function filterCategory(cat) {
   render();
 }
 
-// ---- Product Detail Modal ----
+function couponDiscountAmount(coupon, sale) {
+  if (!coupon) return 0;
+  const value = Number(coupon.discount_value) || 0;
+  if (coupon.discount_type === 'RATE') {
+    return Math.min(sale, Math.round(sale * value / 100));
+  }
+  return Math.min(sale, Math.max(0, value));
+}
+
+function userHeldCouponIds() {
+  const fromUser = Array.isArray(state.user && state.user.coupon_ids)
+    ? state.user.coupon_ids.map(Number)
+    : [];
+  if (state.channelFriendRegistered && !fromUser.includes(1)) fromUser.push(1);
+  return fromUser;
+}
+
+function pickBestCoupon(p, sale) {
+  const held = new Set(userHeldCouponIds());
+  const active = (state.coupons || []).filter((c) => c && c.status === 'ACTIVE');
+  const scoped = active.filter((c) => {
+    if (Number(c.min_order_amount || 0) > sale) return false;
+    if (c.apply_scope === 'BRAND' && Number(c.brand_id) !== Number(p.brand_id)) return false;
+    return true;
+  });
+  const owned = scoped.filter((c) => held.has(Number(c.id)));
+  const pool = owned.length ? owned : [];
+  let best = null;
+  let bestAmt = 0;
+  pool.forEach((c) => {
+    const amt = couponDiscountAmount(c, sale);
+    if (amt > bestAmt) { best = c; bestAmt = amt; }
+  });
+  return { coupon: best, amount: bestAmt };
+}
+
+function maxDiscountBreakdown(p) {
+  const sale = Math.max(0, Number(p.original_price) || sellingPrice(p) || 0);
+  const picked = pickBestCoupon(p, sale);
+  const couponAmt = picked.amount;
+  const afterCoupon = Math.max(0, sale - couponAmt);
+  const userPts = Math.max(0, Number(state.user && state.user.points) || 0);
+  const pointsDisabled = !!(p && p.point_use_disabled);
+  const pointsAmt = pointsDisabled ? 0 : Math.min(userPts, afterCoupon);
+  const maxPrice = Math.max(0, afterCoupon - pointsAmt);
+  const earnRate = Math.max(0, Number(p.earn_points_rate) || 0);
+  const earnPts = Math.floor(maxPrice * earnRate / 100);
+  return {
+    sale,
+    coupon: picked.coupon,
+    couponAmt,
+    hasCoupon: !!picked.coupon,
+    pointsAmt,
+    pointsDisabled,
+    userPts,
+    maxPrice,
+    earnPts,
+  };
+}
+
+function togglePriceBreakdown() {
+  state.priceBreakdownOpen = !state.priceBreakdownOpen;
+  render();
+}
+
+function registerChannelFriend() {
+  state.channelFriendRegistered = true;
+  try { localStorage.setItem('salon-vip-channel-friend', '1'); } catch (_) {}
+  if (state.user) {
+    const ids = Array.isArray(state.user.coupon_ids) ? state.user.coupon_ids.map(Number) : [];
+    if (!ids.includes(1)) ids.push(1);
+    state.user.coupon_ids = ids;
+    saveUser(state.user);
+  }
+  showToast('채널친구 쿠폰이 적용되었습니다', 'success');
+  render();
+}
+
+function renderMaxDiscountBox(p, deal) {
+  const open = state.priceBreakdownOpen !== false;
+  const couponLabel = deal.coupon ? deal.coupon.name : '채널친구 등록';
+  return `
+    <button type="button" class="pd-max-toggle" onclick="togglePriceBreakdown()">
+      <span class="pd-max-price">${deal.maxPrice.toLocaleString()}원</span>
+      <span class="pd-max-label">나의 최대할인가</span>
+      <i class="fas fa-chevron-${open ? 'up' : 'down'}"></i>
+    </button>
+    ${open ? `
+    <div class="pd-breakdown">
+      <div class="pd-row">
+        <span>판매가</span>
+        <span>${deal.sale.toLocaleString()}원</span>
+      </div>
+      <div class="pd-row">
+        <span class="pd-coupon-label">
+          ${escText(couponLabel)}
+          ${!deal.hasCoupon ? `<button type="button" class="pd-register-link" onclick="registerChannelFriend()">등록하기</button>` : ''}
+        </span>
+        <span>${deal.couponAmt ? '-' + deal.couponAmt.toLocaleString() + '원' : '0원'}</span>
+      </div>
+      <div class="pd-points-box">
+        <div class="pd-points-title">포인트</div>
+        <div class="pd-row pd-row-tight">
+          <span class="pd-muted">사용가능 금액</span>
+          <span>${deal.pointsDisabled ? '사용불가' : '-' + deal.pointsAmt.toLocaleString() + '원'}</span>
+        </div>
+      </div>
+      <div class="pd-row pd-row-total">
+        <span>최대할인가</span>
+        <span>${deal.maxPrice.toLocaleString()}원</span>
+      </div>
+      <div class="pd-row pd-row-earn">
+        <span>추가 구매적립금</span>
+        <span>${deal.earnPts.toLocaleString()}원</span>
+      </div>
+    </div>` : ''}
+  `;
+}
+
+// ---- Product Detail Page ----
 function openProductDetail(id) {
-  const p = state.products.find(x => x.id === id);
-  if (!p) return;
-  const qty = state.cart.find(i => i.product_id === id)?.qty || 0;
-  const price = sellingPrice(p);
-  const disc = Math.round((1 - price / p.original_price) * 100);
-  const stars = renderStars(p.rating || 4.8);
+  const p = findCatalogProduct(id);
+  if (!p) { showToast('상품을 찾을 수 없습니다', 'error'); return; }
+  if (state.currentPage !== 'product') state.productBackPage = state.currentPage || 'home';
+  state.selectedProductId = Number(id);
+  state.priceBreakdownOpen = true;
+  navigate('product');
+}
 
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.innerHTML = `
-    <div class="modal-sheet">
-      <div class="modal-handle"></div>
-      <img class="product-detail-img"
-           src="${p.image_url || 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=400&q=80'}"
-           alt="${p.name}"
-           onerror="this.src='https://images.unsplash.com/photo-1556228720-195a672e8a03?w=400&q=80'">
-      <div style="padding:0 4px">
-        <span style="font-size:11px;color:var(--muted);background:var(--light);padding:3px 9px;border-radius:6px;border:1px solid var(--border)">${p.category}</span>
-        <h3 class="product-detail-name">${p.name}</h3>
-        <div class="product-detail-rating">
-          <span class="pc-stars">${stars}</span>
-          <span class="pc-rating-val">${p.rating || '4.8'}</span>
-          <span class="pc-review-cnt">${(p.review_count||0).toLocaleString()}개 리뷰</span>
-          ${p.is_best ? `<span class="p-best-badge" style="position:static;font-size:10px;padding:2px 6px">BEST</span>` : ''}
-        </div>
-        <div style="display:flex;align-items:baseline;gap:10px;margin:10px 0 6px">
-          <span class="detail-vip-price">${price.toLocaleString()}원</span>
-          <span style="font-size:13px;color:var(--muted);text-decoration:line-through">${(p.original_price||0).toLocaleString()}원</span>
-          <span style="font-size:13px;font-weight:700;color:var(--rose)">-${disc}%</span>
-        </div>
-        <p style="font-size:13px;color:var(--muted);line-height:1.65;margin-bottom:14px;border-top:1px solid var(--border);padding-top:12px">${p.description || ''}</p>
-        ${(p.detail_image_urls || []).map((src) => `<img src="${String(src).replace(/"/g, '&quot;')}" alt="" style="width:100%;border-radius:12px;margin-bottom:8px;display:block">`).join('')}
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:16px">
-          <span>무료배송</span>
+function closeProductPage() {
+  const back = state.productBackPage || 'home';
+  state.selectedProductId = null;
+  navigate(back === 'product' ? 'home' : back);
+}
+
+function renderProductPage() {
+  const p = findCatalogProduct(state.selectedProductId);
+  if (!p) {
+    return `<div style="padding:40px 24px;text-align:center">
+      <p style="color:var(--muted);margin-bottom:16px">상품을 찾을 수 없습니다</p>
+      <button class="btn-primary" style="width:auto;padding:12px 24px" onclick="navigate('home')">홈으로</button>
+    </div>`;
+  }
+  const brand = productBrandName(p);
+  const deal = maxDiscountBreakdown(p);
+  const qty = state.cart.find((i) => i.product_id === p.id)?.qty || 0;
+  const wished = isWishlisted(p.id);
+  return `
+    <div class="pd-page">
+      <div class="pd-topbar">
+        <button type="button" class="pd-back" onclick="closeProductPage()" aria-label="뒤로">
+          <i class="fas fa-chevron-left"></i>
+        </button>
+        <div class="pd-topbar-title">상품 상세</div>
+        <button type="button" class="pd-wish-top${wished ? ' on' : ''}" onclick="toggleWishlist(${p.id})" aria-label="찜">
+          <i class="${wished ? 'fas' : 'far'} fa-heart"></i>
+        </button>
+      </div>
+      <div class="pd-hero">
+        <img src="${p.image_url || 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=800&q=80'}"
+             alt="${escText(p.name)}"
+             onerror="this.src='https://images.unsplash.com/photo-1556228720-195a672e8a03?w=800&q=80'">
+      </div>
+      <div class="pd-body">
+        <div class="pd-crumb">${escText(brand)} &gt; ${escText(p.category || '')}</div>
+        <h1 class="pd-title">${escText(p.name)}</h1>
+        <div class="pd-sale">${deal.sale.toLocaleString()}원</div>
+        ${renderMaxDiscountBox(p, deal)}
+        <div class="pd-ship">${escText(freeShipHint(p))}</div>
+        <div class="pd-desc">${escText(p.description || '')}</div>
+        ${(p.detail_image_urls || []).map((src) =>
+          `<img class="pd-detail-img" src="${String(src).replace(/"/g, '&quot;')}" alt="">`
+        ).join('')}
+        <div class="pd-meta">
           <span>${p.stock_quantity >= 9999 ? '재고 있음' : '재고 ' + p.stock_quantity + '개'}</span>
+          <span>보유 포인트 ${(Number(state.user && state.user.points) || 0).toLocaleString()}P</span>
         </div>
-
+      </div>
+      <div class="pd-bottom-bar">
         ${qty > 0 ? `
-          <div class="qty-stepper">
+          <div class="qty-stepper pd-qty">
             <button class="qty-btn" onclick="updateCartQty(${p.id},-1)">−</button>
             <span class="qty-val">${qty}</span>
             <button class="qty-btn" onclick="updateCartQty(${p.id},1)">+</button>
           </div>` : ''}
-
-        <button class="btn-primary" onclick="addToCart(${p.id});closeModal()">
+        <button class="btn-primary" onclick="addToCart(${p.id})">
           <i class="fas fa-shopping-bag"></i> ${qty > 0 ? '추가 담기' : '장바구니 담기'}
         </button>
-        <button onclick="closeModal()" style="width:100%;background:none;border:none;padding:14px;color:var(--muted);font-size:13px;cursor:pointer;margin-top:4px">닫기</button>
       </div>
-    </div>`;
-  modal.onclick = (e) => { if (e.target === modal) closeModal(); };
-  document.body.appendChild(modal);
-  window.__modal = modal;
-  requestAnimationFrame(() => modal.querySelector('.modal-sheet')?.classList.add('open'));
+    </div>
+  `;
 }
 
 function closeModal() {
@@ -1787,7 +1930,6 @@ function updateCartQty(productId, delta) {
     item.qty += delta;
     if (item.qty <= 0) state.cart = state.cart.filter(i => i.product_id !== productId);
   }
-  closeModal();
   render();
 }
 
@@ -2150,13 +2292,14 @@ async function loadAppData() {
     const salonId = catalogSalonId();
     const salonQuery = salonId ? '?salon_id=' + salonId : '';
     const bestQuery = salonId ? '?best=1&salon_id=' + salonId : '?best=1';
-    const [salonsRes, allRes, productsRes, bestRes, brandsRes, bannersRes] = await Promise.all([
+    const [salonsRes, allRes, productsRes, bestRes, brandsRes, bannersRes, couponsRes] = await Promise.all([
       api('/api/salons'),
       api('/api/products'),
       api('/api/products' + salonQuery),
       api('/api/products' + bestQuery),
       api('/api/brands'),
       api('/api/banners'),
+      api('/api/coupons'),
     ]);
     if (salonsRes.success) state.salons = salonsRes.data;
     if (allRes.success) state.allProducts = allRes.data;
@@ -2164,6 +2307,7 @@ async function loadAppData() {
     if (bestRes.success) state.bestProducts = bestRes.data;
     if (brandsRes.success) state.brands = brandsRes.data;
     if (bannersRes.success) state.banners = bannersRes.data;
+    if (couponsRes.success) state.coupons = couponsRes.data;
     if (state.user) await loadUserOrders();
     if (state.user) await loadPendingStaffInvites();
     if (ownerSalon()) await loadStoreLedger();
