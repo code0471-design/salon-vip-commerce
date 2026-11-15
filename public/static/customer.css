@@ -917,6 +917,30 @@ body {
   font-family: var(--font);
 }
 
+.social-login-stack { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.social-btn {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  border: none; border-radius: 12px; padding: 14px 16px;
+  font-size: 15px; font-weight: 700; cursor: pointer; font-family: var(--font);
+}
+.social-btn:active { transform: scale(0.99); opacity: 0.92; }
+.social-ico {
+  width: 22px; height: 22px; border-radius: 6px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 900;
+}
+.social-kakao { background: #FEE500; color: #191919; }
+.social-kakao .social-ico { background: #191919; color: #FEE500; }
+.social-google { background: #fff; color: #222; border: 1.5px solid var(--border); }
+.social-google .social-ico { background: #fff; color: #4285F4; border: 1px solid #e5e5e5; }
+.social-naver { background: #03C75A; color: #fff; }
+.social-naver .social-ico { background: rgba(255,255,255,0.2); color: #fff; }
+.social-apple { background: #111; color: #fff; }
+.social-apple .social-ico { background: transparent; color: #fff; font-size: 16px; }
+.login-flow-hint {
+  margin-top: 16px; font-size: 12px; color: var(--muted); text-align: center; line-height: 1.5;
+}
+
 /* ═══════════════════════════════════════════
    HOME — 인사 배너 (1줄 슬림)
 ═══════════════════════════════════════════ */

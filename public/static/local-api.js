@@ -569,6 +569,59 @@
       users = users.slice().sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
       return { data: users.map(publicUser) };
     }],
+    ['POST', /^\/api\/auth\/social$/, (req) => {
+      const body = req.body || {};
+      const provider = String(body.provider || '').trim().toLowerCase();
+      const authId = String(body.auth_id || body.kakao_id || '').trim();
+      const allowed = ['kakao', 'google', 'naver', 'apple'];
+      if (!allowed.includes(provider) || !authId) {
+        return { status: 400, error: '소셜 로그인 정보가 올바르지 않습니다' };
+      }
+      const existing = db.users.find((item) => item.kakao_id === authId);
+      if (existing) {
+        existing.auth_provider = provider;
+        if (body.name) existing.name = body.name;
+        if (body.phone) existing.phone = body.phone;
+        const ownedExisting = ownedSalon(existing);
+        if (ownedExisting && !existing.current_salon_id) existing.current_salon_id = ownedExisting.id;
+        save();
+        return {
+          data: publicUser(existing),
+          extra: {
+            is_new: false,
+            is_returning: true,
+            salon_bound: !!(existing.current_salon_id && existing.mapped_designer_id),
+          },
+        };
+      }
+      if (!body.name) {
+        return {
+          data: null,
+          extra: { needs_profile: true, provider, auth_id: authId },
+        };
+      }
+      const owned = ownedSalon({ phone: body.phone });
+      const user = {
+        id: nextId(db.users),
+        kakao_id: authId,
+        auth_provider: provider,
+        name: body.name,
+        phone: body.phone || '',
+        current_salon_id: owned ? owned.id : null,
+        mapped_designer_id: null,
+        created_at: nowStamp(),
+      };
+      db.users.push(user);
+      save();
+      return {
+        data: publicUser(user),
+        extra: {
+          is_new: true,
+          is_returning: false,
+          salon_bound: !!(user.current_salon_id && user.mapped_designer_id),
+        },
+      };
+    }],
     ['POST', /^\/api\/users$/, (req) => {
       const body = req.body || {};
       if (!body.name) return { status: 400, error: '이름을 입력해주세요' };
@@ -576,6 +629,7 @@
       if (existing) {
         if (body.name) existing.name = body.name;
         if (body.phone) existing.phone = body.phone;
+        if (body.auth_provider) existing.auth_provider = body.auth_provider;
         const ownedExisting = ownedSalon(existing);
         if (ownedExisting && !existing.current_salon_id) existing.current_salon_id = ownedExisting.id;
         save();
@@ -585,6 +639,7 @@
       const user = {
         id: nextId(db.users),
         kakao_id: body.kakao_id || `kakao_${Date.now()}`,
+        auth_provider: body.auth_provider || 'kakao',
         name: body.name,
         phone: body.phone || '',
         current_salon_id: owned ? owned.id : null,
