@@ -1093,6 +1093,27 @@ const routes = [
     if (!user) return { status: 404, error: '고객을 찾을 수 없습니다' };
     return { data: { user: publicUser(user), orders: userOrders(user.id) } };
   }],
+  ['PUT', /^\/api\/users\/(\d+)$/, (req, id) => {
+    const user = db.users.find((u) => u.id === Number(id));
+    if (!user) return { status: 404, error: '고객을 찾을 수 없습니다' };
+    const body = req.body || {};
+    const name = String(body.name != null ? body.name : user.name || '').trim();
+    const phone = String(body.phone != null ? body.phone : user.phone || '').trim();
+    const shipping = String(body.shipping_address != null ? body.shipping_address : user.shipping_address || '').trim();
+    if (!name) return { status: 400, error: '이름을 입력해주세요' };
+    if (!phone) return { status: 400, error: '휴대폰번호를 입력해주세요' };
+    if (!shipping) return { status: 400, error: '배송주소를 입력해주세요' };
+    const phoneChanged = phoneDigits(phone) !== phoneDigits(user.phone);
+    if (phoneChanged && !isPhoneVerified(phone)) {
+      return { status: 400, error: '휴대폰 번호 변경 시 문자 인증을 완료해주세요' };
+    }
+    user.name = name;
+    user.phone = phone;
+    user.shipping_address = shipping;
+    if (phoneChanged) user.phone_verified = true;
+    save();
+    return { data: publicUser(user), extra: { message: '회원 정보를 저장했습니다' } };
+  }],
   ['POST', /^\/api\/users\/(\d+)\/scan-qr$/, (req, id) => {
     const user = db.users.find((u) => u.id === Number(id));
     if (!user) return { status: 404, error: '고객을 찾을 수 없습니다' };
