@@ -39,6 +39,8 @@ let state = {
   deepInviteId: null,
   deepInviteInfo: null,
   manageDraft: null, // { salon_id, salon_name, owner_name, owner_phone, address, address_detail, bank_account }
+  profilePhoneVerified: false,
+  profileOtpSent: false,
   setupDraft: {
     salon_name: '',
     owner_name: '',
@@ -1906,18 +1908,23 @@ function openOrderDetail(id) {
 // ============================================================
 // PROFILE PAGE
 // ============================================================
+function phoneDigitsLocal(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
 function renderProfile() {
   if (!state.user) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
   const u = state.user;
   const totalSpent = state.orders.filter(o => o.payment_status === 'PAID').reduce((s,o) => s + o.total_amount, 0);
   const orderCount = state.orders.filter(o => o.payment_status === 'PAID').length;
+  const ship = String(u.shipping_address || '');
 
   return `
     <div class="profile-hero">
       <div class="profile-avatar-wrap">
         <i class="fas fa-user" style="font-size:28px;color:white;opacity:0.9"></i>
       </div>
-      <div class="profile-name">${u.name}</div>
+      <div class="profile-name">${escText(u.name)}</div>
       <div class="profile-vip-chip"><i class="fas fa-crown" style="margin-right:4px"></i>VIP 멤버</div>
     </div>
 
@@ -1943,19 +1950,42 @@ function renderProfile() {
           <i class="fas fa-scissors" style="color:var(--accent);font-size:18px"></i>
         </div>
         <div>
-          <div style="font-size:15px;font-weight:700;color:var(--text)">${u.salon_name || '미등록'}</div>
-          <div style="font-size:12px;color:var(--muted)">담당 · ${u.designer_name || '없음'}</div>
+          <div style="font-size:15px;font-weight:700;color:var(--text)">${escText(u.salon_name || '미등록')}</div>
+          <div style="font-size:12px;color:var(--muted)">담당 · ${escText(u.designer_name || '없음')}</div>
         </div>
       </div>
     </div>
 
-    <div class="info-card">
+    <div class="info-card setup-form" style="padding-bottom:16px">
       <div class="info-card-header">계정 정보</div>
-      <div class="info-row"><span>이름</span><span>${u.name}</span></div>
-      <div class="info-row"><span>전화번호</span><span>${u.phone || '-'}</span></div>
-      <div class="info-row"><span>배송주소</span><span style="text-align:right;max-width:62%">${u.shipping_address || '-'}</span></div>
-      <div class="info-row"><span>보유 포인트</span><span>${(u.points || 0).toLocaleString()}P</span></div>
-      <div class="info-row" style="border-bottom:none"><span>가입일</span><span>${new Date(u.created_at).toLocaleDateString('ko-KR')}</span></div>
+      <div style="padding:12px 16px 0">
+        <label class="form-label">이름</label>
+        <input id="profile-name" class="form-input" type="text" value="${escText(u.name || '')}">
+        <label class="form-label">휴대폰번호</label>
+        <div class="otp-row">
+          <input id="profile-phone" class="form-input" type="tel" value="${escText(u.phone || '')}"
+            oninput="onProfilePhoneInput()">
+          <button type="button" class="btn-secondary otp-send-btn" onclick="sendProfileOtp()">인증요청</button>
+        </div>
+        <label class="form-label">인증번호</label>
+        <div class="otp-row">
+          <input id="profile-otp" class="form-input" type="tel" inputmode="numeric" maxlength="4" placeholder="번호 변경 시에만">
+          <button type="button" class="btn-secondary otp-send-btn" onclick="verifyProfileOtp()">확인</button>
+        </div>
+        <p id="profile-otp-hint" class="code-hint">${state.profilePhoneVerified ? '휴대폰 인증 완료' : (state.profileOtpSent ? '인증번호를 입력하세요' : '번호 변경 시에만 인증하세요')}</p>
+        <label class="form-label">배송주소</label>
+        <div class="address-search-row">
+          <input id="profile-address" class="form-input" value="${escText(ship)}" readonly
+            placeholder="주소 검색을 눌러주세요"
+            onclick="openAddressSearch('profile-address','profile-address-detail')">
+          <button type="button" class="btn-secondary address-search-btn" onclick="openAddressSearch('profile-address','profile-address-detail')">주소 검색</button>
+        </div>
+        <input id="profile-address-detail" class="form-input" type="text" style="margin-top:8px"
+          placeholder="상세주소 (동·호수 등)">
+        <div class="info-row" style="padding-left:0;padding-right:0;margin-top:8px"><span>보유 포인트</span><span>${(u.points || 0).toLocaleString()}P</span></div>
+        <div class="info-row" style="padding-left:0;padding-right:0;border-bottom:none"><span>가입일</span><span>${u.created_at ? new Date(u.created_at).toLocaleDateString('ko-KR') : '-'}</span></div>
+        <button class="btn-primary" style="margin-top:8px" onclick="saveProfileInfo()">회원 정보 저장</button>
+      </div>
     </div>
 
     <div style="padding:0 16px 100px">
@@ -1968,6 +1998,75 @@ function renderProfile() {
       </button>
     </div>
   `;
+}
+
+function onProfilePhoneInput() {
+  state.profilePhoneVerified = false;
+  state.profileOtpSent = false;
+  const hint = document.getElementById('profile-otp-hint');
+  if (hint) hint.textContent = '번호 변경 시에만 인증하세요';
+}
+
+async function sendProfileOtp() {
+  const phone = ((document.getElementById('profile-phone') || {}).value || '').trim();
+  if (!phone) { showToast('휴대폰번호를 입력해주세요', 'error'); return; }
+  const res = await api('/api/auth/otp/send', 'POST', { phone });
+  if (!res.success) {
+    showToast(res.error || '인증번호 발송 실패', 'error');
+    return;
+  }
+  state.profileOtpSent = true;
+  state.profilePhoneVerified = false;
+  const hint = document.getElementById('profile-otp-hint');
+  if (hint) hint.textContent = res.demo_code ? `데모 인증번호: ${res.demo_code}` : '인증번호를 입력하세요';
+  showToast(res.demo_code ? `데모 인증번호 ${res.demo_code}` : (res.message || '인증번호를 발송했습니다'), 'success');
+}
+
+async function verifyProfileOtp() {
+  const phone = ((document.getElementById('profile-phone') || {}).value || '').trim();
+  const code = ((document.getElementById('profile-otp') || {}).value || '').trim();
+  if (!phone || !code) { showToast('휴대폰번호와 인증번호를 입력하세요', 'error'); return; }
+  const res = await api('/api/auth/otp/verify', 'POST', { phone, code });
+  if (!res.success) {
+    state.profilePhoneVerified = false;
+    showToast(res.error || '인증 실패', 'error');
+    return;
+  }
+  state.profilePhoneVerified = true;
+  const hint = document.getElementById('profile-otp-hint');
+  if (hint) hint.textContent = '휴대폰 인증 완료';
+  showToast(res.message || '휴대폰 인증이 완료되었습니다', 'success');
+}
+
+async function saveProfileInfo() {
+  if (!state.user) return;
+  const name = ((document.getElementById('profile-name') || {}).value || '').trim();
+  const phone = ((document.getElementById('profile-phone') || {}).value || '').trim();
+  const base = ((document.getElementById('profile-address') || {}).value || '').trim();
+  const detail = ((document.getElementById('profile-address-detail') || {}).value || '').trim();
+  const shipping = joinAddress(base, detail) || base;
+  if (!name) { showToast('이름을 입력해주세요', 'error'); return; }
+  if (!phone) { showToast('휴대폰번호를 입력해주세요', 'error'); return; }
+  if (!shipping) { showToast('배송주소를 입력해주세요', 'error'); return; }
+  const phoneChanged = phoneDigitsLocal(phone) !== phoneDigitsLocal(state.user.phone);
+  if (phoneChanged && !state.profilePhoneVerified) {
+    showToast('휴대폰 번호 변경 시 문자 인증을 완료해주세요', 'error');
+    return;
+  }
+  const res = await api('/api/users/' + state.user.id, 'PUT', {
+    name,
+    phone,
+    shipping_address: shipping,
+  });
+  if (!res.success) {
+    showToast(res.error || '저장하지 못했습니다', 'error');
+    return;
+  }
+  saveUser(res.data);
+  state.profilePhoneVerified = false;
+  state.profileOtpSent = false;
+  render();
+  showToast(res.message || '회원 정보를 저장했습니다', 'success');
 }
 
 function renderLoginPrompt() {
