@@ -148,6 +148,7 @@ function clearSessionOnly() {
   state.storeView = '';
   state.adminTab = 'sales';
   state.manageDesigners = [];
+  state.resignConfirmId = null;
   state.manageDraft = null;
   state.cart = [];
   state.pendingSocial = null;
