@@ -369,7 +369,7 @@ async function openAddSalonModal() {
   showModal(`
     <h3 style="font-size:18px;font-weight:800;margin-bottom:20px">살롱 추가</h3>
     <div class="form-group"><label class="form-label">살롱명 *</label><input class="form-input" id="m-salon-name" placeholder="살롱 이름"></div>
-    <div class="form-group"><label class="form-label">매장 코드</label><input class="form-input" id="m-salon-code" placeholder="예: 10001 (5자리 숫자, 비우면 자동)" inputmode="numeric" maxlength="5" style="letter-spacing:0.06em"></div>
+    <div class="form-group"><label class="form-label">매장 코드</label><input class="form-input" id="m-salon-code" placeholder="예: 100001 (6자리 숫자, 비우면 자동)" inputmode="numeric" maxlength="6" style="letter-spacing:0.06em"></div>
     <div class="form-group"><label class="form-label">오너 이름 *</label><input class="form-input" id="m-owner-name" placeholder="대표자명"></div>
     <div class="form-group"><label class="form-label">연락처 *</label><input class="form-input" id="m-owner-phone" type="tel" placeholder="010-0000-0000"></div>
     <div class="form-group"><label class="form-label">계좌번호</label><input class="form-input" id="m-bank" placeholder="은행명 000-0000-0000"></div>
@@ -445,7 +445,7 @@ async function openEditSalonModal(id) {
   showModal(`
     <h3 style="font-size:18px;font-weight:800;margin-bottom:20px">살롱 편집</h3>
     <div class="form-group"><label class="form-label">살롱명</label><input class="form-input" id="m-salon-name" value="${salon.salon_name}"></div>
-    <div class="form-group"><label class="form-label">매장 코드</label><input class="form-input" id="m-salon-code" value="${salon.salon_code || ''}" inputmode="numeric" maxlength="5" style="letter-spacing:0.06em"></div>
+    <div class="form-group"><label class="form-label">매장 코드</label><input class="form-input" id="m-salon-code" value="${salon.salon_code || ''}" inputmode="numeric" maxlength="6" style="letter-spacing:0.06em"></div>
     <div class="form-group"><label class="form-label">오너 이름</label><input class="form-input" id="m-owner-name" value="${salon.owner_name}"></div>
     <div class="form-group"><label class="form-label">연락처</label><input class="form-input" id="m-owner-phone" value="${salon.owner_phone}"></div>
     <div class="form-group"><label class="form-label">계좌번호</label><input class="form-input" id="m-bank" value="${salon.bank_account || ''}"></div>
