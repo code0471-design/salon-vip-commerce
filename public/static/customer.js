@@ -2249,9 +2249,10 @@ function renderCartQtySheet() {
             <button type="button" class="qty-btn" onclick="changeCartQtySheet(1)">+</button>
           </div>
         </div>
+        <p class="cart-qty-hint">쿠폰, 포인트 할인혜택은 장바구니에서 적용됩니다</p>
         <button type="button" class="btn-primary cart-sheet-add${canAdd ? '' : ' is-disabled'}"
           ${canAdd ? `onclick="confirmCartQtySheet()"` : 'disabled'}>
-          ${canAdd ? `장바구니 담기 · ${(deal.maxPrice * qty).toLocaleString()}원` : '수량을 선택해 주세요'}
+          ${canAdd ? '장바구니 담기' : '수량을 선택해 주세요'}
         </button>
       </div>
     </div>
@@ -2333,7 +2334,7 @@ function renderProductPage() {
       </div>
       <div class="pd-bottom-bar">
         <button class="btn-primary" onclick="openCartQtySheet(${p.id})">
-          <i class="fas fa-shopping-bag"></i> 장바구니 담기 · ${deal.maxPrice.toLocaleString()}원
+          <i class="fas fa-shopping-bag"></i> 장바구니 담기
         </button>
       </div>
     </div>
