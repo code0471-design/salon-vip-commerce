@@ -132,7 +132,7 @@ function renderBottomNav() {
     { id: 'home', icon: 'fa-home', label: '홈' },
     ownerSalon()
       ? { id: 'store', icon: 'fa-chart-line', label: '매출' }
-      : { id: 'scan', icon: 'fa-store', label: needsSalonBinding() ? '매장등록' : '매장변경' },
+      : { id: 'scan', icon: 'fa-store', label: needsSalonBinding() ? '매장등록' : '내 매장' },
     { id: 'shop', icon: 'fa-shopping-bag', label: '쇼핑' },
     { id: 'profile', icon: 'fa-user', label: '내 정보' }
   ];
@@ -378,8 +378,14 @@ async function loginAsDemo() {
 // SALON CODE + DESIGNER ONBOARDING
 // ============================================================
 function renderScan() {
-  if (state.switchInfo) return renderSwitchConfirm();
   if (!state.user) return `<div style="padding:24px">${renderLoginPrompt()}</div>`;
+
+  // 이미 매장이 있으면 변경·다중 선택 불가. 담당자만 같은 매장 안에서 수정 가능.
+  if (state.user.current_salon_id && !state.selectedSalon) {
+    if (!needsSalonBinding()) return renderBoundSalonPage();
+    startDesignerChange();
+    return `<div class="scan-page"><p style="font-size:13px;color:var(--muted)">담당자 선택을 준비하는 중…</p></div>`;
+  }
 
   const salon = state.selectedSalon;
   const designers = (salon && salon.designers) || [];
@@ -389,10 +395,10 @@ function renderScan() {
   return `
     <div class="scan-page">
       <h2 style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px">
-        ${needsSalonBinding() ? '매장 · 담당자 등록' : '매장 · 담당자 변경'}
+        매장 · 담당자 등록
       </h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:18px">
-        매장 코드 입력 후 담당자를 선택하면, 이후 모든 주문이 해당 매장·담당자에게 귀속됩니다.
+        5자리 매장 코드 입력 후 담당자를 선택하세요. 고객당 매장은 1곳만 등록됩니다.
       </p>
 
       <div class="onboard-steps">
@@ -403,19 +409,20 @@ function renderScan() {
       ${!salon ? `
         <div class="code-card">
           <label class="form-label" for="salon-code-input">매장 코드</label>
-          <input id="salon-code-input" class="form-input code-input" type="text" autocomplete="off"
+          <input id="salon-code-input" class="form-input code-input" type="tel" inputmode="numeric"
+            maxlength="5" autocomplete="off"
             value="${state.salonCodeInput || ''}"
-            placeholder="예: GANGNAM"
-            oninput="state.salonCodeInput=this.value.toUpperCase()">
-          <p class="code-hint">매장 QR 안내문 또는 직원에게 받은 코드를 입력하세요.</p>
+            placeholder="예: 10001"
+            oninput="state.salonCodeInput=this.value.replace(/\\D/g,'').slice(0,5); this.value=state.salonCodeInput">
+          <p class="code-hint">매장에서 안내받은 5자리 숫자 코드를 입력하세요.</p>
           <button class="btn-primary" style="margin-top:14px" onclick="lookupSalonCode()">
             <i class="fas fa-search"></i> 매장 확인
           </button>
         </div>
         <div class="code-demo-hint">
-          데모 코드 · <button type="button" class="demo-link" onclick="fillDemoCode('GANGNAM')">GANGNAM</button>
-          · <button type="button" class="demo-link" onclick="fillDemoCode('MAPO')">MAPO</button>
-          · <button type="button" class="demo-link" onclick="fillDemoCode('HONGDAE')">HONGDAE</button>
+          데모 코드 · <button type="button" class="demo-link" onclick="fillDemoCode('10001')">10001</button>
+          · <button type="button" class="demo-link" onclick="fillDemoCode('10002')">10002</button>
+          · <button type="button" class="demo-link" onclick="fillDemoCode('10003')">10003</button>
         </div>
       ` : `
         <div class="salon-confirm-card">
@@ -424,7 +431,9 @@ function renderScan() {
             <div style="font-weight:800;font-size:16px;color:var(--text)">${salon.salon_name}</div>
             <div style="font-size:12px;color:var(--muted);margin-top:2px">매장 코드 ${salon.salon_code || '-'}</div>
           </div>
-          <button type="button" class="ghost-text-btn" onclick="resetOnboarding();render()">다시 입력</button>
+          ${!state.user.current_salon_id
+            ? `<button type="button" class="ghost-text-btn" onclick="resetOnboarding();render()">다시 입력</button>`
+            : ''}
         </div>
 
         <div class="designer-section">
@@ -454,6 +463,43 @@ function renderScan() {
   `;
 }
 
+function renderBoundSalonPage() {
+  const u = state.user;
+  return `
+    <div class="scan-page">
+      <h2 style="font-size:20px;font-weight:800;color:var(--text);margin-bottom:4px">내 매장</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:18px">
+        고객당 매장은 1곳만 등록됩니다. 다른 매장으로 바꿀 수 없습니다.
+      </p>
+      <div class="salon-confirm-card">
+        <div class="salon-icon-wrap"><i class="fas fa-scissors" style="color:var(--accent)"></i></div>
+        <div style="flex:1">
+          <div style="font-weight:800;font-size:16px;color:var(--text)">${u.salon_name || '등록된 매장'}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">담당 · ${u.designer_name || '없음'}</div>
+        </div>
+      </div>
+      <button class="btn-secondary" style="margin-top:16px" onclick="startDesignerChange()">
+        <i class="fas fa-user-edit" style="margin-right:8px"></i>같은 매장 담당자만 변경
+      </button>
+    </div>
+  `;
+}
+
+async function startDesignerChange() {
+  if (!state.user || !state.user.current_salon_id) return;
+  const res = await api('/api/salons/' + state.user.current_salon_id + '/qr');
+  if (!res.success) {
+    showToast(res.error || '매장 정보를 불러오지 못했습니다', 'error');
+    return;
+  }
+  state.selectedSalon = {
+    ...res.data.salon,
+    designers: res.data.designers || [],
+  };
+  state.selectedDesigner = state.user.mapped_designer_id || null;
+  render();
+}
+
 function fillDemoCode(code) {
   state.salonCodeInput = code;
   const input = document.getElementById('salon-code-input');
@@ -464,7 +510,11 @@ function fillDemoCode(code) {
 async function lookupSalonCode() {
   const code = (state.salonCodeInput || (document.getElementById('salon-code-input') || {}).value || '').trim();
   if (!code) { showToast('매장 코드를 입력해주세요', 'error'); return; }
-  state.salonCodeInput = code.toUpperCase();
+  if (!/^\d{5}$/.test(code)) {
+    showToast('매장 코드는 5자리 숫자입니다', 'error');
+    return;
+  }
+  state.salonCodeInput = code;
   const res = await api('/api/salons/lookup?code=' + encodeURIComponent(state.salonCodeInput));
   if (!res.success) {
     showToast(res.error || '매장 코드를 찾을 수 없습니다', 'error');
@@ -478,37 +528,6 @@ async function lookupSalonCode() {
   state.onboardingStep = 'designer';
   render();
   showToast(res.data.salon.salon_name + '에 입장했습니다', 'success');
-}
-
-function renderSwitchConfirm() {
-  const info = state.switchInfo;
-  return `
-    <div style="padding:24px 20px">
-      <div style="background:linear-gradient(135deg,var(--primary),#0f3460);border-radius:var(--card-r);padding:28px 24px;color:white;text-align:center;margin-bottom:20px">
-        <div style="width:64px;height:64px;background:rgba(200,169,110,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
-          <i class="fas fa-exchange-alt" style="font-size:28px;color:var(--accent)"></i>
-        </div>
-        <h3 style="font-size:18px;font-weight:800;margin-bottom:8px">살롱 변경 확인</h3>
-        <p style="font-size:13px;opacity:0.7;margin-bottom:20px">메인 살롱을 변경하시겠습니까?</p>
-        <div style="display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap">
-          <div style="background:rgba(255,255,255,0.1);padding:8px 14px;border-radius:10px;font-size:13px">
-            <i class="fas fa-store" style="margin-right:6px;opacity:0.7"></i>${info.from_salon}
-          </div>
-          <i class="fas fa-arrow-right" style="color:var(--accent)"></i>
-          <div style="background:rgba(200,169,110,0.25);border:1px solid rgba(200,169,110,0.5);padding:8px 14px;border-radius:10px;font-size:13px">
-            <i class="fas fa-store" style="margin-right:6px;color:var(--accent)"></i>${info.to_salon}
-          </div>
-        </div>
-        <p style="font-size:11px;opacity:0.5;margin-top:14px">※ 기존 주문 내역은 유지됩니다</p>
-      </div>
-      <div style="display:flex;gap:10px">
-        <button class="btn-secondary" style="flex:1" onclick="cancelSwitch()">취소</button>
-        <button class="btn-primary" style="flex:2" onclick="confirmSwitch()">
-          <i class="fas fa-check"></i> 변경하기
-        </button>
-      </div>
-    </div>
-  `;
 }
 
 function selectDesigner(id) {
@@ -528,46 +547,14 @@ async function confirmScan() {
     designer_id: state.selectedDesigner
   });
   if (res.success) {
-    if (res.requires_confirmation) {
-      state.switchInfo = res.switch_info;
-      render();
-    } else {
-      saveUser(res.data);
-      resetOnboarding();
-      await loadAppData();
-      navigate('home');
-      showToast(res.message || '등록이 완료되었습니다', 'success');
-    }
-  } else {
-    showToast(res.error || '등록에 실패했습니다', 'error');
-  }
-}
-
-async function confirmSwitch() {
-  const info = state.switchInfo;
-  if (!info || !info.designer_id) {
-    showToast('담당자를 선택해주세요', 'error');
-    return;
-  }
-  const res = await api(`/api/users/${state.user.id}/confirm-switch`, 'POST', {
-    to_salon_id: info.to_salon_id,
-    designer_id: info.designer_id
-  });
-  if (res.success) {
     saveUser(res.data);
     resetOnboarding();
     await loadAppData();
-    await loadUserOrders();
     navigate('home');
-    showToast(res.message || '변경되었습니다', 'success');
+    showToast(res.message || '등록이 완료되었습니다', 'success');
   } else {
-    showToast(res.error || '변경에 실패했습니다', 'error');
+    showToast(res.error || '등록에 실패했습니다', 'error');
   }
-}
-
-function cancelSwitch() {
-  state.switchInfo = null;
-  render();
 }
 
 // ============================================================
@@ -993,9 +980,13 @@ function renderProfile() {
     </div>
 
     <div style="padding:0 16px 100px">
+      ${u.current_salon_id ? `
+      <button class="btn-secondary" style="margin-bottom:10px" onclick="navigate('scan'); startDesignerChange()">
+        <i class="fas fa-user-edit" style="margin-right:8px"></i>같은 매장 담당자만 변경
+      </button>` : `
       <button class="btn-secondary" style="margin-bottom:10px" onclick="resetOnboarding();navigate('scan')">
-        <i class="fas fa-store" style="margin-right:8px"></i>매장 · 담당자 변경
-      </button>
+        <i class="fas fa-store" style="margin-right:8px"></i>매장 · 담당자 등록
+      </button>`}
       <button onclick="handleLogout()" style="width:100%;background:none;border:1.5px solid #fee2e2;border-radius:14px;padding:14px;color:#dc2626;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:0.3px">
         <i class="fas fa-sign-out-alt" style="margin-right:8px"></i>로그아웃
       </button>
