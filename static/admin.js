@@ -2,7 +2,9 @@
 // SALON Admin Dashboard SPA
 // ============================================================
 
-const API = '';
+const API = (window.__SALON_CONFIG__ && window.__SALON_CONFIG__.apiBase)
+  ? String(window.__SALON_CONFIG__.apiBase).replace(/\/$/, '')
+  : '';
 let adminState = {
   page: 'dashboard',
   stats: null,
@@ -52,10 +54,17 @@ let adminState = {
 
 // ---- API Helpers ----
 async function api(path, method = 'GET', body = null) {
+  if (location.hostname.endsWith('github.io') && !API) {
+    return { success: false, error: '실서버 API가 연결되지 않았습니다. config.js의 apiBase를 설정하세요.' };
+  }
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(API + path, opts);
-  return res.json();
+  try {
+    const res = await fetch(API + path, opts);
+    return await res.json();
+  } catch (e) {
+    return { success: false, error: '실서버에 연결할 수 없습니다' };
+  }
 }
 
 function showToast(msg, type = '') {
@@ -68,21 +77,24 @@ function showToast(msg, type = '') {
 
 // ---- Render ----
 function renderDataSourceBanner() {
-  const onPages = location.hostname.endsWith('github.io');
-  if (onPages) {
+  if (API) {
     return `
       <div class="data-source-banner pages">
-        <i class="fas fa-info-circle"></i>
-        <span>이 어드민은 <strong>이 브라우저에 저장된 데모 DB</strong>를 봅니다. 고객 앱(같은 사이트)에서 개설한 매장이 여기 살롱 목록에 나타납니다. 다른 PC·다른 브라우저·로컬 서버에는 안 보입니다.</span>
+        <i class="fas fa-cloud"></i>
+        <span>실서버 API: <code>${escAttr(API)}</code> — 고객 앱·어드민이 같은 DB를 공유합니다.</span>
+      </div>`;
+  }
+  if (location.hostname.endsWith('github.io')) {
+    return `
+      <div class="data-source-banner local">
+        <i class="fas fa-exclamation-triangle"></i>
+        <span>실서버가 아직 연결되지 않았습니다. <code>static/config.js</code>에 <strong>apiBase</strong>를 넣어 주세요. 브라우저 로컬 DB는 더 이상 쓰지 않습니다.</span>
       </div>`;
   }
   return `
-    <div class="data-source-banner local">
-      <i class="fas fa-database"></i>
-      <span>로컬 서버 DB(<code>data/db.json</code>)입니다. GitHub Pages 고객 앱에서 만든 매장은 여기에 없습니다. 같은 데모 매장을 보려면
-        <a href="https://code0471-design.github.io/salon-vip-commerce/admin.html" target="_blank" rel="noopener">GitHub Pages 어드민</a>을
-        고객 앱과 <strong>같은 브라우저</strong>로 여세요.
-      </span>
+    <div class="data-source-banner pages">
+      <i class="fas fa-server"></i>
+      <span>이 서버의 공유 DB를 사용합니다. 개설한 매장은 고객 앱·어드민에 같이 보입니다.</span>
     </div>`;
 }
 
