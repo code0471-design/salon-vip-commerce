@@ -154,6 +154,13 @@ body {
 .admin-tab.on {
   background: var(--primary); color: #fff; border-color: var(--primary);
 }
+.entry-path-list {
+  text-align: left; margin: 0 0 16px; padding: 12px 14px 12px 28px;
+  background: #f7f6f3; border-radius: 14px; font-size: 12px; color: var(--text);
+  line-height: 1.55;
+}
+.entry-path-list li { margin-bottom: 6px; }
+.entry-path-list li:last-child { margin-bottom: 0; }
 .entry-code-hint {
   margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4;
 }
