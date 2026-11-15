@@ -902,7 +902,10 @@ body {
   line-height: 1.35; margin-bottom: 4px;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.order-salon-sub { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.order-salon-sub { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.order-meta-line {
+  font-size: 11px; color: var(--muted); margin-bottom: 8px; line-height: 1.4;
+}
 .order-detail-btn {
   width: 100%; margin-top: 12px; border: 1.5px solid var(--border);
   background: #fff; border-radius: 12px; padding: 11px 12px;

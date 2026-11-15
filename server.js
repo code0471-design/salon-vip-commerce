@@ -1434,15 +1434,32 @@ const routes = [
       });
     }
     if (!items.length) return { status: 400, error: '주문 상품이 없습니다' };
-    const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-    const split = splitAmount(total, Boolean(designer));
+    const goodsTotal = items.reduce((sum, item) => sum + item.price * item.qty, 0);
+    let couponDiscount = Math.max(0, Number(body.coupon_discount) || 0);
+    let pointsUsed = Math.max(0, Math.floor(Number(body.points_used) || 0));
+    if (!couponDiscount) {
+      couponDiscount = (body.items || []).reduce((s, item) => s + (Number(item.coupon_discount) || 0), 0);
+    }
+    if (!pointsUsed) {
+      pointsUsed = (body.items || []).reduce((s, item) => s + (Number(item.points_used) || 0), 0);
+    }
+    couponDiscount = Math.min(couponDiscount, goodsTotal);
+    const afterCoupon = Math.max(0, goodsTotal - couponDiscount);
+    pointsUsed = Math.min(pointsUsed, afterCoupon, Math.max(0, Number(user.points) || 0));
+    const paidTotal = Math.max(0, afterCoupon - pointsUsed);
+    const split = splitAmount(paidTotal, Boolean(designer));
     const storePayout = items.reduce((sum, item) => sum + (item.price - item.salon_price) * item.qty, 0);
-    const pointsEarned = orderPointsEarned(items);
+    const pointsEarned = orderPointsEarned(items.map((item) => ({
+      ...item,
+      price: paidTotal > 0 && goodsTotal > 0
+        ? Math.round(item.price * (paidTotal / goodsTotal))
+        : item.price,
+    })));
     items.forEach((item) => {
       const product = db.products.find((p) => p.id === item.product_id);
       product.stock_quantity -= item.qty;
     });
-    if (pointsEarned > 0) user.points = (user.points || 0) + pointsEarned;
+    user.points = Math.max(0, (Number(user.points) || 0) - pointsUsed + pointsEarned);
     const shippingAddress = String(body.shipping_address || user.shipping_address || '').trim();
     if (!shippingAddress) {
       return { status: 400, error: '배송주소를 등록한 뒤 주문할 수 있습니다' };
@@ -1452,12 +1469,14 @@ const routes = [
       user_id: user.id,
       salon_id: salon.id,
       designer_id: designer ? designer.id : null,
-      total_amount: total,
+      total_amount: paidTotal,
       platform_amount: split.platform,
       salon_commission_amount: storePayout,
       designer_commission_amount: split.designer,
       points_earned: pointsEarned,
-      points_used: 0,
+      points_used: pointsUsed,
+      coupon_id: body.coupon_id ? Number(body.coupon_id) : null,
+      coupon_discount: couponDiscount,
       payment_status: 'PAID',
       shipping_status: 'READY',
       shipping_name: user.name || '',
