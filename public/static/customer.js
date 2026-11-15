@@ -31,6 +31,8 @@ let state = {
   orderBackPage: 'orders',
   orderPayOpen: true,
   priceBreakdownOpen: true,
+  cartQtySheet: null, // { productId, qty }
+  cartAddedSheet: null, // { productId, brandName, brandId }
   // 상품 상세 할인 선택: 기본 전체 적용, 고객이 해제/변경 가능
   dealPrefs: null, // { productId, useCoupon, couponId, usePoints, pointsUse }
   menuOpen: false,
@@ -289,6 +291,8 @@ function renderShell() {
     </main>
     ${state.user && !['entry', 'admin-setup', 'product'].includes(state.currentPage) ? renderBottomNav(cartCount) : ''}
     ${renderHeaderMenu()}
+    ${renderCartQtySheet()}
+    ${renderCartAddedSheet()}
   `;
 }
 
@@ -2111,7 +2115,165 @@ function openProductDetail(id) {
 function closeProductPage() {
   const back = state.productBackPage || 'home';
   state.selectedProductId = null;
+  state.cartQtySheet = null;
+  state.cartAddedSheet = null;
   navigate(back === 'product' ? 'home' : back);
+}
+
+function openCartQtySheet(productId) {
+  if (state.user && needsSalonBinding()) {
+    showToast('먼저 살롱 VIP에 입장해 주세요', 'error');
+    navigate('entry');
+    return;
+  }
+  const p = findCatalogProduct(productId);
+  if (!p) { showToast('상품을 찾을 수 없습니다', 'error'); return; }
+  state.cartAddedSheet = null;
+  state.cartQtySheet = { productId: Number(p.id), qty: 0 };
+  render();
+}
+
+function closeCartQtySheet() {
+  state.cartQtySheet = null;
+  render();
+}
+
+function changeCartQtySheet(delta) {
+  if (!state.cartQtySheet) return;
+  const next = Math.max(0, Math.min(99, Number(state.cartQtySheet.qty || 0) + delta));
+  state.cartQtySheet.qty = next;
+  render();
+}
+
+function confirmCartQtySheet() {
+  if (!state.cartQtySheet || Number(state.cartQtySheet.qty) < 1) return;
+  const productId = state.cartQtySheet.productId;
+  const qty = Number(state.cartQtySheet.qty);
+  const p = findCatalogProduct(productId);
+  addToCart(productId, qty, { silent: true });
+  state.cartQtySheet = null;
+  state.cartAddedSheet = p ? {
+    productId: Number(p.id),
+    brandName: productBrandName(p),
+    brandId: Number(p.brand_id) || 0,
+  } : null;
+  render();
+}
+
+function closeCartAddedSheet() {
+  state.cartAddedSheet = null;
+  render();
+}
+
+function goCartFromAddedSheet() {
+  state.cartAddedSheet = null;
+  openCart();
+}
+
+function openBrandFromAddedSheet(brandId) {
+  const id = Number(brandId) || 0;
+  state.cartAddedSheet = null;
+  state.selectedBrandId = id;
+  navigate('shop');
+}
+
+function brandOtherProducts(productId, brandId, limit) {
+  const pid = Number(productId);
+  const bid = Number(brandId);
+  return (state.products || [])
+    .filter((p) => p && Number(p.id) !== pid && (!bid || Number(p.brand_id) === bid))
+    .slice(0, limit || 8);
+}
+
+function renderCartRecoCard(p) {
+  const deal = maxDiscountBreakdown(p);
+  const brand = productBrandName(p);
+  const original = Number(p.original_price || 0);
+  const sale = Number(deal.sale || p.vip_price || 0);
+  const rate = original > sale && original > 0 ? Math.round((1 - sale / original) * 100) : 0;
+  return `
+    <button type="button" class="cart-reco-card" onclick="closeCartAddedSheet(); openProductDetail(${p.id})">
+      <img class="cart-reco-img" src="${p.image_url || ORDER_FALLBACK_IMG}" alt=""
+           onerror="this.src='${ORDER_FALLBACK_IMG}'">
+      <div class="cart-reco-brand">${escText(brand)}</div>
+      <div class="cart-reco-name">${escText(p.name)}</div>
+      <div class="cart-reco-price-row">
+        ${original > sale ? `<span class="cart-reco-old">${original.toLocaleString()}원</span>` : ''}
+        ${rate ? `<span class="cart-reco-rate">${rate}%</span>` : ''}
+        <span class="cart-reco-now">${sale.toLocaleString()}원</span>
+      </div>
+    </button>`;
+}
+
+function renderCartQtySheet() {
+  const sheet = state.cartQtySheet;
+  if (!sheet) return '';
+  const p = findCatalogProduct(sheet.productId);
+  if (!p) return '';
+  const deal = maxDiscountBreakdown(p, {
+    interactive: state.currentPage === 'product' && Number(state.selectedProductId) === Number(p.id),
+  });
+  const qty = Number(sheet.qty || 0);
+  const canAdd = qty >= 1;
+  return `
+    <div class="cart-sheet-overlay" onclick="closeCartQtySheet()">
+      <div class="cart-sheet" onclick="event.stopPropagation()">
+        <div class="cart-sheet-handle"></div>
+        <div class="cart-qty-head">
+          <img class="cart-qty-thumb" src="${p.image_url || ORDER_FALLBACK_IMG}" alt=""
+               onerror="this.src='${ORDER_FALLBACK_IMG}'">
+          <div class="cart-qty-meta">
+            <div class="cart-qty-brand">${escText(productBrandName(p))}</div>
+            <div class="cart-qty-name">${escText(p.name)}</div>
+            <div class="cart-qty-price">${deal.maxPrice.toLocaleString()}원</div>
+          </div>
+        </div>
+        <div class="cart-qty-row">
+          <span class="cart-qty-label">수량</span>
+          <div class="qty-stepper cart-qty-stepper">
+            <button type="button" class="qty-btn" onclick="changeCartQtySheet(-1)" ${qty <= 0 ? 'disabled' : ''}>−</button>
+            <span class="qty-val">${qty}</span>
+            <button type="button" class="qty-btn" onclick="changeCartQtySheet(1)">+</button>
+          </div>
+        </div>
+        <button type="button" class="btn-primary cart-sheet-add${canAdd ? '' : ' is-disabled'}"
+          ${canAdd ? `onclick="confirmCartQtySheet()"` : 'disabled'}>
+          ${canAdd ? `장바구니 담기 · ${(deal.maxPrice * qty).toLocaleString()}원` : '수량을 선택해 주세요'}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function renderCartAddedSheet() {
+  const sheet = state.cartAddedSheet;
+  if (!sheet) return '';
+  const brandName = sheet.brandName || '브랜드';
+  const others = brandOtherProducts(sheet.productId, sheet.brandId, 8);
+  return `
+    <div class="cart-sheet-overlay" onclick="closeCartAddedSheet()">
+      <div class="cart-sheet cart-added-sheet" onclick="event.stopPropagation()">
+        <div class="cart-sheet-handle"></div>
+        <div class="cart-added-banner">
+          <div class="cart-added-ico" aria-hidden="true">
+            <i class="fas fa-shopping-bag"></i>
+            <span class="cart-added-check"><i class="fas fa-check"></i></span>
+          </div>
+          <div class="cart-added-text">장바구니에 상품이 담겼습니다.</div>
+          <button type="button" class="cart-added-link" onclick="goCartFromAddedSheet()">장바구니 <i class="fas fa-chevron-right"></i></button>
+        </div>
+        <div class="cart-reco-head">
+          <div class="cart-reco-title">${escText(brandName)}의 다른 제품</div>
+          ${sheet.brandId ? `<button type="button" class="cart-reco-more" onclick="openBrandFromAddedSheet(${sheet.brandId})">더보기 <i class="fas fa-chevron-right"></i></button>` : ''}
+        </div>
+        <div class="cart-reco-rail">
+          ${others.length
+            ? others.map((p) => renderCartRecoCard(p)).join('')
+            : `<div class="cart-reco-empty">같은 브랜드의 다른 상품이 없습니다</div>`}
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 function renderProductPage() {
@@ -2124,7 +2286,6 @@ function renderProductPage() {
   }
   const brand = productBrandName(p);
   const deal = maxDiscountBreakdown(p, { interactive: true });
-  const qty = state.cart.find((i) => i.product_id === p.id)?.qty || 0;
   const wished = isWishlisted(p.id);
   return `
     <div class="pd-page">
@@ -2158,14 +2319,8 @@ function renderProductPage() {
         </div>
       </div>
       <div class="pd-bottom-bar">
-        ${qty > 0 ? `
-          <div class="qty-stepper pd-qty">
-            <button class="qty-btn" onclick="updateCartQty(${p.id},-1)">−</button>
-            <span class="qty-val">${qty}</span>
-            <button class="qty-btn" onclick="updateCartQty(${p.id},1)">+</button>
-          </div>` : ''}
-        <button class="btn-primary" onclick="addToCart(${p.id})">
-          <i class="fas fa-shopping-bag"></i> ${qty > 0 ? '추가 담기' : '장바구니 담기'} · ${deal.maxPrice.toLocaleString()}원
+        <button class="btn-primary" onclick="openCartQtySheet(${p.id})">
+          <i class="fas fa-shopping-bag"></i> 장바구니 담기 · ${deal.maxPrice.toLocaleString()}원
         </button>
       </div>
     </div>
@@ -2179,7 +2334,7 @@ function closeModal() {
   }
 }
 
-function addToCart(productId) {
+function addToCart(productId, qtyOrOpts, maybeOpts) {
   if (state.user && needsSalonBinding()) {
     showToast('먼저 살롱 VIP에 입장해 주세요', 'error');
     navigate('entry');
@@ -2187,11 +2342,16 @@ function addToCart(productId) {
   }
   const p = findCatalogProduct(productId);
   if (!p) return;
+  let qty = 1;
+  let opts = {};
+  if (typeof qtyOrOpts === 'object' && qtyOrOpts) opts = qtyOrOpts;
+  else if (qtyOrOpts != null) qty = Math.max(1, Number(qtyOrOpts) || 1);
+  if (maybeOpts) opts = maybeOpts;
   const fromDetail = state.currentPage === 'product' && Number(state.selectedProductId) === Number(productId);
   const deal = maxDiscountBreakdown(p, { interactive: fromDetail });
   const existing = state.cart.find(i => i.product_id === productId);
   if (existing) {
-    existing.qty++;
+    existing.qty += qty;
     existing.price = deal.maxPrice;
     existing.coupon_id = deal.useCoupon && deal.coupon ? deal.coupon.id : null;
     existing.coupon_discount = deal.couponAmt || 0;
@@ -2201,14 +2361,16 @@ function addToCart(productId) {
       product_id: p.id,
       name: p.name,
       price: deal.maxPrice,
-      qty: 1,
+      qty,
       coupon_id: deal.useCoupon && deal.coupon ? deal.coupon.id : null,
       coupon_discount: deal.couponAmt || 0,
       points_used: deal.pointsAmt || 0,
     });
   }
-  render();
-  showToast('장바구니에 담겼습니다', 'success');
+  if (!opts.silent) {
+    render();
+    showToast('장바구니에 담겼습니다', 'success');
+  }
 }
 
 function updateCartQty(productId, delta) {
