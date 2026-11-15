@@ -27,6 +27,8 @@ let state = {
   selectedProductId: null,
   productBackPage: 'home',
   priceBreakdownOpen: true,
+  // 상품 상세 할인 선택: 기본 전체 적용, 고객이 해제/변경 가능
+  dealPrefs: null, // { productId, useCoupon, couponId, usePoints, pointsUse }
   orders: [],
   storeOrders: [],
   storeSettlement: null,
@@ -1723,44 +1725,126 @@ function userHeldCouponIds() {
     : [];
 }
 
-function pickBestCoupon(p, sale) {
+function productSalePrice(p) {
+  return Math.max(0, Number(p && p.original_price) || sellingPrice(p) || 0);
+}
+
+function listAvailableCoupons(p, sale) {
+  const price = sale != null ? sale : productSalePrice(p);
   const held = new Set(userHeldCouponIds());
   const active = (state.coupons || []).filter((c) => c && c.status === 'ACTIVE');
   const scoped = active.filter((c) => {
-    if (Number(c.min_order_amount || 0) > sale) return false;
+    if (Number(c.min_order_amount || 0) > price) return false;
     if (c.apply_scope === 'BRAND' && Number(c.brand_id) !== Number(p.brand_id)) return false;
     return true;
   });
-  // 보유 쿠폰 우선, 없으면 적용 가능 쿠폰 중 최대 할인(최대할인가)
-  const pool = scoped.filter((c) => held.has(Number(c.id)));
-  const candidates = pool.length ? pool : scoped;
-  let best = null;
-  let bestAmt = 0;
-  candidates.forEach((c) => {
-    const amt = couponDiscountAmount(c, sale);
-    if (amt > bestAmt) { best = c; bestAmt = amt; }
-  });
-  return { coupon: best, amount: bestAmt };
+  const owned = scoped.filter((c) => held.has(Number(c.id)));
+  const pool = owned.length ? owned : scoped;
+  return pool
+    .map((c) => ({ coupon: c, amount: couponDiscountAmount(c, price) }))
+    .filter((row) => row.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
 }
 
-function maxDiscountBreakdown(p) {
-  const sale = Math.max(0, Number(p.original_price) || sellingPrice(p) || 0);
-  const picked = pickBestCoupon(p, sale);
-  const couponAmt = picked.amount;
-  const afterCoupon = Math.max(0, sale - couponAmt);
+function pickBestCoupon(p, sale) {
+  const list = listAvailableCoupons(p, sale);
+  if (!list.length) return { coupon: null, amount: 0 };
+  return { coupon: list[0].coupon, amount: list[0].amount };
+}
+
+function maxPointsUsable(p, afterCoupon) {
+  if (p && p.point_use_disabled) return 0;
+  const userPts = Math.max(0, Number(state.user && state.user.points) || 0);
+  return Math.min(userPts, Math.max(0, afterCoupon));
+}
+
+function ensureDealPrefs(p, forceReset) {
+  const sale = productSalePrice(p);
+  const available = listAvailableCoupons(p, sale);
+  const best = available[0] || null;
+  const bestCouponAmt = best ? best.amount : 0;
+  const maxPts = maxPointsUsable(p, Math.max(0, sale - bestCouponAmt));
+  const same = state.dealPrefs && Number(state.dealPrefs.productId) === Number(p.id);
+  if (forceReset || !same) {
+    state.dealPrefs = {
+      productId: Number(p.id),
+      useCoupon: !!best,
+      couponId: best ? Number(best.coupon.id) : null,
+      usePoints: maxPts > 0,
+      pointsUse: maxPts,
+    };
+    return state.dealPrefs;
+  }
+  // 선택값이 유효한지 보정
+  if (state.dealPrefs.useCoupon) {
+    const still = available.find((row) => Number(row.coupon.id) === Number(state.dealPrefs.couponId));
+    if (!still) {
+      state.dealPrefs.couponId = best ? Number(best.coupon.id) : null;
+      state.dealPrefs.useCoupon = !!best;
+    }
+  }
+  const couponAmt = state.dealPrefs.useCoupon
+    ? (available.find((row) => Number(row.coupon.id) === Number(state.dealPrefs.couponId)) || { amount: 0 }).amount
+    : 0;
+  const cap = maxPointsUsable(p, Math.max(0, sale - couponAmt));
+  if (!state.dealPrefs.usePoints) state.dealPrefs.pointsUse = 0;
+  else state.dealPrefs.pointsUse = Math.min(cap, Math.max(0, Number(state.dealPrefs.pointsUse) || 0));
+  if (state.dealPrefs.usePoints && state.dealPrefs.pointsUse === 0 && cap > 0) {
+    state.dealPrefs.pointsUse = cap;
+  }
+  return state.dealPrefs;
+}
+
+function maxDiscountBreakdown(p, opts) {
+  const interactive = !!(opts && opts.interactive);
+  const fullApply = !interactive; // 목록 카드는 항상 최대 적용
+  const sale = productSalePrice(p);
+  const available = listAvailableCoupons(p, sale);
+  let coupon = null;
+  let couponAmt = 0;
+  let useCoupon = false;
+  let usePoints = false;
+  let pointsAmt = 0;
   const userPts = Math.max(0, Number(state.user && state.user.points) || 0);
   const pointsDisabled = !!(p && p.point_use_disabled);
-  const pointsAmt = pointsDisabled ? 0 : Math.min(userPts, afterCoupon);
+
+  if (fullApply) {
+    const best = available[0] || null;
+    coupon = best ? best.coupon : null;
+    couponAmt = best ? best.amount : 0;
+    useCoupon = !!coupon;
+    const afterCoupon = Math.max(0, sale - couponAmt);
+    pointsAmt = pointsDisabled ? 0 : Math.min(userPts, afterCoupon);
+    usePoints = pointsAmt > 0;
+  } else {
+    const prefs = ensureDealPrefs(p);
+    useCoupon = !!prefs.useCoupon && !!prefs.couponId;
+    if (useCoupon) {
+      const row = available.find((item) => Number(item.coupon.id) === Number(prefs.couponId));
+      if (row) { coupon = row.coupon; couponAmt = row.amount; }
+      else { useCoupon = false; couponAmt = 0; }
+    }
+    const afterCoupon = Math.max(0, sale - couponAmt);
+    const cap = pointsDisabled ? 0 : Math.min(userPts, afterCoupon);
+    usePoints = !!prefs.usePoints && !pointsDisabled;
+    pointsAmt = usePoints ? Math.min(cap, Math.max(0, Number(prefs.pointsUse) || 0)) : 0;
+  }
+
+  const afterCoupon = Math.max(0, sale - couponAmt);
   const maxPrice = Math.max(0, afterCoupon - pointsAmt);
   const earnRate = Math.max(0, Number(p.earn_points_rate) || 0);
   const earnPts = Math.floor(maxPrice * earnRate / 100);
   return {
     sale,
-    coupon: picked.coupon,
+    availableCoupons: available,
+    coupon,
     couponAmt,
-    hasCoupon: !!picked.coupon,
+    useCoupon,
+    hasCoupon: available.length > 0,
     pointsAmt,
+    usePoints,
     pointsDisabled,
+    pointsCap: pointsDisabled ? 0 : Math.min(userPts, afterCoupon),
     userPts,
     maxPrice,
     earnPts,
@@ -1772,9 +1856,84 @@ function togglePriceBreakdown() {
   render();
 }
 
+function setDealUseCoupon(on) {
+  const p = findCatalogProduct(state.selectedProductId);
+  if (!p) return;
+  const prefs = ensureDealPrefs(p);
+  prefs.useCoupon = !!on;
+  if (prefs.useCoupon && !prefs.couponId) {
+    const best = listAvailableCoupons(p)[0];
+    prefs.couponId = best ? Number(best.coupon.id) : null;
+    if (!prefs.couponId) prefs.useCoupon = false;
+  }
+  // 쿠폰 변경 후 포인트 상한 재적용
+  const sale = productSalePrice(p);
+  const couponAmt = prefs.useCoupon
+    ? (listAvailableCoupons(p, sale).find((r) => Number(r.coupon.id) === Number(prefs.couponId)) || { amount: 0 }).amount
+    : 0;
+  const cap = maxPointsUsable(p, Math.max(0, sale - couponAmt));
+  if (prefs.usePoints) prefs.pointsUse = cap;
+  render();
+}
+
+function setDealCouponId(couponId) {
+  const p = findCatalogProduct(state.selectedProductId);
+  if (!p) return;
+  const prefs = ensureDealPrefs(p);
+  const id = couponId === '' || couponId == null ? null : Number(couponId);
+  if (!id) {
+    prefs.useCoupon = false;
+    prefs.couponId = null;
+  } else {
+    prefs.useCoupon = true;
+    prefs.couponId = id;
+  }
+  const sale = productSalePrice(p);
+  const couponAmt = prefs.useCoupon
+    ? (listAvailableCoupons(p, sale).find((r) => Number(r.coupon.id) === Number(prefs.couponId)) || { amount: 0 }).amount
+    : 0;
+  const cap = maxPointsUsable(p, Math.max(0, sale - couponAmt));
+  if (prefs.usePoints) prefs.pointsUse = cap;
+  render();
+}
+
+function setDealUsePoints(on) {
+  const p = findCatalogProduct(state.selectedProductId);
+  if (!p) return;
+  const prefs = ensureDealPrefs(p);
+  prefs.usePoints = !!on;
+  const deal = maxDiscountBreakdown(p, { interactive: true });
+  prefs.pointsUse = prefs.usePoints ? deal.pointsCap : 0;
+  // maxDiscountBreakdown already read prefs; re-set and render
+  prefs.pointsUse = prefs.usePoints ? (
+    maxPointsUsable(p, Math.max(0, productSalePrice(p) - (
+      prefs.useCoupon
+        ? (listAvailableCoupons(p).find((r) => Number(r.coupon.id) === Number(prefs.couponId)) || { amount: 0 }).amount
+        : 0
+    )))
+  ) : 0;
+  render();
+}
+
+function setDealPointsUse(value) {
+  const p = findCatalogProduct(state.selectedProductId);
+  if (!p) return;
+  const prefs = ensureDealPrefs(p);
+  const sale = productSalePrice(p);
+  const couponAmt = prefs.useCoupon
+    ? (listAvailableCoupons(p, sale).find((r) => Number(r.coupon.id) === Number(prefs.couponId)) || { amount: 0 }).amount
+    : 0;
+  const cap = maxPointsUsable(p, Math.max(0, sale - couponAmt));
+  const n = Math.min(cap, Math.max(0, Math.floor(Number(value) || 0)));
+  prefs.usePoints = n > 0;
+  prefs.pointsUse = n;
+  render();
+}
+
 function renderMaxDiscountBox(p, deal) {
   const open = state.priceBreakdownOpen !== false;
-  const couponLabel = deal.coupon ? ('쿠폰 · ' + deal.coupon.name) : '쿠폰';
+  const prefs = ensureDealPrefs(p);
+  const couponOptions = deal.availableCoupons || [];
   return `
     <button type="button" class="pd-max-toggle" onclick="togglePriceBreakdown()">
       <span class="pd-max-price">${deal.maxPrice.toLocaleString()}원</span>
@@ -1787,17 +1946,55 @@ function renderMaxDiscountBox(p, deal) {
         <span>판매가</span>
         <span>${deal.sale.toLocaleString()}원</span>
       </div>
-      <div class="pd-row">
-        <span>${escText(couponLabel)}</span>
-        <span>${deal.couponAmt ? '-' + deal.couponAmt.toLocaleString() + '원' : '0원'}</span>
-      </div>
-      <div class="pd-points-box">
-        <div class="pd-points-title">포인트</div>
-        <div class="pd-row pd-row-tight">
-          <span class="pd-muted">사용가능 금액</span>
-          <span>${deal.pointsDisabled ? '사용불가' : '-' + deal.pointsAmt.toLocaleString() + '원'}</span>
+
+      <div class="pd-apply-block">
+        <div class="pd-apply-head">
+          <label class="pd-check">
+            <input type="checkbox" ${prefs.useCoupon && couponOptions.length ? 'checked' : ''}
+              ${couponOptions.length ? '' : 'disabled'}
+              onchange="setDealUseCoupon(this.checked)">
+            <span>쿠폰 사용</span>
+          </label>
+          <span class="pd-apply-amt">${deal.couponAmt ? '-' + deal.couponAmt.toLocaleString() + '원' : '0원'}</span>
         </div>
+        ${couponOptions.length ? `
+        <select class="pd-select" ${prefs.useCoupon ? '' : 'disabled'} onchange="setDealCouponId(this.value)">
+          <option value="">사용 안 함</option>
+          ${couponOptions.map((row) => `
+            <option value="${row.coupon.id}" ${prefs.useCoupon && Number(prefs.couponId) === Number(row.coupon.id) ? 'selected' : ''}>
+              ${escText(row.coupon.name)} (−${row.amount.toLocaleString()}원)
+            </option>`).join('')}
+        </select>
+        <div class="pd-hint">사용 가능 쿠폰 ${couponOptions.length}장</div>
+        ` : `<div class="pd-hint">사용 가능한 쿠폰이 없습니다</div>`}
       </div>
+
+      <div class="pd-points-box">
+        <div class="pd-apply-head">
+          <label class="pd-check">
+            <input type="checkbox" ${prefs.usePoints && !deal.pointsDisabled && deal.pointsCap > 0 ? 'checked' : ''}
+              ${deal.pointsDisabled || deal.userPts <= 0 ? 'disabled' : ''}
+              onchange="setDealUsePoints(this.checked)">
+            <span>포인트 사용</span>
+          </label>
+          <span class="pd-apply-amt">${deal.pointsAmt ? '-' + deal.pointsAmt.toLocaleString() + '원' : '0원'}</span>
+        </div>
+        ${deal.pointsDisabled ? `<div class="pd-hint">이 상품은 포인트 사용이 불가합니다</div>` : `
+        <div class="pd-row pd-row-tight">
+          <span class="pd-muted">보유 ${deal.userPts.toLocaleString()}P · 사용가능 ${deal.pointsCap.toLocaleString()}P</span>
+        </div>
+        <div class="pd-points-edit">
+          <input class="pd-points-input" type="number" min="0" max="${deal.pointsCap}" step="100"
+            value="${deal.pointsAmt}"
+            ${prefs.usePoints && deal.pointsCap > 0 ? '' : 'disabled'}
+            onchange="setDealPointsUse(this.value)"
+            onkeydown="if(event.key==='Enter'){setDealPointsUse(this.value);event.preventDefault();}">
+          <button type="button" class="pd-points-max" ${deal.pointsCap > 0 ? '' : 'disabled'}
+            onclick="setDealUsePoints(true)">전액</button>
+        </div>
+        `}
+      </div>
+
       <div class="pd-row pd-row-total">
         <span>최대할인가</span>
         <span>${deal.maxPrice.toLocaleString()}원</span>
@@ -1817,6 +2014,7 @@ function openProductDetail(id) {
   if (state.currentPage !== 'product') state.productBackPage = state.currentPage || 'home';
   state.selectedProductId = Number(id);
   state.priceBreakdownOpen = true;
+  ensureDealPrefs(p, true); // 상품 열 때마다 기본: 전체 적용
   navigate('product');
 }
 
@@ -1835,7 +2033,7 @@ function renderProductPage() {
     </div>`;
   }
   const brand = productBrandName(p);
-  const deal = maxDiscountBreakdown(p);
+  const deal = maxDiscountBreakdown(p, { interactive: true });
   const qty = state.cart.find((i) => i.product_id === p.id)?.qty || 0;
   const wished = isWishlisted(p.id);
   return `
@@ -1877,7 +2075,7 @@ function renderProductPage() {
             <button class="qty-btn" onclick="updateCartQty(${p.id},1)">+</button>
           </div>` : ''}
         <button class="btn-primary" onclick="addToCart(${p.id})">
-          <i class="fas fa-shopping-bag"></i> ${qty > 0 ? '추가 담기' : '장바구니 담기'}
+          <i class="fas fa-shopping-bag"></i> ${qty > 0 ? '추가 담기' : '장바구니 담기'} · ${deal.maxPrice.toLocaleString()}원
         </button>
       </div>
     </div>
@@ -1897,11 +2095,28 @@ function addToCart(productId) {
     navigate('entry');
     return;
   }
-  const p = state.products.find(x => x.id === productId);
+  const p = findCatalogProduct(productId);
   if (!p) return;
+  const fromDetail = state.currentPage === 'product' && Number(state.selectedProductId) === Number(productId);
+  const deal = maxDiscountBreakdown(p, { interactive: fromDetail });
   const existing = state.cart.find(i => i.product_id === productId);
-  if (existing) { existing.qty++; }
-  else { state.cart.push({ product_id: p.id, name: p.name, price: sellingPrice(p), qty: 1 }); }
+  if (existing) {
+    existing.qty++;
+    existing.price = deal.maxPrice;
+    existing.coupon_id = deal.useCoupon && deal.coupon ? deal.coupon.id : null;
+    existing.coupon_discount = deal.couponAmt || 0;
+    existing.points_used = deal.pointsAmt || 0;
+  } else {
+    state.cart.push({
+      product_id: p.id,
+      name: p.name,
+      price: deal.maxPrice,
+      qty: 1,
+      coupon_id: deal.useCoupon && deal.coupon ? deal.coupon.id : null,
+      coupon_discount: deal.couponAmt || 0,
+      points_used: deal.pointsAmt || 0,
+    });
+  }
   render();
   showToast('장바구니에 담겼습니다', 'success');
 }

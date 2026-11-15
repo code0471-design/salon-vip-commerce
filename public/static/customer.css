@@ -712,18 +712,43 @@ body {
 }
 .pd-row-tight { padding: 4px 0 2px; }
 .pd-muted { color: #9a9a9a; font-size: 13px; }
-.pd-coupon-label {
-  display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;
+.pd-apply-block {
+  border-top: 1px solid #f0f0f0;
+  padding: 10px 0 8px;
 }
-.pd-register-link {
-  border: none; background: none; padding: 0;
-  color: #e11d48; font-size: 13px; font-weight: 700; cursor: pointer;
+.pd-apply-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 8px;
 }
+.pd-apply-amt { font-size: 14px; font-weight: 700; color: #333; white-space: nowrap; }
+.pd-check {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 700; color: #222; cursor: pointer;
+}
+.pd-check input { width: 16px; height: 16px; accent-color: #e11d48; }
+.pd-select {
+  width: 100%; border: 1px solid #e5e5e5; border-radius: 10px;
+  padding: 10px 12px; font-size: 13px; background: #fff; color: #222;
+}
+.pd-select:disabled { opacity: 0.55; background: #f7f7f7; }
+.pd-hint { font-size: 11px; color: #9a9a9a; margin-top: 6px; }
 .pd-points-box {
   background: #f6f6f6; border-radius: 10px;
   padding: 10px 12px; margin: 4px 0 8px;
 }
-.pd-points-title { font-size: 14px; font-weight: 700; color: #222; margin-bottom: 2px; }
+.pd-points-edit {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px;
+}
+.pd-points-input {
+  flex: 1; border: 1px solid #e5e5e5; border-radius: 10px;
+  padding: 10px 12px; font-size: 14px; background: #fff;
+}
+.pd-points-input:disabled { opacity: 0.55; background: #eee; }
+.pd-points-max {
+  border: 1px solid #ddd; background: #fff; border-radius: 10px;
+  padding: 10px 12px; font-size: 12px; font-weight: 700; cursor: pointer; color: #333;
+}
+.pd-points-max:disabled { opacity: 0.45; cursor: default; }
 .pd-row-total {
   border-top: 1px solid #ececec; margin-top: 4px; padding-top: 12px;
   color: #e11d48; font-weight: 800;
