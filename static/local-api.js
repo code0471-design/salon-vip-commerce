@@ -595,7 +595,7 @@
       if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
       const body = req.body || {};
       ['salon_name', 'owner_name', 'owner_phone', 'bank_account', 'address', 'address_detail'].forEach((key) => {
-        if (body[key] !== undefined) salon[key] = body[key];
+        if (body[key] !== undefined) salon[key] = String(body[key] == null ? '' : body[key]).trim();
       });
       if (body.salon_code !== undefined) {
         const raw = String(body.salon_code || '').trim();
@@ -606,7 +606,8 @@
         salon.salon_code = uniqueSalonCode(code, salon.id);
       }
       save();
-      return { data: publicSalon(salon) };
+      const fresh = findSalon(id);
+      return { data: publicSalon(fresh || salon) };
     }],
     ['POST', /^\/api\/salons\/(\d+)\/hidden-brands$/, (req, id) => {
       const salon = findSalon(id);
@@ -1270,6 +1271,8 @@
     });
     (db.salons || []).forEach((salon) => {
       if (!Array.isArray(salon.hidden_brand_ids)) salon.hidden_brand_ids = [];
+      if (salon.address == null) salon.address = '';
+      if (salon.address_detail == null) salon.address_detail = '';
       const seedSalon = (seed.salons || []).find((item) => item.id === salon.id);
       const fromSelf = normalizeSalonCode(salon.salon_code);
       const fromSeed = normalizeSalonCode(seedSalon && seedSalon.salon_code);
