@@ -36,6 +36,7 @@ let state = {
   pendingStaffInvites: [],
   deepInviteId: null,
   deepInviteInfo: null,
+  manageDraft: null, // { salon_id, salon_name, owner_name, owner_phone, address, address_detail }
   setupDraft: {
     salon_name: '',
     owner_name: '',
@@ -180,7 +181,8 @@ function renderShell() {
 
 function ownerSalon() {
   if (!state.user || !state.user.is_owner) return null;
-  return state.salons.find((salon) => salon.id === state.user.owned_salon_id) || null;
+  const ownedId = Number(state.user.owned_salon_id);
+  return state.salons.find((salon) => Number(salon.id) === ownedId) || null;
 }
 
 function salesSalon() {
@@ -501,6 +503,16 @@ function renderHome() {
 
     ${!state.user.is_owner ? `<div style="padding:0 16px">${renderStaffInviteCards()}</div>` : ''}
 
+    <div class="home-search-wrap">
+      <form class="search-box home-search-box" onsubmit="event.preventDefault(); goHomeSearch();">
+        <i class="fas fa-search"></i>
+        <input id="home-search" class="search-input" type="search" enterkeyhint="search"
+          placeholder="제품명, 브랜드 검색"
+          value="${escText(state.searchQuery || '')}"
+          oninput="state.searchQuery=this.value">
+      </form>
+    </div>
+
     <div class="home-banner">
       <img src="${bannerUrl}" alt="${(mainBanner && mainBanner.title) || '메인 배너'}">
     </div>
@@ -533,6 +545,12 @@ function renderHome() {
         : state.orders.slice(0,3).map(o => renderOrderCard(o)).join('')}
     </div>
   `;
+}
+
+function goHomeSearch() {
+  const input = document.getElementById('home-search');
+  if (input) state.searchQuery = input.value || '';
+  navigate('search');
 }
 
 // 홈 카테고리 클릭 → 쇼핑 페이지로 이동 + 카테고리 필터
@@ -912,14 +930,17 @@ function openAddressSearch(baseInputId, detailInputId) {
         detailInputId(base);
       } else if (baseInputId === 'setup-address') {
         updateSetupField('address', base);
+      } else if (baseInputId === 'manage-address') {
+        updateManageField('address', base);
       }
       const detailEl = detailInputId && typeof detailInputId === 'string'
         ? document.getElementById(detailInputId)
         : null;
       if (detailEl) {
+        // 도로명 선택 후에도 상세주소(동·호수)는 유지
         detailEl.focus();
       }
-      showToast('주소를 선택했습니다. 상세주소를 입력하세요', 'success');
+      showToast('주소를 선택했습니다. 상세주소(예: 301호)를 입력하세요', 'success');
     },
   }).open();
 }
@@ -2084,9 +2105,43 @@ function cartStoreProfit() {
 }
 
 function rememberSalon(salon) {
-  const index = state.salons.findIndex((item) => item.id === salon.id);
-  if (index >= 0) state.salons[index] = salon;
+  if (!salon || salon.id == null) return;
+  const index = state.salons.findIndex((item) => Number(item.id) === Number(salon.id));
+  if (index >= 0) state.salons[index] = { ...state.salons[index], ...salon };
   else state.salons.push(salon);
+}
+
+function ensureManageDraft(salon) {
+  if (!salon) {
+    state.manageDraft = null;
+    return null;
+  }
+  const addr = splitSalonAddress(salon);
+  const same = state.manageDraft && Number(state.manageDraft.salon_id) === Number(salon.id);
+  if (!same) {
+    state.manageDraft = {
+      salon_id: salon.id,
+      salon_name: salon.salon_name || '',
+      owner_name: salon.owner_name || '',
+      owner_phone: salon.owner_phone || '',
+      address: addr.base,
+      address_detail: addr.detail,
+    };
+  } else {
+    // 서버에 상세주소가 생겼는데 draft만 비어 있으면 채움 (입력 중이면 유지)
+    if (!state.manageDraft.address_detail && addr.detail) {
+      state.manageDraft.address_detail = addr.detail;
+    }
+    if (!state.manageDraft.address && addr.base) {
+      state.manageDraft.address = addr.base;
+    }
+  }
+  return state.manageDraft;
+}
+
+function updateManageField(key, value) {
+  if (!state.manageDraft) state.manageDraft = {};
+  state.manageDraft[key] = value;
 }
 
 function priceSettingSummary(salon) {
@@ -2435,7 +2490,7 @@ async function loadManageDesigners() {
 
 function renderStoreManage(salon) {
   const designers = (state.manageDesigners || []).filter((d) => d.status !== 'RESIGNED');
-  const addr = splitSalonAddress(salon);
+  const draft = ensureManageDraft(salon) || {};
   return `
     <div style="padding:20px 16px 28px">
       <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">관리자</h2>
@@ -2444,21 +2499,26 @@ function renderStoreManage(salon) {
       <div class="code-card setup-form" style="margin-top:4px">
         <div class="section-label" style="margin-top:0">기본 정보</div>
         <label class="form-label">매장명</label>
-        <input id="manage-salon-name" class="form-input" value="${escText(salon.salon_name || '')}">
+        <input id="manage-salon-name" class="form-input" value="${escText(draft.salon_name || '')}"
+          oninput="updateManageField('salon_name', this.value)">
         <label class="form-label">대표자</label>
-        <input id="manage-owner-name" class="form-input" value="${escText(salon.owner_name || '')}">
+        <input id="manage-owner-name" class="form-input" value="${escText(draft.owner_name || '')}"
+          oninput="updateManageField('owner_name', this.value)">
         <label class="form-label">휴대폰번호</label>
-        <input id="manage-owner-phone" class="form-input" type="tel" value="${escText(salon.owner_phone || '')}">
+        <input id="manage-owner-phone" class="form-input" type="tel" value="${escText(draft.owner_phone || '')}"
+          oninput="updateManageField('owner_phone', this.value)">
         <label class="form-label">주소</label>
         <div class="address-search-row">
-          <input id="manage-address" class="form-input" value="${escText(addr.base)}" readonly
+          <input id="manage-address" class="form-input" value="${escText(draft.address || '')}" readonly
             placeholder="주소 검색을 눌러주세요"
             onclick="openAddressSearch('manage-address','manage-address-detail')">
           <button type="button" class="btn-secondary address-search-btn" onclick="openAddressSearch('manage-address','manage-address-detail')">주소 검색</button>
         </div>
-        <input id="manage-address-detail" class="form-input" type="text" style="margin-top:8px"
-          value="${escText(addr.detail)}"
-          placeholder="상세주소 (동·호수 등)">
+        <label class="form-label" style="margin-top:10px">상세주소</label>
+        <input id="manage-address-detail" class="form-input" type="text"
+          value="${escText(draft.address_detail || '')}"
+          placeholder="예: 301호"
+          oninput="updateManageField('address_detail', this.value)">
         <label class="form-label">매장코드</label>
         <input class="form-input" value="${escText(salon.salon_code || '')}" disabled>
         <button class="btn-primary" style="margin-top:12px" onclick="saveSalonManage()">기본 정보 저장</button>
@@ -2494,24 +2554,54 @@ function renderStoreManage(salon) {
 async function saveSalonManage() {
   const salon = ownerSalon();
   if (!salon) return;
+  const draft = state.manageDraft || {};
   const body = {
-    salon_name: (document.getElementById('manage-salon-name') || {}).value || '',
-    owner_name: (document.getElementById('manage-owner-name') || {}).value || '',
-    owner_phone: (document.getElementById('manage-owner-phone') || {}).value || '',
-    address: ((document.getElementById('manage-address') || {}).value || '').trim(),
-    address_detail: ((document.getElementById('manage-address-detail') || {}).value || '').trim(),
+    salon_name: String((document.getElementById('manage-salon-name') || {}).value || draft.salon_name || '').trim(),
+    owner_name: String((document.getElementById('manage-owner-name') || {}).value || draft.owner_name || '').trim(),
+    owner_phone: String((document.getElementById('manage-owner-phone') || {}).value || draft.owner_phone || '').trim(),
+    address: String((document.getElementById('manage-address') || {}).value || draft.address || '').trim(),
+    address_detail: String((document.getElementById('manage-address-detail') || {}).value || draft.address_detail || '').trim(),
   };
+  if (!body.address) {
+    showToast('주소 검색으로 매장 주소를 선택해주세요', 'error');
+    return;
+  }
   const res = await api('/api/salons/' + salon.id, 'PUT', body);
   if (!res.success) {
     showToast(res.error || '저장하지 못했습니다', 'error');
     return;
   }
-  rememberSalon(res.data);
+  const saved = res.data || {};
+  // 응답에 detail이 빠져도 방금 저장한 값 유지
+  const merged = {
+    ...salon,
+    ...saved,
+    address: saved.address != null ? saved.address : body.address,
+    address_detail: saved.address_detail != null && String(saved.address_detail).length
+      ? saved.address_detail
+      : body.address_detail,
+  };
+  rememberSalon(merged);
+  state.manageDraft = {
+    salon_id: merged.id,
+    salon_name: merged.salon_name || body.salon_name,
+    owner_name: merged.owner_name || body.owner_name,
+    owner_phone: merged.owner_phone || body.owner_phone,
+    address: merged.address || '',
+    address_detail: merged.address_detail || '',
+  };
   if (state.user) {
     const userRes = await api('/api/users/' + state.user.id);
     if (userRes.success) saveUser(userRes.data.user);
   }
-  showToast('매장 정보를 저장했습니다', 'success');
+  await loadAppData();
+  // loadAppData 후에도 방금 저장한 상세주소가 비면 다시 병합
+  const after = ownerSalon();
+  if (after && body.address_detail && !String(after.address_detail || '').trim()) {
+    rememberSalon({ ...after, address: body.address, address_detail: body.address_detail });
+    await api('/api/salons/' + salon.id, 'PUT', body);
+  }
+  showToast(body.address_detail ? `저장했습니다 · 상세 ${body.address_detail}` : '매장 정보를 저장했습니다', 'success');
   navigate('home');
 }
 

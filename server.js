@@ -678,7 +678,7 @@ const routes = [
     if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
     const body = req.body || {};
     ['salon_name', 'owner_name', 'owner_phone', 'bank_account', 'address', 'address_detail'].forEach((key) => {
-      if (body[key] !== undefined) salon[key] = body[key];
+      if (body[key] !== undefined) salon[key] = String(body[key] == null ? '' : body[key]).trim();
     });
     if (body.salon_code !== undefined) {
       const raw = String(body.salon_code || '').trim();
@@ -689,7 +689,7 @@ const routes = [
       salon.salon_code = uniqueSalonCode(code, salon.id);
     }
     save();
-    return { data: publicSalon(salon) };
+    return { data: publicSalon(findSalon(id) || salon) };
   }],
   ['POST', /^\/api\/salons\/(\d+)\/hidden-brands$/, (req, id) => {
     const salon = findSalon(id);
