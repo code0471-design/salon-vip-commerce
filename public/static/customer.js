@@ -1396,6 +1396,7 @@ function renderAdminSetup() {
             <label class="form-label" style="margin:0">담당자 초대</label>
             <button type="button" class="ghost-text-btn" onclick="addSetupDesignerRow()">+ 추가</button>
           </div>
+          <p class="setup-designer-hint">각 담당자 매출 확인이 필요한 경우 추가하세요.<br>1인샵은 추가할 필요 없습니다.</p>
           <p style="font-size:12px;color:var(--muted);margin:0 0 10px">이름·휴대폰 입력 후 <strong>요청</strong>을 누르세요. 매장 생성 시 초대 문자가 갑니다.</p>
           ${d.designers.map((row, i) => `
             <div class="setup-designer-row ${row.requested ? 'requested' : ''}">
