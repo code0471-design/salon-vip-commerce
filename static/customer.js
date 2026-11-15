@@ -34,6 +34,8 @@ let state = {
   adminTab: 'sales', // sales | manage
   manageDesigners: [],
   pendingStaffInvites: [],
+  deepInviteId: null,
+  deepInviteInfo: null,
   setupDraft: {
     salon_name: '',
     owner_name: '',
@@ -212,13 +214,22 @@ function needsEntryGate() {
   return needsSalonBinding();
 }
 
+function visibleStaffInvites() {
+  const ownedId = state.user && state.user.owned_salon_id;
+  return (state.pendingStaffInvites || []).filter((inv) => {
+    // 원장은 본인 매장 초대를 승인하지 않음 — 담당자(초대 수신자)만
+    if (ownedId && Number(inv.salon_id) === Number(ownedId)) return false;
+    return true;
+  });
+}
+
 function renderStaffInviteCards() {
-  const invites = state.pendingStaffInvites || [];
+  const invites = visibleStaffInvites();
   if (!invites.length) return '';
   return `
     <div class="code-card" style="margin-bottom:14px">
       <div class="section-label" style="margin-top:0">담당자 초대</div>
-      <p style="font-size:13px;color:var(--muted);margin:0 0 10px">이미 회원이면 가입 없이 승인만 하면 됩니다. 승인 시 이전 매장 담당 소속은 자동 해제됩니다.</p>
+      <p style="font-size:13px;color:var(--muted);margin:0 0 10px">문자 링크를 받은 담당자가 승인합니다. 승인 시 이전 매장 담당 소속은 자동 해제됩니다.</p>
       ${invites.map((inv) => `
         <div class="manage-designer-row">
           <div>
@@ -227,6 +238,122 @@ function renderStaffInviteCards() {
           </div>
           <button type="button" class="btn-secondary" style="width:auto;padding:10px 14px;margin:0" onclick="acceptStaffInvite(${inv.id})">승인</button>
         </div>`).join('')}
+    </div>`;
+}
+
+async function loadDeepInviteInfo(inviteId) {
+  const id = Number(inviteId || state.deepInviteId || 0);
+  if (!id) {
+    state.deepInviteInfo = null;
+    return null;
+  }
+  const res = await api('/api/designers/' + id + '/invite-info');
+  state.deepInviteInfo = res.success ? res.data : null;
+  return state.deepInviteInfo;
+}
+
+async function resumeDeepInviteIfNeeded() {
+  if (!state.deepInviteId) return false;
+  await loadDeepInviteInfo(state.deepInviteId);
+  if (state.user) await loadPendingStaffInvites();
+  state.currentPage = 'staff-invite';
+  return true;
+}
+
+function clearDeepInviteFromUrl() {
+  try {
+    const url = new URL(location.href);
+    if (!url.searchParams.has('invite')) return;
+    url.searchParams.delete('invite');
+    history.replaceState({}, '', url.pathname + (url.search || '') + url.hash);
+  } catch (e) { /* ignore */ }
+}
+
+function renderStaffInviteLanding() {
+  const info = state.deepInviteInfo;
+  if (!info) {
+    return `
+      <div class="scan-page">
+        <div class="onboard-card">
+          <div class="onboard-icon"><i class="fas fa-link"></i></div>
+          <h2>초대를 찾을 수 없습니다</h2>
+          <p>링크가 만료되었거나 잘못된 초대입니다.</p>
+          <button class="btn-primary" onclick="navigate('home')">홈으로</button>
+        </div>
+      </div>`;
+  }
+
+  if (info.status === 'ACTIVE') {
+    return `
+      <div class="scan-page">
+        <div class="onboard-card">
+          <div class="onboard-icon"><i class="fas fa-check"></i></div>
+          <h2>이미 승인된 초대</h2>
+          <p>${escText(info.salon_name || '매장')} 담당자로 등록되어 있습니다.</p>
+          <button class="btn-primary" onclick="navigate('home')">홈으로</button>
+        </div>
+      </div>`;
+  }
+
+  if (info.status !== 'INVITED') {
+    return `
+      <div class="scan-page">
+        <div class="onboard-card">
+          <div class="onboard-icon"><i class="fas fa-user-slash"></i></div>
+          <h2>유효하지 않은 초대</h2>
+          <p>이 초대는 더 이상 사용할 수 없습니다.</p>
+          <button class="btn-primary" onclick="navigate('home')">홈으로</button>
+        </div>
+      </div>`;
+  }
+
+  if (!state.user) {
+    if (state.loginStep === 'account' || state.loginStep === 'profile') {
+      return renderLogin();
+    }
+    return `
+      <div class="scan-page">
+        <div class="onboard-card invite-landing-card">
+          <div class="onboard-icon"><i class="fas fa-user-check"></i></div>
+          <h2>담당자 초대</h2>
+          <p><strong>${escText(info.salon_name || '매장')}</strong>에서<br>${escText((info.designer_name || '').replace(' 디자이너', '') || '담당자')}님을 초대했습니다.</p>
+          <p class="entry-code-hint">초대받은 휴대폰(끝 ${escText(info.phone_hint || '****')})로 로그인·가입한 뒤 승인하세요.</p>
+          <div class="social-login-stack" style="margin-top:12px">
+            <button type="button" class="social-btn social-kakao" onclick="startSocialLogin('kakao')">
+              <span class="social-ico">K</span>카카오로 시작하기
+            </button>
+            <button type="button" class="social-btn social-google" onclick="startSocialLogin('google')">
+              <span class="social-ico">G</span>Google로 시작하기
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  const ownedOwnSalon = state.user.is_owner && Number(state.user.owned_salon_id) === Number(info.salon_id);
+  if (ownedOwnSalon) {
+    return `
+      <div class="scan-page">
+        <div class="onboard-card">
+          <div class="onboard-icon"><i class="fas fa-store"></i></div>
+          <h2>원장님 계정입니다</h2>
+          <p>승인은 초대 문자를 받은 <strong>담당자</strong>가 합니다. 담당자 번호로 로그인한 뒤 링크를 다시 열어 주세요.</p>
+          <button class="btn-primary" onclick="navigate('home')">홈으로</button>
+          <button type="button" class="entry-logout-link" onclick="handleLogout()">다른 계정으로 로그인</button>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="scan-page">
+      <div class="onboard-card invite-landing-card">
+        <div class="onboard-icon"><i class="fas fa-user-check"></i></div>
+        <h2>담당자 초대 승인</h2>
+        <p><strong>${escText(info.salon_name || '매장')}</strong> 담당자로 등록할까요?</p>
+        <p class="entry-code-hint">승인하면 이전 매장 담당 소속은 자동 해제됩니다.</p>
+        <button class="btn-primary" onclick="acceptStaffInvite(${info.id})">승인하고 담당자로 등록</button>
+        <button type="button" class="entry-logout-link" onclick="navigate('home')">나중에</button>
+      </div>
     </div>`;
 }
 
@@ -248,13 +375,29 @@ async function loadPendingStaffInvites() {
 }
 
 async function acceptStaffInvite(designerId) {
-  if (!state.user) return;
+  if (!state.user) {
+    state.deepInviteId = Number(designerId);
+    state.currentPage = 'staff-invite';
+    render();
+    showToast('먼저 로그인·가입해 주세요', 'error');
+    return;
+  }
+  if (state.user.is_owner && Number(state.user.owned_salon_id)) {
+    const info = state.deepInviteInfo;
+    if (info && Number(info.salon_id) === Number(state.user.owned_salon_id)) {
+      showToast('승인은 담당자가 합니다', 'error');
+      return;
+    }
+  }
   const res = await api('/api/designers/' + designerId + '/accept', 'POST', { user_id: state.user.id });
   if (!res.success) {
     showToast(res.error || '승인에 실패했습니다', 'error');
     return;
   }
   if (res.data && res.data.user) saveUser(res.data.user);
+  state.deepInviteId = null;
+  state.deepInviteInfo = null;
+  clearDeepInviteFromUrl();
   await loadAppData();
   await loadPendingStaffInvites();
   navigate('home');
@@ -315,6 +458,7 @@ function renderPage() {
     case 'store':        return renderStore();
     case 'entry':        return renderEntryGate();
     case 'admin-setup':  return renderAdminSetup();
+    case 'staff-invite': return renderStaffInviteLanding();
     case 'scan':         return renderScan();
     case 'shop':         return renderShop();
     case 'orders':       return renderOrders();
@@ -355,7 +499,7 @@ function renderHome() {
       <span class="home-salon-cta-btn">등록</span>
     </div>` : ''}
 
-    <div style="padding:0 16px">${renderStaffInviteCards()}</div>
+    ${!state.user.is_owner ? `<div style="padding:0 16px">${renderStaffInviteCards()}</div>` : ''}
 
     <div class="home-banner">
       <img src="${bannerUrl}" alt="${(mainBanner && mainBanner.title) || '메인 배너'}">
@@ -892,6 +1036,11 @@ async function finishSocialAuth(res, provider, authId) {
   state.pendingSocial = null;
   state.loginStep = 'social';
   await loadAppData();
+  if (await resumeDeepInviteIfNeeded()) {
+    render();
+    showToast('초대를 확인하고 승인해 주세요', 'success');
+    return;
+  }
   if (needsEntryGate()) {
     navigate('entry');
     showToast('환영합니다! 입장 방법을 선택해 주세요', 'success');
@@ -942,7 +1091,7 @@ function renderEntryGate() {
       </div>`;
   }
   const unaffiliated = !state.user.is_owner && !state.user.is_staff && needsSalonBinding();
-  const hasInvites = (state.pendingStaffInvites || []).length > 0;
+  const hasInvites = visibleStaffInvites().length > 0;
   return `
     <div class="scan-page entry-page">
       ${renderStaffInviteCards()}
@@ -2442,11 +2591,16 @@ async function loadUserOrders() {
 async function init() {
   loadUser();
   const params = new URLSearchParams(location.search);
+  const inviteId = Number(params.get('invite') || 0);
+  if (inviteId) {
+    state.deepInviteId = inviteId;
+    state.currentPage = 'staff-invite';
+  }
   const prefillCode = params.get('code') || '';
-  if (prefillCode) {
+  if (!inviteId && prefillCode) {
     state.salonCodeInput = String(prefillCode).replace(/\D/g, '').slice(0, 6);
     state.currentPage = 'scan';
-  } else if (params.get('salon')) {
+  } else if (!inviteId && params.get('salon')) {
     // legacy QR links: /scan?salon=1 → resolve via salon list after load
     state.legacySalonPrefill = Number(params.get('salon'));
     state.currentPage = 'scan';
@@ -2458,9 +2612,19 @@ async function init() {
   if (!state.user) {
     const restored = await tryAutoLogin();
     if (restored) {
+      if (await resumeDeepInviteIfNeeded()) {
+        render();
+        return;
+      }
       if (needsEntryGate() && state.currentPage !== 'scan' && state.currentPage !== 'admin-setup') {
         state.currentPage = 'entry';
       }
+      render();
+      return;
+    }
+    if (state.deepInviteId) {
+      await loadDeepInviteInfo(state.deepInviteId);
+      state.currentPage = 'staff-invite';
       render();
       return;
     }
@@ -2473,7 +2637,11 @@ async function init() {
       if (res.success) saveUser(res.data.user);
     } catch (e) { /* 세션 데이터 유지 */ }
   }
-  if (state.user && needsEntryGate() && !['scan', 'admin-setup', 'entry'].includes(state.currentPage) && !state.salonCodeInput && !state.legacySalonPrefill) {
+  if (await resumeDeepInviteIfNeeded()) {
+    render();
+    return;
+  }
+  if (state.user && needsEntryGate() && !['scan', 'admin-setup', 'entry', 'staff-invite'].includes(state.currentPage) && !state.salonCodeInput && !state.legacySalonPrefill) {
     state.currentPage = 'entry';
   }
   if (state.user && state.salonCodeInput && !state.selectedSalon) {
