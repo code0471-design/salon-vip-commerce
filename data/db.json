@@ -332,7 +332,8 @@
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=tykim",
       "status": "ACTIVE",
       "commission_rate": 0.15,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "phone": "010-3333-1111"
     },
     {
       "id": 4,
@@ -341,7 +342,8 @@
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=mjpark",
       "status": "ACTIVE",
       "commission_rate": 0.15,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "phone": "010-3333-2222"
     },
     {
       "id": 6,
@@ -350,7 +352,8 @@
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=hnjeong",
       "status": "ACTIVE",
       "commission_rate": 0.15,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "phone": "010-3333-3333"
     },
     {
       "id": 2,
@@ -359,7 +362,8 @@
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=jhchoi",
       "status": "ACTIVE",
       "commission_rate": 0.15,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "phone": "010-3333-4444"
     },
     {
       "id": 1,
@@ -378,7 +382,8 @@
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=sjlee",
       "status": "ACTIVE",
       "commission_rate": 0.15,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "phone": "010-3333-5555"
     }
   ],
   "users": [
@@ -461,7 +466,9 @@
       "mapped_designer_id": 1,
       "created_at": "2026-08-10 06:09:35",
       "points": 12000,
-      "coupon_ids": [1],
+      "coupon_ids": [
+        1
+      ],
       "auth_provider": "kakao",
       "shipping_address": "(06236) 서울 강남구 테헤란로 152 301호",
       "phone_verified": true
@@ -475,7 +482,9 @@
       "mapped_designer_id": 2,
       "created_at": "2026-08-10 06:09:35",
       "points": 5000,
-      "coupon_ids": [1]
+      "coupon_ids": [
+        1
+      ]
     },
     {
       "id": 3,
@@ -486,7 +495,9 @@
       "mapped_designer_id": 4,
       "created_at": "2026-08-10 06:09:35",
       "points": 3000,
-      "coupon_ids": [1]
+      "coupon_ids": [
+        1
+      ]
     },
     {
       "id": 4,
@@ -497,7 +508,9 @@
       "mapped_designer_id": 3,
       "created_at": "2026-08-10 06:09:35",
       "points": 8000,
-      "coupon_ids": [1]
+      "coupon_ids": [
+        1
+      ]
     },
     {
       "id": 5,
@@ -508,7 +521,9 @@
       "mapped_designer_id": 6,
       "created_at": "2026-08-10 06:09:35",
       "points": 4000,
-      "coupon_ids": [1]
+      "coupon_ids": [
+        1
+      ]
     }
   ],
   "orders": [
