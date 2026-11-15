@@ -1592,7 +1592,7 @@ function renderScan() {
             <div style="font-weight:800;font-size:16px;color:var(--text)">${salon.salon_name}</div>
             <div style="font-size:12px;color:var(--muted);margin-top:2px">매장 코드 ${salon.salon_code || '-'}</div>
           </div>
-          `<button type="button" class="ghost-text-btn" onclick="resetSalonCodeStep()">다시 입력</button>`}
+          <button type="button" class="ghost-text-btn" onclick="resetSalonCodeStep()">다시 입력</button>
         </div>
 
         <div class="designer-section">
