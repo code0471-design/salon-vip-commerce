@@ -942,6 +942,7 @@ function renderEntryGate() {
       </div>`;
   }
   const unaffiliated = !state.user.is_owner && !state.user.is_staff && needsSalonBinding();
+  const hasInvites = (state.pendingStaffInvites || []).length > 0;
   return `
     <div class="scan-page entry-page">
       ${renderStaffInviteCards()}
@@ -949,12 +950,15 @@ function renderEntryGate() {
         <div class="onboard-icon"><i class="fas fa-door-open"></i></div>
         <h2>${unaffiliated ? '소속이 없습니다' : '살롱 VIP 입장하기'}</h2>
         <p>${unaffiliated
-          ? '고객으로 매장에 입장하거나, 관리자로 매장을 개설할 수 있어요. 담당자 초대가 있으면 위에서 승인하세요.'
-          : '고객은 매장 코드로 입장하고, 원장님은 관리자로 매장을 개설할 수 있어요.'}</p>
+          ? (hasInvites
+            ? '위에서 담당자 초대를 승인하거나, 내 매장을 개설할 수 있어요. 고객 입장은 방문한 매장의 6자리 코드가 있을 때만 가능합니다.'
+            : '고객 입장은 매장에서 받은 6자리 코드(또는 QR)가 있어야 합니다. 코드가 없으면 입장할 수 없고, 원장이면 아래에서 매장을 개설하세요.')
+          : '고객은 매장에서 받은 6자리 코드로 입장하고, 원장님은 관리자로 매장을 개설할 수 있어요.'}</p>
         <button class="btn-primary" onclick="navigate('scan')">
-          <i class="fas fa-key"></i> 살롱 VIP 입장하기
+          <i class="fas fa-key"></i> 매장 코드로 고객 입장
         </button>
-        <button type="button" class="entry-admin-link" onclick="openAdminSetup()">관리자 입장</button>
+        <p class="entry-code-hint">방문·QR로 받은 코드가 없으면 고객 입장이 되지 않습니다.</p>
+        <button type="button" class="entry-admin-link" onclick="openAdminSetup()">관리자 입장 · 매장 개설</button>
         <button type="button" class="entry-logout-link" onclick="handleLogout()">로그아웃</button>
       </div>
     </div>
@@ -1198,7 +1202,7 @@ function renderScan() {
         매장 · 담당자 등록
       </h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:18px">
-        6자리 매장 코드 입력 후 담당자를 선택하세요. 고객당 매장은 1곳만 등록됩니다.
+        매장 방문·QR로 받은 6자리 코드가 있어야 입장됩니다. 코드 입력 후 담당자를 선택하세요. 고객당 매장은 1곳만 등록됩니다.
       </p>
 
       <div class="onboard-steps">

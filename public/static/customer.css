@@ -154,6 +154,9 @@ body {
 .admin-tab.on {
   background: var(--primary); color: #fff; border-color: var(--primary);
 }
+.entry-code-hint {
+  margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4;
+}
 .entry-admin-link {
   display: block; width: 100%; margin-top: 14px; border: none; background: none;
   color: var(--muted); font-size: 12px; font-weight: 600; text-decoration: underline;
