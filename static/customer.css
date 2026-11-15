@@ -831,14 +831,22 @@ body {
 }
 
 .profile-stats {
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 1px; background: var(--border); margin-bottom: 12px;
+  display: flex;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
 }
 .profile-stat-item {
-  background: white; padding: 18px; text-align: center;
+  flex: 1;
+  background: #fff;
+  padding: 16px 10px;
+  text-align: center;
+  border-right: 1px solid var(--border);
 }
-.profile-stat-item .pval { font-size: 20px; font-weight: 800; color: var(--text); }
-.profile-stat-item .plbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.profile-stat-item:last-child { border-right: none; }
+.profile-stat-item .pval { font-size: 18px; font-weight: 800; color: var(--text); line-height: 1.2; }
+.profile-stat-item .pval.rose { color: var(--rose); font-size: 15px; }
+.profile-stat-item .plbl { font-size: 11px; color: var(--muted); margin-top: 4px; }
 
 .info-card {
   background: white; border-radius: var(--card-r);
