@@ -233,6 +233,10 @@ body {
   cursor: pointer; font-family: var(--font);
 }
 .category-menu-row i { color: #c0bbb4; font-size: 12px; }
+.brand-menu-meta {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--muted);
+}
 .search-box {
   display: flex; align-items: center; gap: 10px;
   background: #fff; border: 1.5px solid var(--border); border-radius: 14px;
