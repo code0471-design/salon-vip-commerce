@@ -38,6 +38,7 @@ let state = {
     owner_name: '',
     owner_phone: '',
     address: '',
+    address_detail: '',
     salon_code: '',
     designers: [{ designer_name: '', phone: '', requested: false }],
   },
@@ -215,6 +216,7 @@ function resetSetupDraft() {
     owner_name: state.user ? (state.user.name || '') : '',
     owner_phone: state.user ? (state.user.phone || '') : '',
     address: '',
+    address_detail: '',
     salon_code: '',
     designers: [{ designer_name: '', phone: '', requested: false }],
   };
@@ -663,7 +665,13 @@ function renderSocialProfile() {
         </div>
         <div class="form-field">
           <label class="form-label">배송주소</label>
-          <input id="login-address" class="form-input" type="text" placeholder="예: 서울시 강남구 ○○로 12">
+          <div class="address-search-row">
+            <input id="login-address" class="form-input" type="text" readonly
+              placeholder="주소 검색을 눌러주세요" onclick="openAddressSearch('login-address','login-address-detail')">
+            <button type="button" class="btn-secondary address-search-btn" onclick="openAddressSearch('login-address','login-address-detail')">주소 검색</button>
+          </div>
+          <input id="login-address-detail" class="form-input" type="text" style="margin-top:8px"
+            placeholder="상세주소 (동·호수 등)">
         </div>
         <button class="btn-primary" style="margin-top:8px" onclick="submitSocialProfile()">
           <i class="fas fa-arrow-right"></i> 가입하고 입장하기
@@ -672,6 +680,51 @@ function renderSocialProfile() {
       </div>
     </div>
   `;
+}
+
+function joinAddress(base, detail) {
+  const a = String(base || '').trim();
+  const b = String(detail || '').trim();
+  if (!a) return '';
+  return b ? a + ' ' + b : a;
+}
+
+function openAddressSearch(baseInputId, detailInputId) {
+  if (!(window.daum && window.daum.Postcode)) {
+    showToast('주소 검색을 불러오지 못했습니다. 잠시 후 다시 시도해주세요', 'error');
+    return;
+  }
+  new daum.Postcode({
+    oncomplete(data) {
+      const road = data.roadAddress || '';
+      const jibun = data.jibunAddress || '';
+      let addr = data.userSelectedType === 'R' ? road : jibun;
+      if (!addr) addr = road || jibun;
+      let extra = '';
+      if (data.bname && /[동|로|가]$/g.test(data.bname)) extra += data.bname;
+      if (data.buildingName && data.apartment === 'Y') {
+        extra += (extra ? ', ' : '') + data.buildingName;
+      }
+      const base = (data.zonecode ? '(' + data.zonecode + ') ' : '') + addr + (extra ? ' (' + extra + ')' : '');
+      const baseEl = document.getElementById(baseInputId);
+      if (baseEl) {
+        baseEl.value = base;
+        baseEl.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      if (typeof detailInputId === 'function') {
+        detailInputId(base);
+      } else if (baseInputId === 'setup-address') {
+        updateSetupField('address', base);
+      }
+      const detailEl = detailInputId && typeof detailInputId === 'string'
+        ? document.getElementById(detailInputId)
+        : null;
+      if (detailEl) {
+        detailEl.focus();
+      }
+      showToast('주소를 선택했습니다. 상세주소를 입력하세요', 'success');
+    },
+  }).open();
 }
 
 async function sendSignupOtp() {
@@ -748,11 +801,13 @@ function useAnotherSocialAccount(provider) {
 async function submitSocialProfile() {
   const name = (document.getElementById('login-name') || {}).value.trim();
   const phone = (document.getElementById('login-phone') || {}).value.trim();
-  const shippingAddress = (document.getElementById('login-address') || {}).value.trim();
+  const shippingBase = (document.getElementById('login-address') || {}).value.trim();
+  const shippingDetail = (document.getElementById('login-address-detail') || {}).value.trim();
+  const shippingAddress = joinAddress(shippingBase, shippingDetail);
   if (!name) { showToast('이름을 입력해주세요', 'error'); return; }
   if (!phone) { showToast('휴대폰번호를 입력해주세요', 'error'); return; }
   if (!state.phoneVerified) { showToast('휴대폰 문자 인증을 완료해주세요', 'error'); return; }
-  if (!shippingAddress) { showToast('배송주소를 입력해주세요', 'error'); return; }
+  if (!shippingBase) { showToast('주소 검색으로 배송주소를 선택해주세요', 'error'); return; }
   if (!state.pendingSocial || !state.pendingSocial.auth_id) {
     state.loginStep = 'account';
     render();
@@ -925,8 +980,16 @@ function renderAdminSetup() {
         <input class="form-input" type="tel" value="${escText(d.owner_phone)}" placeholder="010-0000-0000"
           oninput="updateSetupField('owner_phone', this.value)">
         <label class="form-label">주소</label>
-        <input class="form-input" value="${escText(d.address)}" placeholder="매장 주소"
-          oninput="updateSetupField('address', this.value)">
+        <div class="address-search-row">
+          <input id="setup-address" class="form-input" value="${escText(d.address)}" readonly
+            placeholder="주소 검색을 눌러주세요"
+            onclick="openAddressSearch('setup-address','setup-address-detail')">
+          <button type="button" class="btn-secondary address-search-btn" onclick="openAddressSearch('setup-address','setup-address-detail')">주소 검색</button>
+        </div>
+        <input id="setup-address-detail" class="form-input" type="text" style="margin-top:8px"
+          value="${escText(d.address_detail || '')}"
+          placeholder="상세주소 (동·호수 등)"
+          oninput="updateSetupField('address_detail', this.value)">
         <label class="form-label">매장코드 6자리</label>
         <input class="form-input code-input" type="tel" inputmode="numeric" maxlength="6"
           value="${escText(d.salon_code)}" placeholder="예: 100001"
@@ -964,6 +1027,14 @@ async function submitSalonSetup() {
     showToast('매장명, 대표자, 휴대폰번호를 입력하세요', 'error');
     return;
   }
+  const setupBase = (document.getElementById('setup-address') || {}).value.trim() || String(d.address || '').trim();
+  const setupDetail = (document.getElementById('setup-address-detail') || {}).value.trim() || String(d.address_detail || '').trim();
+  const setupAddress = joinAddress(setupBase, setupDetail);
+  if (!setupBase) {
+    showToast('주소 검색으로 매장 주소를 선택해주세요', 'error');
+    return;
+  }
+  d.address = setupAddress;
   if (!/^\d{6}$/.test(String(d.salon_code || '').trim())) {
     showToast('매장 코드는 6자리 숫자입니다', 'error');
     return;
@@ -2162,7 +2233,14 @@ function renderStoreManage(salon) {
         <label class="form-label">휴대폰번호</label>
         <input id="manage-owner-phone" class="form-input" type="tel" value="${escText(salon.owner_phone || '')}">
         <label class="form-label">주소</label>
-        <input id="manage-address" class="form-input" value="${escText(salon.address || '')}">
+        <div class="address-search-row">
+          <input id="manage-address" class="form-input" value="${escText(salon.address || '')}" readonly
+            placeholder="주소 검색을 눌러주세요"
+            onclick="openAddressSearch('manage-address','manage-address-detail')">
+          <button type="button" class="btn-secondary address-search-btn" onclick="openAddressSearch('manage-address','manage-address-detail')">주소 검색</button>
+        </div>
+        <input id="manage-address-detail" class="form-input" type="text" style="margin-top:8px"
+          placeholder="상세주소 (동·호수 등)">
         <label class="form-label">매장코드</label>
         <input class="form-input" value="${escText(salon.salon_code || '')}" disabled>
         <button class="btn-primary" style="margin-top:12px" onclick="saveSalonManage()">기본 정보 저장</button>
@@ -2202,7 +2280,10 @@ async function saveSalonManage() {
     salon_name: (document.getElementById('manage-salon-name') || {}).value || '',
     owner_name: (document.getElementById('manage-owner-name') || {}).value || '',
     owner_phone: (document.getElementById('manage-owner-phone') || {}).value || '',
-    address: (document.getElementById('manage-address') || {}).value || '',
+    address: joinAddress(
+      (document.getElementById('manage-address') || {}).value || '',
+      (document.getElementById('manage-address-detail') || {}).value || ''
+    ),
   };
   const res = await api('/api/salons/' + salon.id, 'PUT', body);
   if (!res.success) {

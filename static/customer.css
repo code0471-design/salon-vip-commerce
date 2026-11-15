@@ -170,6 +170,12 @@ body {
   width: auto !important; white-space: nowrap; padding: 0 14px !important;
   margin: 0 !important; flex-shrink: 0;
 }
+.address-search-row { display: flex; gap: 8px; align-items: stretch; }
+.address-search-row .form-input { flex: 1; cursor: pointer; background: #fafafa; }
+.address-search-btn {
+  width: auto !important; white-space: nowrap; padding: 0 14px !important;
+  margin: 0 !important; flex-shrink: 0;
+}
 .designer-status-chip {
   display: inline-block; margin-left: 6px; padding: 2px 7px; border-radius: 999px;
   font-size: 10px; font-weight: 700; vertical-align: middle;
