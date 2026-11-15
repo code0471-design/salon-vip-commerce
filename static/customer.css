@@ -911,8 +911,13 @@ body {
 .cart-qty-price { margin-top: 8px; font-size: 15px; font-weight: 800; color: #111; }
 .cart-qty-hint {
   margin: 0 0 14px;
-  font-size: 12px;
-  color: #7a7a85;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  font-size: 13px;
+  font-weight: 700;
+  color: #c2410c;
   line-height: 1.45;
   text-align: center;
 }

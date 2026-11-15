@@ -2238,7 +2238,7 @@ function renderCartQtySheet() {
           <div class="cart-qty-meta">
             <div class="cart-qty-brand">${escText(productBrandName(p))}</div>
             <div class="cart-qty-name">${escText(p.name)}</div>
-            <div class="cart-qty-price">${deal.maxPrice.toLocaleString()}원</div>
+            <div class="cart-qty-price">${deal.sale.toLocaleString()}원</div>
           </div>
         </div>
         <div class="cart-qty-row">
