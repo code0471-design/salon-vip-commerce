@@ -33,6 +33,7 @@ let state = {
   otpSent: false,
   adminTab: 'sales', // sales | manage
   manageDesigners: [],
+  pendingStaffInvites: [],
   setupDraft: {
     salon_name: '',
     owner_name: '',
@@ -207,7 +208,57 @@ function needsSalonBinding() {
 function needsEntryGate() {
   if (!state.user) return false;
   if (state.user.is_owner || state.user.is_staff) return false;
+  // 담당 해제·고객 미연결 등 무소속이면 입장 화면
   return needsSalonBinding();
+}
+
+function renderStaffInviteCards() {
+  const invites = state.pendingStaffInvites || [];
+  if (!invites.length) return '';
+  return `
+    <div class="code-card" style="margin-bottom:14px">
+      <div class="section-label" style="margin-top:0">담당자 초대</div>
+      <p style="font-size:13px;color:var(--muted);margin:0 0 10px">이미 회원이면 가입 없이 승인만 하면 됩니다. 승인 시 이전 매장 담당 소속은 자동 해제됩니다.</p>
+      ${invites.map((inv) => `
+        <div class="manage-designer-row">
+          <div>
+            <div style="font-weight:700">${escText(inv.salon_name || '매장')}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px">${escText((inv.designer_name || '').replace(' 디자이너', ''))} · 초대 대기</div>
+          </div>
+          <button type="button" class="btn-secondary" style="width:auto;padding:10px 14px;margin:0" onclick="acceptStaffInvite(${inv.id})">승인</button>
+        </div>`).join('')}
+    </div>`;
+}
+
+function splitSalonAddress(salon) {
+  if (!salon) return { base: '', detail: '' };
+  if (salon.address_detail != null && String(salon.address_detail).length) {
+    return { base: String(salon.address || ''), detail: String(salon.address_detail || '') };
+  }
+  return { base: String(salon.address || ''), detail: '' };
+}
+
+async function loadPendingStaffInvites() {
+  if (!state.user) {
+    state.pendingStaffInvites = [];
+    return;
+  }
+  const res = await api('/api/users/' + state.user.id + '/staff-invites');
+  state.pendingStaffInvites = res.success ? (res.data || []) : [];
+}
+
+async function acceptStaffInvite(designerId) {
+  if (!state.user) return;
+  const res = await api('/api/designers/' + designerId + '/accept', 'POST', { user_id: state.user.id });
+  if (!res.success) {
+    showToast(res.error || '승인에 실패했습니다', 'error');
+    return;
+  }
+  if (res.data && res.data.user) saveUser(res.data.user);
+  await loadAppData();
+  await loadPendingStaffInvites();
+  navigate('home');
+  showToast(res.message || '담당자로 등록되었습니다', 'success');
 }
 
 function resetSetupDraft() {
@@ -303,6 +354,8 @@ function renderHome() {
       </div>
       <span class="home-salon-cta-btn">등록</span>
     </div>` : ''}
+
+    <div style="padding:0 16px">${renderStaffInviteCards()}</div>
 
     <div class="home-banner">
       <img src="${bannerUrl}" alt="${(mainBanner && mainBanner.title) || '메인 배너'}">
@@ -888,12 +941,16 @@ function renderEntryGate() {
         </div>
       </div>`;
   }
+  const unaffiliated = !state.user.is_owner && !state.user.is_staff && needsSalonBinding();
   return `
     <div class="scan-page entry-page">
+      ${renderStaffInviteCards()}
       <div class="onboard-card entry-card">
         <div class="onboard-icon"><i class="fas fa-door-open"></i></div>
-        <h2>살롱 VIP 입장하기</h2>
-        <p>고객은 매장 코드로 입장하고, 원장님은 관리자로 매장을 개설할 수 있어요.</p>
+        <h2>${unaffiliated ? '소속이 없습니다' : '살롱 VIP 입장하기'}</h2>
+        <p>${unaffiliated
+          ? '고객으로 매장에 입장하거나, 관리자로 매장을 개설할 수 있어요. 담당자 초대가 있으면 위에서 승인하세요.'
+          : '고객은 매장 코드로 입장하고, 원장님은 관리자로 매장을 개설할 수 있어요.'}</p>
         <button class="btn-primary" onclick="navigate('scan')">
           <i class="fas fa-key"></i> 살롱 VIP 입장하기
         </button>
@@ -1029,12 +1086,12 @@ async function submitSalonSetup() {
   }
   const setupBase = (document.getElementById('setup-address') || {}).value.trim() || String(d.address || '').trim();
   const setupDetail = (document.getElementById('setup-address-detail') || {}).value.trim() || String(d.address_detail || '').trim();
-  const setupAddress = joinAddress(setupBase, setupDetail);
   if (!setupBase) {
     showToast('주소 검색으로 매장 주소를 선택해주세요', 'error');
     return;
   }
-  d.address = setupAddress;
+  d.address = setupBase;
+  d.address_detail = setupDetail;
   if (!/^\d{6}$/.test(String(d.salon_code || '').trim())) {
     showToast('매장 코드는 6자리 숫자입니다', 'error');
     return;
@@ -1053,7 +1110,8 @@ async function submitSalonSetup() {
     salon_name: d.salon_name.trim(),
     owner_name: d.owner_name.trim(),
     owner_phone: d.owner_phone.trim(),
-    address: (d.address || '').trim(),
+    address: setupBase,
+    address_detail: setupDetail,
     salon_code: String(d.salon_code).trim(),
     designers,
   });
@@ -1757,6 +1815,7 @@ async function loadAppData() {
     if (brandsRes.success) state.brands = brandsRes.data;
     if (bannersRes.success) state.banners = bannersRes.data;
     if (state.user) await loadUserOrders();
+    if (state.user) await loadPendingStaffInvites();
     if (ownerSalon()) await loadStoreLedger();
   } catch (e) {
     console.error('Load error:', e);
@@ -2219,6 +2278,7 @@ async function loadManageDesigners() {
 
 function renderStoreManage(salon) {
   const designers = (state.manageDesigners || []).filter((d) => d.status !== 'RESIGNED');
+  const addr = splitSalonAddress(salon);
   return `
     <div style="padding:20px 16px 28px">
       <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">관리자</h2>
@@ -2234,12 +2294,13 @@ function renderStoreManage(salon) {
         <input id="manage-owner-phone" class="form-input" type="tel" value="${escText(salon.owner_phone || '')}">
         <label class="form-label">주소</label>
         <div class="address-search-row">
-          <input id="manage-address" class="form-input" value="${escText(salon.address || '')}" readonly
+          <input id="manage-address" class="form-input" value="${escText(addr.base)}" readonly
             placeholder="주소 검색을 눌러주세요"
             onclick="openAddressSearch('manage-address','manage-address-detail')">
           <button type="button" class="btn-secondary address-search-btn" onclick="openAddressSearch('manage-address','manage-address-detail')">주소 검색</button>
         </div>
         <input id="manage-address-detail" class="form-input" type="text" style="margin-top:8px"
+          value="${escText(addr.detail)}"
           placeholder="상세주소 (동·호수 등)">
         <label class="form-label">매장코드</label>
         <input class="form-input" value="${escText(salon.salon_code || '')}" disabled>
@@ -2280,10 +2341,8 @@ async function saveSalonManage() {
     salon_name: (document.getElementById('manage-salon-name') || {}).value || '',
     owner_name: (document.getElementById('manage-owner-name') || {}).value || '',
     owner_phone: (document.getElementById('manage-owner-phone') || {}).value || '',
-    address: joinAddress(
-      (document.getElementById('manage-address') || {}).value || '',
-      (document.getElementById('manage-address-detail') || {}).value || ''
-    ),
+    address: ((document.getElementById('manage-address') || {}).value || '').trim(),
+    address_detail: ((document.getElementById('manage-address-detail') || {}).value || '').trim(),
   };
   const res = await api('/api/salons/' + salon.id, 'PUT', body);
   if (!res.success) {
@@ -2295,8 +2354,8 @@ async function saveSalonManage() {
     const userRes = await api('/api/users/' + state.user.id);
     if (userRes.success) saveUser(userRes.data.user);
   }
-  render();
   showToast('매장 정보를 저장했습니다', 'success');
+  navigate('home');
 }
 
 async function addManageDesigner() {

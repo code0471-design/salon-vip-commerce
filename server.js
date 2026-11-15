@@ -48,17 +48,57 @@ function isPhoneVerified(phone) {
   return !!(row && row.verified && Date.now() <= row.expires + 30 * 60 * 1000);
 }
 
+function resignOtherStaffJobs(user, keepDesignerId) {
+  const phone = phoneDigits(user.phone);
+  const resigned = [];
+  db.designers.forEach((d) => {
+    if (d.id === Number(keepDesignerId)) return;
+    if (d.status !== 'ACTIVE') return;
+    const samePhone = phone && phoneDigits(d.phone) === phone;
+    const sameStaff = user.staff_designer_id && Number(user.staff_designer_id) === d.id;
+    if (!samePhone && !sameStaff) return;
+    d.status = 'RESIGNED';
+    d.resigned_at = nowStamp();
+    resigned.push(d);
+  });
+  return resigned;
+}
+
+function activateStaffInvite(user, designer) {
+  if (!designer || designer.status !== 'INVITED') return { error: '대기 중인 초대가 없습니다' };
+  if (phoneDigits(user.phone) !== phoneDigits(designer.phone)) {
+    return { error: '초대된 휴대폰번호와 일치하지 않습니다' };
+  }
+  const resigned = resignOtherStaffJobs(user, designer.id);
+  designer.status = 'ACTIVE';
+  designer.joined_at = nowStamp();
+  user.staff_designer_id = designer.id;
+  return { designer, resigned };
+}
+
+function pendingStaffInvitesFor(user) {
+  const phone = phoneDigits(user && user.phone);
+  if (!phone) return [];
+  return db.designers
+    .filter((d) => d.status === 'INVITED' && phoneDigits(d.phone) === phone)
+    .map((d) => {
+      const salon = findSalon(d.salon_id);
+      return {
+        ...publicDesigner(d),
+        salon_name: salon ? salon.salon_name : '',
+        salon_id: d.salon_id,
+      };
+    });
+}
+
 function acceptDesignerInvites(user) {
   const phone = phoneDigits(user.phone);
   if (!phone) return [];
+  const invited = db.designers.filter((d) => d.status === 'INVITED' && phoneDigits(d.phone) === phone);
   const accepted = [];
-  db.designers.forEach((d) => {
-    if (d.status !== 'INVITED') return;
-    if (phoneDigits(d.phone) !== phone) return;
-    d.status = 'ACTIVE';
-    d.joined_at = nowStamp();
-    user.staff_designer_id = d.id;
-    accepted.push(d);
+  invited.forEach((d) => {
+    const result = activateStaffInvite(user, d);
+    if (!result.error) accepted.push(d);
   });
   return accepted;
 }
@@ -546,6 +586,7 @@ const routes = [
       owner_name: String(body.owner_name).trim(),
       owner_phone: String(body.owner_phone).trim(),
       address: String(body.address || '').trim(),
+      address_detail: String(body.address_detail || '').trim(),
       bank_account: body.bank_account || '',
       hidden_brand_ids: [],
       brand_discount_rates: {},
@@ -611,7 +652,7 @@ const routes = [
     const salon = findSalon(id);
     if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
     const body = req.body || {};
-    ['salon_name', 'owner_name', 'owner_phone', 'bank_account', 'address'].forEach((key) => {
+    ['salon_name', 'owner_name', 'owner_phone', 'bank_account', 'address', 'address_detail'].forEach((key) => {
       if (body[key] !== undefined) salon[key] = body[key];
     });
     if (body.salon_code !== undefined) {
@@ -758,15 +799,12 @@ const routes = [
     };
     db.designers.push(designer);
     const matchUser = db.users.find((u) => phoneDigits(u.phone) === phoneDigits(phone));
+    const salon = findSalon(designer.salon_id);
     let demoSms = '';
-    if (matchUser && designer.status === 'INVITED') {
-      designer.status = 'ACTIVE';
-      designer.joined_at = nowStamp();
-      matchUser.staff_designer_id = designer.id;
-      demoSms = '이미 가입된 번호라 바로 담당자로 연결했습니다';
-    } else if (designer.status === 'INVITED') {
-      const salon = findSalon(designer.salon_id);
-      demoSms = `[살롱VIP] ${salon ? salon.salon_name : '매장'} 담당자 초대. 앱에서 같은 번호로 가입·인증하면 완료됩니다.`;
+    if (designer.status === 'INVITED') {
+      demoSms = matchUser
+        ? `[살롱VIP] ${salon ? salon.salon_name : '매장'} 담당자 초대. 앱에서 승인하면 새 매장 담당자로 등록됩니다.`
+        : `[살롱VIP] ${salon ? salon.salon_name : '매장'} 담당자 초대. 앱에서 같은 번호로 가입·인증하면 완료됩니다.`;
     }
     save();
     return {
@@ -774,6 +812,7 @@ const routes = [
       extra: {
         message: designer.status === 'INVITED' ? '담당자에게 초대 요청을 보냈습니다' : '담당자가 추가되었습니다',
         demo_sms: demoSms,
+        existing_member: !!matchUser,
       },
     };
   }],
@@ -784,19 +823,46 @@ const routes = [
     designer.status = 'INVITED';
     designer.invited_at = nowStamp();
     const salon = findSalon(designer.salon_id);
-    const demoSms = `[살롱VIP] ${salon ? salon.salon_name : '매장'} 담당자 초대. 앱에서 같은 번호로 가입·인증하면 완료됩니다.`;
+    const matchUser = db.users.find((u) => phoneDigits(u.phone) === phoneDigits(designer.phone));
+    const demoSms = matchUser
+      ? `[살롱VIP] ${salon ? salon.salon_name : '매장'} 담당자 초대. 앱에서 승인하면 등록됩니다.`
+      : `[살롱VIP] ${salon ? salon.salon_name : '매장'} 담당자 초대. 앱에서 같은 번호로 가입·인증하면 완료됩니다.`;
     save();
     return {
       data: publicDesigner(designer),
       extra: { message: '초대 문자를 다시 보냈습니다', demo_sms: demoSms },
     };
   }],
+  ['POST', /^\/api\/designers\/(\d+)\/accept$/, (req, id) => {
+    const designer = findDesigner(id);
+    if (!designer) return { status: 404, error: '초대를 찾을 수 없습니다' };
+    const user = db.users.find((u) => u.id === Number((req.body || {}).user_id));
+    if (!user) return { status: 404, error: '사용자를 찾을 수 없습니다' };
+    const result = activateStaffInvite(user, designer);
+    if (result.error) return { status: 400, error: result.error };
+    save();
+    return {
+      data: { user: publicUser(user), designer: publicDesigner(designer), resigned: result.resigned.map(publicDesigner) },
+      extra: {
+        message: result.resigned.length
+          ? '새 매장 담당자로 등록되었고, 이전 매장 담당 소속은 해제되었습니다'
+          : '담당자로 등록되었습니다',
+      },
+    };
+  }],
+  ['GET', /^\/api\/users\/(\d+)\/staff-invites$/, (req, id) => {
+    const user = db.users.find((u) => u.id === Number(id));
+    if (!user) return { status: 404, error: '사용자를 찾을 수 없습니다' };
+    return { data: pendingStaffInvitesFor(user) };
+  }],
   ['POST', /^\/api\/designers\/(\d+)\/resign$/, (req, id) => {
     const designer = findDesigner(id);
     if (!designer) return { status: 404, error: '디자이너를 찾을 수 없습니다' };
     designer.status = 'RESIGNED';
+    designer.resigned_at = nowStamp();
     db.users.forEach((user) => {
       if (user.mapped_designer_id === designer.id) user.mapped_designer_id = null;
+      if (Number(user.staff_designer_id) === designer.id) user.staff_designer_id = null;
     });
     save();
     return { data: publicDesigner(designer), message: '퇴사 처리되었습니다.' };
