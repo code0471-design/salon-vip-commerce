@@ -788,6 +788,7 @@ function renderEntryGate() {
           <i class="fas fa-key"></i> 살롱 VIP 입장하기
         </button>
         <button type="button" class="entry-admin-link" onclick="openAdminSetup()">관리자 입장</button>
+        <button type="button" class="entry-logout-link" onclick="handleLogout()">로그아웃</button>
       </div>
     </div>
   `;
@@ -840,7 +841,10 @@ function renderAdminSetup() {
   const d = state.setupDraft;
   return `
     <div class="scan-page admin-setup-page">
-      <button class="store-back" onclick="navigate('entry')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>입장</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <button class="store-back" style="margin:0" onclick="navigate('entry')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>입장</button>
+        <button type="button" class="entry-logout-link" style="margin:0;width:auto" onclick="handleLogout()">로그아웃</button>
+      </div>
       <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">매장 세팅</h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:16px">필수 정보를 입력하고 저장하면 매장이 생성됩니다.</p>
       <div class="code-card setup-form">
