@@ -196,8 +196,23 @@ body {
 .entry-code-hint {
   margin: 10px 0 0; font-size: 12px; color: var(--muted); line-height: 1.4;
 }
+.entry-page {
+  min-height: calc(100dvh - 56px - env(safe-area-inset-top));
+  display: flex; flex-direction: column;
+  padding-bottom: calc(18px + env(safe-area-inset-bottom)) !important;
+  box-sizing: border-box;
+}
+.entry-main {
+  flex: 1; display: flex; flex-direction: column;
+  justify-content: center; align-items: stretch;
+  min-height: 0;
+}
+.entry-card { width: 100%; }
+.entry-footer {
+  margin-top: auto; padding-top: 24px; text-align: center;
+}
 .entry-admin-link {
-  display: block; width: 100%; margin-top: 14px; border: none; background: none;
+  display: block; width: 100%; margin: 0; border: none; background: none;
   color: var(--muted); font-size: 12px; font-weight: 600; text-decoration: underline;
   cursor: pointer; font-family: var(--font);
 }
@@ -206,6 +221,7 @@ body {
   color: #b91c1c; font-size: 12px; font-weight: 600;
   cursor: pointer; font-family: var(--font);
 }
+.page-content:has(.entry-page) { padding-bottom: 0; }
 .otp-row { display: flex; gap: 8px; align-items: stretch; }
 .otp-row .form-input { flex: 1; }
 .otp-send-btn {
