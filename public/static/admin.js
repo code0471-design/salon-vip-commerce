@@ -2,7 +2,9 @@
 // SALON Admin Dashboard SPA
 // ============================================================
 
-const API = '';
+const API = (window.__SALON_CONFIG__ && window.__SALON_CONFIG__.apiBase)
+  ? String(window.__SALON_CONFIG__.apiBase).replace(/\/$/, '')
+  : '';
 let adminState = {
   page: 'dashboard',
   stats: null,
@@ -54,8 +56,12 @@ let adminState = {
 async function api(path, method = 'GET', body = null) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(API + path, opts);
-  return res.json();
+  try {
+    const res = await fetch(API + path, opts);
+    return await res.json();
+  } catch (e) {
+    return { success: false, error: '서버에 연결할 수 없습니다' };
+  }
 }
 
 function showToast(msg, type = '') {
@@ -67,6 +73,28 @@ function showToast(msg, type = '') {
 }
 
 // ---- Render ----
+function renderDataSourceBanner() {
+  if (API) {
+    return `
+      <div class="data-source-banner pages">
+        <i class="fas fa-cloud"></i>
+        <span>실서버 API: <code>${escAttr(API)}</code> — 고객 앱·어드민이 같은 DB를 공유합니다.</span>
+      </div>`;
+  }
+  if (location.hostname.endsWith('github.io')) {
+    return `
+      <div class="data-source-banner pages">
+        <i class="fas fa-info-circle"></i>
+        <span>지금은 GitHub Pages 데모입니다. 이 브라우저에서 고객 앱·어드민이 같은 데이터를 공유합니다. 앱스토어 배포 때 실서버로 전환합니다.</span>
+      </div>`;
+  }
+  return `
+    <div class="data-source-banner pages">
+      <i class="fas fa-server"></i>
+      <span>이 서버 DB를 사용합니다. 개설한 매장은 고객 앱·어드민에 같이 보입니다.</span>
+    </div>`;
+}
+
 function renderAdmin() {
   const app = document.getElementById('admin-app');
   app.innerHTML = `
@@ -74,6 +102,7 @@ function renderAdmin() {
     ${renderSidebar()}
     <div class="main-content">
       ${renderTopbar()}
+      ${renderDataSourceBanner()}
       <div class="page" id="admin-page">
         ${renderAdminPage()}
       </div>
@@ -329,6 +358,7 @@ function renderSalons() {
         <thead>
           <tr>
             <th>살롱명</th>
+            <th>매장 코드</th>
             <th>원장</th>
             <th>연락처</th>
             <th>계좌</th>
@@ -344,9 +374,10 @@ function renderSalons() {
               <div style="font-weight:600">${s.salon_name}</div>
               <div style="font-size:11px;color:#9ca3af">ID ${s.id}</div>
             </td>
+            <td><code style="font-weight:700;letter-spacing:0.04em">${s.salon_code || '-'}</code></td>
             <td>${s.owner_name || ''}</td>
             <td>${s.owner_phone || ''}</td>
-            <td>${s.bank_account || '-'}</td>
+            <td>${[s.bank_name, s.bank_account].filter(Boolean).join(' ') || '-'}</td>
             <td>활동 ${s.active_designers || 0} · 전체 ${s.designer_count || 0}</td>
             <td style="font-size:12px;color:#6b7280">${blockedBrandLabel(s.id)}</td>
             <td>
@@ -356,7 +387,7 @@ function renderSalons() {
                 <button class="btn btn-sm btn-primary" onclick="openEditSalonModal(${s.id})">편집</button>
               </div>
             </td>
-          </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:24px">살롱이 없습니다</td></tr>'}
+          </tr>`).join('') || '<tr><td colspan="8" style="text-align:center;color:#9ca3af;padding:24px">살롱이 없습니다</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -367,9 +398,11 @@ async function openAddSalonModal() {
   showModal(`
     <h3 style="font-size:18px;font-weight:800;margin-bottom:20px">살롱 추가</h3>
     <div class="form-group"><label class="form-label">살롱명 *</label><input class="form-input" id="m-salon-name" placeholder="살롱 이름"></div>
+    <div class="form-group"><label class="form-label">매장 코드</label><input class="form-input" id="m-salon-code" placeholder="예: 100001 (6자리 숫자, 비우면 자동)" inputmode="numeric" maxlength="6" style="letter-spacing:0.06em"></div>
     <div class="form-group"><label class="form-label">오너 이름 *</label><input class="form-input" id="m-owner-name" placeholder="대표자명"></div>
     <div class="form-group"><label class="form-label">연락처 *</label><input class="form-input" id="m-owner-phone" type="tel" placeholder="010-0000-0000"></div>
-    <div class="form-group"><label class="form-label">계좌번호</label><input class="form-input" id="m-bank" placeholder="은행명 000-0000-0000"></div>
+    <div class="form-group"><label class="form-label">은행</label><input class="form-input" id="m-bank-name" placeholder="예: 국민은행"></div>
+    <div class="form-group"><label class="form-label">계좌번호</label><input class="form-input" id="m-bank" placeholder="예: 123456-78-901234"></div>
     <div style="display:flex;gap:10px;margin-top:24px">
       <button class="btn btn-outline" style="flex:1" onclick="closeModal()">취소</button>
       <button class="btn btn-accent" style="flex:1" onclick="submitAddSalon()"><i class="fas fa-plus"></i> 추가</button>
@@ -380,14 +413,16 @@ async function openAddSalonModal() {
 async function submitAddSalon() {
   const body = {
     salon_name: document.getElementById('m-salon-name').value,
+    salon_code: document.getElementById('m-salon-code').value,
     owner_name: document.getElementById('m-owner-name').value,
     owner_phone: document.getElementById('m-owner-phone').value,
+    bank_name: document.getElementById('m-bank-name').value,
     bank_account: document.getElementById('m-bank').value
   };
   if (!body.salon_name || !body.owner_name || !body.owner_phone) { showToast('필수 항목을 입력하세요', 'error'); return; }
   const res = await api('/api/salons', 'POST', body);
   if (res.success) {
-    closeModal(); showToast('살롱이 추가되었습니다', 'success');
+    closeModal(); showToast(`살롱이 추가되었습니다 · 코드 ${res.data.salon_code}`, 'success');
     await loadPageData('salons');
   }
 }
@@ -418,13 +453,17 @@ async function viewSalonStats(id) {
 
 async function openQRModal(salonId) {
   const salon = adminState.salons.find(s => s.id === salonId);
+  const code = salon?.salon_code || '';
   showModal(`
     <div class="qr-display">
       <i class="fas fa-qrcode" style="font-size:100px;margin-bottom:16px;display:block;opacity:0.9"></i>
       <h3 style="font-size:18px;font-weight:800;margin-bottom:4px">${salon?.salon_name}</h3>
-      <p style="font-size:13px;opacity:0.7;margin-bottom:16px">이 QR 코드를 고객에게 제공하세요</p>
-      <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 16px;font-size:14px;font-family:monospace">
-        /scan?salon=${salonId}
+      <p style="font-size:13px;opacity:0.7;margin-bottom:12px">매장 코드를 고객에게 안내하세요</p>
+      <div style="background:rgba(255,255,255,0.15);border-radius:12px;padding:14px 18px;font-size:22px;font-weight:800;letter-spacing:0.14em;margin-bottom:12px">
+        ${code || '-'}
+      </div>
+      <div style="background:rgba(255,255,255,0.1);border-radius:10px;padding:10px 16px;font-size:13px;font-family:monospace">
+        /scan?code=${encodeURIComponent(code)}
       </div>
     </div>
     <button class="btn btn-outline" style="width:100%;margin-top:16px" onclick="closeModal()">닫기</button>
@@ -437,9 +476,11 @@ async function openEditSalonModal(id) {
   showModal(`
     <h3 style="font-size:18px;font-weight:800;margin-bottom:20px">살롱 편집</h3>
     <div class="form-group"><label class="form-label">살롱명</label><input class="form-input" id="m-salon-name" value="${salon.salon_name}"></div>
+    <div class="form-group"><label class="form-label">매장 코드</label><input class="form-input" id="m-salon-code" value="${salon.salon_code || ''}" inputmode="numeric" maxlength="6" style="letter-spacing:0.06em"></div>
     <div class="form-group"><label class="form-label">오너 이름</label><input class="form-input" id="m-owner-name" value="${salon.owner_name}"></div>
     <div class="form-group"><label class="form-label">연락처</label><input class="form-input" id="m-owner-phone" value="${salon.owner_phone}"></div>
-    <div class="form-group"><label class="form-label">계좌번호</label><input class="form-input" id="m-bank" value="${salon.bank_account || ''}"></div>
+    <div class="form-group"><label class="form-label">은행</label><input class="form-input" id="m-bank-name" value="${salon.bank_name || ''}" placeholder="예: 국민은행"></div>
+    <div class="form-group"><label class="form-label">계좌번호</label><input class="form-input" id="m-bank" value="${salon.bank_account || ''}" placeholder="예: 123456-78-901234"></div>
     <div style="display:flex;gap:10px;margin-top:24px">
       <button class="btn btn-outline" style="flex:1" onclick="closeModal()">취소</button>
       <button class="btn btn-primary" style="flex:1" onclick="submitEditSalon(${id})"><i class="fas fa-save"></i> 저장</button>
@@ -450,8 +491,10 @@ async function openEditSalonModal(id) {
 async function submitEditSalon(id) {
   const body = {
     salon_name: document.getElementById('m-salon-name').value,
+    salon_code: document.getElementById('m-salon-code').value,
     owner_name: document.getElementById('m-owner-name').value,
     owner_phone: document.getElementById('m-owner-phone').value,
+    bank_name: document.getElementById('m-bank-name').value,
     bank_account: document.getElementById('m-bank').value
   };
   await api(`/api/salons/${id}`, 'PUT', body);
@@ -460,13 +503,28 @@ async function submitEditSalon(id) {
 }
 
 // ============================================================
-// DESIGNERS PAGE
+// DESIGNERS PAGE (본사 조회용 — 퇴사/복직은 원장 화면)
 // ============================================================
+function designerDisplayName(name) {
+  return String(name || '').replace(/\s*디자이너\s*$/u, '').trim() || '-';
+}
+
+function designerJoinDate(d) {
+  const raw = String((d && (d.joined_at || d.created_at)) || '');
+  return raw.slice(0, 10) || '-';
+}
+
+function designerStatusLabel(status) {
+  if (status === 'ACTIVE') return { text: '활동중', cls: 'status-active' };
+  if (status === 'INVITED') return { text: '초대중', cls: 'status-invited' };
+  return { text: '퇴사', cls: 'status-resigned' };
+}
+
 function renderDesigners() {
   return `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-        <h2 style="font-size:18px;font-weight:700">디자이너 (${adminState.designers.length})</h2>
+        <h2 style="font-size:18px;font-weight:700">디자이너 목록 (${adminState.designers.length})</h2>
         <select class="form-select" style="width:160px;padding:8px 12px" onchange="filterDesigners(this.value)">
           <option value="">전체 살롱</option>
           ${adminState.salons.map(s => `<option value="${s.id}">${s.salon_name}</option>`).join('')}
@@ -480,10 +538,12 @@ function renderDesigners() {
       <table class="data-table">
         <thead>
           <tr>
-            <th>디자이너</th>
+            <th>이름</th>
             <th>소속 살롱</th>
+            <th>휴대폰번호</th>
+            <th>가입일</th>
             <th>상태</th>
-            <th>관리</th>
+            <th>담당 고객</th>
           </tr>
         </thead>
         <tbody id="designer-table-body">
@@ -491,52 +551,33 @@ function renderDesigners() {
         </tbody>
       </table>
     </div>
-
-    <!-- Resignation Rule Notice -->
-    <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:14px;padding:16px;margin-top:20px">
-      <div style="display:flex;align-items:flex-start;gap:12px">
-        <i class="fas fa-info-circle" style="color:#d97706;font-size:18px;margin-top:2px"></i>
-        <div>
-          <div style="font-weight:700;color:#92400e;margin-bottom:6px">디자이너 퇴사 처리 규칙</div>
-          <ul style="font-size:13px;color:#92400e;line-height:1.8;padding-left:16px">
-            <li>퇴사 즉시 해당 디자이너에게 매핑된 모든 고객의 담당이 해제됩니다</li>
-            <li>퇴사 전 주문에는 그 디자이너 이름이 남습니다</li>
-          </ul>
-        </div>
-      </div>
-    </div>
   `;
 }
 
 function renderDesignerRows(designers) {
-  return designers.map(d => `
+  return designers.map((d) => {
+    const status = designerStatusLabel(d.status);
+    return `
     <tr>
       <td>
-        <div style="display:flex;align-items:center;gap:10px">
-          <img src="${d.profile_img || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + d.id}" 
-               style="width:36px;height:36px;border-radius:50%;object-fit:cover;background:#f3f4f6" 
-               onerror="this.src='https://api.dicebear.com/7.x/avataaars/svg?seed=default'">
-          <div>
-            <div style="font-weight:600">${d.designer_name}</div>
-            <div style="font-size:11px;color:#9ca3af">ID: ${d.id}</div>
-          </div>
-        </div>
+        <div style="font-weight:600">${escHtml(designerDisplayName(d.designer_name))}</div>
+        <div style="font-size:11px;color:#9ca3af">ID ${d.id}</div>
       </td>
-      <td>${d.salon_name}</td>
-      <td><span class="badge badge-${d.status === 'ACTIVE' ? 'active' : 'resigned'}">${d.status === 'ACTIVE' ? '활동중' : '퇴사'}</span></td>
-      <td>
-        <div style="display:flex;gap:6px">
-          ${d.status === 'ACTIVE' ?
-            `<button class="btn btn-sm btn-danger" onclick="resignDesigner(${d.id}, '${d.designer_name.replace(/'/g, "\\'")}')">
-              <i class="fas fa-user-times"></i> 퇴사처리
-            </button>` :
-            `<button class="btn btn-sm btn-success" onclick="reinstateDesigner(${d.id})">
-              <i class="fas fa-user-check"></i> 복직
-            </button>`
-          }
-        </div>
-      </td>
-    </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:#9ca3af;padding:24px">디자이너 없음</td></tr>';
+      <td>${escHtml(d.salon_name || '-')}</td>
+      <td>${escHtml(d.phone || '-')}</td>
+      <td>${escHtml(designerJoinDate(d))}</td>
+      <td><span class="status-chip ${status.cls}">${status.text}</span></td>
+      <td>${Number(d.mapped_user_count || 0)}명</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:24px">디자이너가 없습니다</td></tr>';
+}
+
+function escHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 async function filterDesigners(salonId) {
@@ -544,46 +585,6 @@ async function filterDesigners(salonId) {
   if (res.success) {
     const tbody = document.getElementById('designer-table-body');
     if (tbody) tbody.innerHTML = renderDesignerRows(res.data);
-  }
-}
-
-async function resignDesigner(id, name) {
-  showModal(`
-    <div style="text-align:center;padding:12px 0">
-      <div style="width:64px;height:64px;background:#fee2e2;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 16px">
-        <i class="fas fa-user-times" style="font-size:28px;color:#dc2626"></i>
-      </div>
-      <h3 style="font-size:18px;font-weight:800;color:#1a1a2e;margin-bottom:8px">퇴사 처리 확인</h3>
-      <p style="font-size:14px;color:#6b7280;margin-bottom:16px"><strong>${name}</strong> 디자이너를 퇴사 처리하시겠습니까?</p>
-      <div style="background:#fef3c7;border-radius:10px;padding:12px;text-align:left;margin-bottom:20px">
-        <p style="font-size:12px;color:#92400e;line-height:1.6">
-          ⚠️ 퇴사 처리 시 매핑된 고객의 담당이 해제됩니다.
-        </p>
-      </div>
-      <div style="display:flex;gap:10px">
-        <button class="btn btn-outline" style="flex:1" onclick="closeModal()">취소</button>
-        <button class="btn btn-danger" style="flex:1" onclick="confirmResign(${id})">
-          <i class="fas fa-user-times"></i> 퇴사 처리
-        </button>
-      </div>
-    </div>
-  `);
-}
-
-async function confirmResign(id) {
-  const res = await api(`/api/designers/${id}/resign`, 'POST');
-  if (res.success) {
-    closeModal();
-    showToast('퇴사 처리했습니다', 'success');
-    await loadPageData('designers');
-  }
-}
-
-async function reinstateDesigner(id) {
-  const res = await api(`/api/designers/${id}/reinstate`, 'POST');
-  if (res.success) {
-    showToast('복직 처리되었습니다', 'success');
-    await loadPageData('designers');
   }
 }
 
@@ -596,7 +597,8 @@ async function openAddDesignerModal() {
         ${adminState.salons.map(s => `<option value="${s.id}">${s.salon_name}</option>`).join('')}
       </select>
     </div>
-    <div class="form-group"><label class="form-label">이름 *</label><input class="form-input" id="m-d-name" placeholder="홍길동 디자이너"></div>
+    <div class="form-group"><label class="form-label">이름 *</label><input class="form-input" id="m-d-name" placeholder="홍길동"></div>
+    <div class="form-group"><label class="form-label">휴대폰번호 *</label><input class="form-input" id="m-d-phone" type="tel" placeholder="010-0000-0000"></div>
     <div style="display:flex;gap:10px;margin-top:24px">
       <button class="btn btn-outline" style="flex:1" onclick="closeModal()">취소</button>
       <button class="btn btn-accent" style="flex:1" onclick="submitAddDesigner()"><i class="fas fa-plus"></i> 추가</button>
@@ -608,13 +610,21 @@ async function submitAddDesigner() {
   const body = {
     salon_id: document.getElementById('m-d-salon').value,
     designer_name: document.getElementById('m-d-name').value,
+    phone: document.getElementById('m-d-phone').value,
+    invite: false,
     commission_rate: 0
   };
   if (!body.designer_name) { showToast('이름을 입력하세요', 'error'); return; }
+  if (!String(body.phone || '').replace(/\D/g, '') || String(body.phone || '').replace(/\D/g, '').length < 10) {
+    showToast('휴대폰번호를 입력하세요', 'error');
+    return;
+  }
   const res = await api('/api/designers', 'POST', body);
   if (res.success) {
     closeModal(); showToast('디자이너가 추가되었습니다', 'success');
     await loadPageData('designers');
+  } else {
+    showToast(res.error || '추가에 실패했습니다', 'error');
   }
 }
 

@@ -14,7 +14,8 @@
       "rating": 4.89,
       "review_count": 2636,
       "created_at": "2026-08-10 06:09:35",
-      "brand_id": 1
+      "brand_id": 1,
+      "earn_points_rate": 3
     },
     {
       "id": 10,
@@ -46,7 +47,8 @@
       "rating": 4.87,
       "review_count": 1534,
       "created_at": "2026-08-10 06:09:35",
-      "brand_id": 1
+      "brand_id": 1,
+      "earn_points_rate": 3
     },
     {
       "id": 3,
@@ -62,7 +64,8 @@
       "rating": 4.88,
       "review_count": 1263,
       "created_at": "2026-08-10 06:09:35",
-      "brand_id": 1
+      "brand_id": 1,
+      "earn_points_rate": 3
     },
     {
       "id": 11,
@@ -297,6 +300,7 @@
       "owner_name": "이민준",
       "owner_phone": "010-9876-5432",
       "bank_account": "신한은행 987-654-321",
+      "salon_code": "100002",
       "created_at": "2026-08-10 06:09:35"
     },
     {
@@ -306,6 +310,7 @@
       "owner_name": "박수연",
       "owner_phone": "010-5555-7777",
       "bank_account": "우리은행 555-777-999",
+      "salon_code": "100003",
       "created_at": "2026-08-10 06:09:35"
     },
     {
@@ -315,6 +320,7 @@
       "owner_name": "김지수",
       "owner_phone": "010-1234-5678",
       "bank_account": "국민은행 123-456-789",
+      "salon_code": "100001",
       "created_at": "2026-08-10 06:09:34"
     }
   ],
@@ -326,7 +332,8 @@
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=tykim",
       "status": "ACTIVE",
       "commission_rate": 0.15,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "phone": "010-3333-1111"
     },
     {
       "id": 4,
@@ -335,7 +342,8 @@
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=mjpark",
       "status": "ACTIVE",
       "commission_rate": 0.15,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "phone": "010-3333-2222"
     },
     {
       "id": 6,
@@ -344,7 +352,8 @@
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=hnjeong",
       "status": "ACTIVE",
       "commission_rate": 0.15,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "phone": "010-3333-3333"
     },
     {
       "id": 2,
@@ -353,7 +362,8 @@
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=jhchoi",
       "status": "ACTIVE",
       "commission_rate": 0.15,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "phone": "010-3333-4444"
     },
     {
       "id": 1,
@@ -362,16 +372,18 @@
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=ysl",
       "status": "ACTIVE",
       "commission_rate": 0.15,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "phone": "010-2222-3333"
     },
     {
       "id": 3,
       "salon_id": 1,
       "designer_name": "이수진 디자이너",
       "profile_img": "https://api.dicebear.com/7.x/avataaars/svg?seed=sjlee",
-      "status": "RESIGNED",
+      "status": "ACTIVE",
       "commission_rate": 0.15,
-      "created_at": "2026-08-10 06:09:35"
+      "created_at": "2026-08-10 06:09:35",
+      "phone": "010-3333-5555"
     }
   ],
   "users": [
@@ -447,13 +459,19 @@
     },
     {
       "id": 1,
-      "kakao_id": "kakao_001",
-      "name": "홍길동",
+      "kakao_id": "kakao_demo_minsu",
+      "name": "김민수",
       "phone": "010-1111-2222",
       "current_salon_id": 1,
       "mapped_designer_id": 1,
       "created_at": "2026-08-10 06:09:35",
-      "points": 0
+      "points": 12000,
+      "coupon_ids": [
+        1
+      ],
+      "auth_provider": "kakao",
+      "shipping_address": "(06236) 서울 강남구 테헤란로 152 301호",
+      "phone_verified": true
     },
     {
       "id": 2,
@@ -463,7 +481,10 @@
       "current_salon_id": 1,
       "mapped_designer_id": 2,
       "created_at": "2026-08-10 06:09:35",
-      "points": 0
+      "points": 5000,
+      "coupon_ids": [
+        1
+      ]
     },
     {
       "id": 3,
@@ -473,7 +494,10 @@
       "current_salon_id": 2,
       "mapped_designer_id": 4,
       "created_at": "2026-08-10 06:09:35",
-      "points": 0
+      "points": 3000,
+      "coupon_ids": [
+        1
+      ]
     },
     {
       "id": 4,
@@ -483,7 +507,10 @@
       "current_salon_id": 1,
       "mapped_designer_id": 3,
       "created_at": "2026-08-10 06:09:35",
-      "points": 0
+      "points": 8000,
+      "coupon_ids": [
+        1
+      ]
     },
     {
       "id": 5,
@@ -493,7 +520,10 @@
       "current_salon_id": 3,
       "mapped_designer_id": 6,
       "created_at": "2026-08-10 06:09:35",
-      "points": 0
+      "points": 4000,
+      "coupon_ids": [
+        1
+      ]
     }
   ],
   "orders": [
@@ -529,15 +559,22 @@
       "id": 3,
       "user_id": 4,
       "salon_id": 1,
-      "designer_id": null,
-      "total_amount": 64800,
-      "platform_amount": 25920,
+      "designer_id": 3,
+      "total_amount": 56800,
+      "platform_amount": 22720,
       "salon_commission_amount": 19440,
       "designer_commission_amount": 0,
       "payment_status": "PAID",
       "order_items": "[{\"product_id\":10,\"name\":\"SUBLIMIC 아쿠아 인텐시브 트리트먼트 200ml\",\"qty\":1,\"price\":64800}]",
       "created_at": "2026-08-10 06:09:35",
-      "shipping_status": "DELIVERED"
+      "shipping_status": "READY",
+      "points_earned": 1795,
+      "points_used": 3000,
+      "coupon_id": 1,
+      "coupon_discount": 5000,
+      "shipping_name": "이서연",
+      "shipping_phone": "010-7777-8888",
+      "shipping_address": "(06236) 서울 강남구 테헤란로 152 502호"
     },
     {
       "id": 4,
