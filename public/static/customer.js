@@ -1454,11 +1454,10 @@ function renderAdminSetup() {
           placeholder="예: 123456-78-901234"
           oninput="updateSetupField('bank_account', this.value)">
         <p style="font-size:12px;color:var(--muted);margin:6px 0 0">매출 정산을 받을 은행과 계좌번호를 입력하세요.</p>
-        <label class="form-label">매장코드 6자리</label>
+        <label class="form-label">매장코드 6자리 <span class="setup-code-sub">(고객이 우리매장 가입시 입력할 코드번호입니다)</span></label>
         <input class="form-input code-input" type="tel" inputmode="numeric" maxlength="6"
           value="${escText(d.salon_code)}" placeholder="예: 100001"
           oninput="updateSetupField('salon_code', this.value.replace(/\\D/g,'').slice(0,6)); this.value=state.setupDraft.salon_code">
-        <p class="setup-code-hint">매장코드 6자리를 만들어주세요</p>
         <div class="setup-designer-block">
           <div class="setup-designer-head">
             <label class="form-label" style="margin:0">담당자</label>
