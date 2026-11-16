@@ -343,23 +343,37 @@ function activeDesignersForSalon(salonId) {
 }
 
 function ensureOwnerDesigner(salon) {
-  if (!salon) return [];
-  const active = activeDesignersForSalon(salon.id);
-  if (active.length) return active;
+  if (!salon) return null;
   const ownerName = String(salon.owner_name || '').trim() || '매장 대표';
-  db.designers.push({
+  const ownerPhone = String(salon.owner_phone || '').trim();
+  const ownerKey = phoneDigits(ownerPhone);
+  let designer = db.designers.find((d) =>
+    d.salon_id === salon.id
+    && d.status !== 'RESIGNED'
+    && (d.is_owner_slot || (ownerKey && phoneDigits(d.phone) === ownerKey))
+  );
+  if (designer) {
+    designer.is_owner_slot = true;
+    designer.status = 'ACTIVE';
+    designer.designer_name = ownerName;
+    if (ownerPhone) designer.phone = ownerPhone;
+    save();
+    return designer;
+  }
+  designer = {
     id: nextId(db.designers),
     salon_id: salon.id,
     designer_name: ownerName,
-    phone: String(salon.owner_phone || '').trim(),
+    phone: ownerPhone,
     profile_img: 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + encodeURIComponent(ownerName),
     status: 'ACTIVE',
     is_owner_slot: true,
     commission_rate: 0,
     created_at: nowStamp(),
-  });
+  };
+  db.designers.push(designer);
   save();
-  return activeDesignersForSalon(salon.id);
+  return designer;
 }
 
 function uniqueSalonCode(preferred, excludeId) {
@@ -674,10 +688,11 @@ const routes = [
     }
     const salon = findSalonByCode(code);
     if (!salon) return { status: 404, error: '매장 코드를 찾을 수 없습니다' };
+    ensureOwnerDesigner(salon);
     return {
       data: {
         salon: publicSalon(salon),
-        designers: ensureOwnerDesigner(salon),
+        designers: activeDesignersForSalon(salon.id),
       },
     };
   }],
@@ -686,7 +701,7 @@ const routes = [
     const user = db.users.find((u) => u.id === Number(body.user_id));
     if (!user) return { status: 404, error: '사용자를 찾을 수 없습니다' };
     if (!body.salon_name || !body.owner_name || !body.owner_phone) {
-      return { status: 400, error: '매장명, 대표자, 휴대폰번호를 입력하세요' };
+      return { status: 400, error: '매장명, 이름, 휴대폰번호를 입력하세요' };
     }
     const rawCode = String(body.salon_code || '').trim();
     const code = normalizeSalonCode(rawCode);
@@ -734,11 +749,11 @@ const routes = [
         created_at: nowStamp(),
       });
     });
-    ensureOwnerDesigner(salon);
+    const ownerDesigner = ensureOwnerDesigner(salon);
     user.name = salon.owner_name;
     user.phone = salon.owner_phone;
     user.current_salon_id = salonId;
-    user.mapped_designer_id = null;
+    user.mapped_designer_id = ownerDesigner ? ownerDesigner.id : null;
     save();
     return {
       data: { salon: publicSalon(salon), user: publicUser(user), designers: activeDesignersForSalon(salonId) },
@@ -767,6 +782,7 @@ const routes = [
       created_at: nowStamp(),
     };
     db.salons.push(salon);
+    ensureOwnerDesigner(salon);
     save();
     return { data: publicSalon(salon) };
   }],
@@ -784,6 +800,9 @@ const routes = [
         return { status: 400, error: raw ? '매장 코드는 6자리 숫자입니다' : '매장 코드를 입력해주세요' };
       }
       salon.salon_code = uniqueSalonCode(code, salon.id);
+    }
+    if (body.owner_name !== undefined || body.owner_phone !== undefined) {
+      ensureOwnerDesigner(salon);
     }
     save();
     return { data: publicSalon(findSalon(id) || salon) };

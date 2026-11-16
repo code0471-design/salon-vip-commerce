@@ -250,6 +250,18 @@ body {
 .setup-designer-row {
   display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 8px; margin-bottom: 8px; align-items: center;
 }
+.setup-designer-row.owner-auto {
+  grid-template-columns: 1fr 1fr auto;
+  opacity: 0.95;
+}
+.setup-designer-row.owner-auto .form-input {
+  background: #f3f4f6; color: #374151; cursor: default;
+}
+.setup-owner-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 52px; height: 36px; padding: 0 10px; border-radius: 10px;
+  background: #eef2ff; color: #3730a3; font-size: 12px; font-weight: 800;
+}
 .setup-designer-row.requested .form-input {
   border-color: #86efac;
 }
