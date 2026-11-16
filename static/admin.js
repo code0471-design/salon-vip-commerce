@@ -377,7 +377,7 @@ function renderSalons() {
             <td><code style="font-weight:700;letter-spacing:0.04em">${s.salon_code || '-'}</code></td>
             <td>${s.owner_name || ''}</td>
             <td>${s.owner_phone || ''}</td>
-            <td>${s.bank_account || '-'}</td>
+            <td>${[s.bank_name, s.bank_account].filter(Boolean).join(' ') || '-'}</td>
             <td>활동 ${s.active_designers || 0} · 전체 ${s.designer_count || 0}</td>
             <td style="font-size:12px;color:#6b7280">${blockedBrandLabel(s.id)}</td>
             <td>
@@ -401,7 +401,8 @@ async function openAddSalonModal() {
     <div class="form-group"><label class="form-label">매장 코드</label><input class="form-input" id="m-salon-code" placeholder="예: 100001 (6자리 숫자, 비우면 자동)" inputmode="numeric" maxlength="6" style="letter-spacing:0.06em"></div>
     <div class="form-group"><label class="form-label">오너 이름 *</label><input class="form-input" id="m-owner-name" placeholder="대표자명"></div>
     <div class="form-group"><label class="form-label">연락처 *</label><input class="form-input" id="m-owner-phone" type="tel" placeholder="010-0000-0000"></div>
-    <div class="form-group"><label class="form-label">계좌번호</label><input class="form-input" id="m-bank" placeholder="은행명 000-0000-0000"></div>
+    <div class="form-group"><label class="form-label">은행</label><input class="form-input" id="m-bank-name" placeholder="예: 국민은행"></div>
+    <div class="form-group"><label class="form-label">계좌번호</label><input class="form-input" id="m-bank" placeholder="예: 123456-78-901234"></div>
     <div style="display:flex;gap:10px;margin-top:24px">
       <button class="btn btn-outline" style="flex:1" onclick="closeModal()">취소</button>
       <button class="btn btn-accent" style="flex:1" onclick="submitAddSalon()"><i class="fas fa-plus"></i> 추가</button>
@@ -415,6 +416,7 @@ async function submitAddSalon() {
     salon_code: document.getElementById('m-salon-code').value,
     owner_name: document.getElementById('m-owner-name').value,
     owner_phone: document.getElementById('m-owner-phone').value,
+    bank_name: document.getElementById('m-bank-name').value,
     bank_account: document.getElementById('m-bank').value
   };
   if (!body.salon_name || !body.owner_name || !body.owner_phone) { showToast('필수 항목을 입력하세요', 'error'); return; }
@@ -477,7 +479,8 @@ async function openEditSalonModal(id) {
     <div class="form-group"><label class="form-label">매장 코드</label><input class="form-input" id="m-salon-code" value="${salon.salon_code || ''}" inputmode="numeric" maxlength="6" style="letter-spacing:0.06em"></div>
     <div class="form-group"><label class="form-label">오너 이름</label><input class="form-input" id="m-owner-name" value="${salon.owner_name}"></div>
     <div class="form-group"><label class="form-label">연락처</label><input class="form-input" id="m-owner-phone" value="${salon.owner_phone}"></div>
-    <div class="form-group"><label class="form-label">계좌번호</label><input class="form-input" id="m-bank" value="${salon.bank_account || ''}"></div>
+    <div class="form-group"><label class="form-label">은행</label><input class="form-input" id="m-bank-name" value="${salon.bank_name || ''}" placeholder="예: 국민은행"></div>
+    <div class="form-group"><label class="form-label">계좌번호</label><input class="form-input" id="m-bank" value="${salon.bank_account || ''}" placeholder="예: 123456-78-901234"></div>
     <div style="display:flex;gap:10px;margin-top:24px">
       <button class="btn btn-outline" style="flex:1" onclick="closeModal()">취소</button>
       <button class="btn btn-primary" style="flex:1" onclick="submitEditSalon(${id})"><i class="fas fa-save"></i> 저장</button>
@@ -491,6 +494,7 @@ async function submitEditSalon(id) {
     salon_code: document.getElementById('m-salon-code').value,
     owner_name: document.getElementById('m-owner-name').value,
     owner_phone: document.getElementById('m-owner-phone').value,
+    bank_name: document.getElementById('m-bank-name').value,
     bank_account: document.getElementById('m-bank').value
   };
   await api(`/api/salons/${id}`, 'PUT', body);

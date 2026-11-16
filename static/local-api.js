@@ -580,6 +580,7 @@
           owner_phone: String(body.owner_phone).trim(),
           address: String(body.address || '').trim(),
           address_detail: String(body.address_detail || '').trim(),
+          bank_name: String(body.bank_name || '').trim(),
           bank_account: String(body.bank_account || '').trim(),
           hidden_brand_ids: [],
           brand_discount_rates: {},
@@ -587,6 +588,7 @@
           product_prices: {},
           created_at: nowStamp(),
         };
+        if (!salon.bank_name) return { status: 400, error: '정산 받을 은행을 입력하세요' };
         if (!salon.bank_account) return { status: 400, error: '정산 받을 계좌번호를 입력하세요' };
         db.salons.push(salon);
         const designerNames = Array.isArray(body.designers) ? body.designers : [];
@@ -629,6 +631,7 @@
         logo_url: `https://api.dicebear.com/7.x/shapes/svg?seed=${encodeURIComponent(body.salon_name)}`,
         owner_name: body.owner_name,
         owner_phone: body.owner_phone,
+        bank_name: body.bank_name || '',
         bank_account: body.bank_account || '',
         hidden_brand_ids: [],
         brand_discount_rates: {},
@@ -644,7 +647,7 @@
       const salon = findSalon(id);
       if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
       const body = req.body || {};
-      ['salon_name', 'owner_name', 'owner_phone', 'bank_account', 'address', 'address_detail'].forEach((key) => {
+      ['salon_name', 'owner_name', 'owner_phone', 'bank_name', 'bank_account', 'address', 'address_detail'].forEach((key) => {
         if (body[key] !== undefined) salon[key] = String(body[key] == null ? '' : body[key]).trim();
       });
       if (body.salon_code !== undefined) {
@@ -1439,10 +1442,27 @@
       if (!Array.isArray(salon.hidden_brand_ids)) salon.hidden_brand_ids = [];
       if (salon.address == null) salon.address = '';
       if (salon.address_detail == null) salon.address_detail = '';
+      if (salon.bank_name == null) salon.bank_name = '';
+      if (!salon.bank_name && salon.bank_account) {
+        const matched = String(salon.bank_account).match(/^(.+?(?:은행|뱅크|증권))\s+(.+)$/);
+        if (matched) {
+          salon.bank_name = matched[1].trim();
+          salon.bank_account = matched[2].trim();
+        }
+      }
       const seedSalon = (seed.salons || []).find((item) => item.id === salon.id);
       const fromSelf = normalizeSalonCode(salon.salon_code);
       const fromSeed = normalizeSalonCode(seedSalon && seedSalon.salon_code);
       salon.salon_code = fromSelf || fromSeed || defaultSalonCode(salon);
+      if (seedSalon) {
+        if (!salon.bank_name && seedSalon.bank_name) salon.bank_name = seedSalon.bank_name;
+        if ((!salon.bank_account || /은행|뱅크/.test(String(salon.bank_account))) && seedSalon.bank_account) {
+          if (seedSalon.bank_name) {
+            salon.bank_name = salon.bank_name || seedSalon.bank_name;
+            salon.bank_account = seedSalon.bank_account;
+          }
+        }
+      }
       ProductCatalog.ensureSalonPricing(salon);
     });
     db.coupons = db.coupons || [];
