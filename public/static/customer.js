@@ -1341,13 +1341,17 @@ function renderEntryGate() {
   return `
     <div class="scan-page entry-page">
       ${renderStaffInviteCards()}
-      <div class="onboard-card entry-card">
-        <div class="onboard-icon"><i class="fas fa-door-open"></i></div>
-        <h2>환영합니다 ${guestName} 고객님</h2>
-        <p>아래 입장하기를 눌러 매장코드를 입력해주세요</p>
-        <button class="btn-primary" onclick="navigate('scan')">
-          <i class="fas fa-key"></i> VIP고객 입장하기
-        </button>
+      <div class="entry-main">
+        <div class="onboard-card entry-card">
+          <div class="onboard-icon"><i class="fas fa-door-open"></i></div>
+          <h2>환영합니다 ${guestName} 고객님</h2>
+          <p>아래 입장하기를 눌러 매장코드를 입력해주세요</p>
+          <button class="btn-primary" onclick="navigate('scan')">
+            <i class="fas fa-key"></i> VIP고객 입장하기
+          </button>
+        </div>
+      </div>
+      <div class="entry-footer">
         <button type="button" class="entry-admin-link" onclick="openAdminSetup()">매장만들기(원장)</button>
         <button type="button" class="entry-logout-link" onclick="handleLogout()">로그아웃</button>
       </div>
