@@ -1464,7 +1464,7 @@ function renderAdminSetup() {
             <label class="form-label" style="margin:0">담당자</label>
             <button type="button" class="ghost-text-btn" onclick="addSetupDesignerRow()">+ 추가</button>
           </div>
-          <p class="setup-designer-hint">위 이름은 매장 생성 시 담당자로 자동 등록됩니다.<br>추가 담당자만 아래에서 초대하세요.</p>
+          <p class="setup-designer-hint">위 이름은 매장 생성 시 담당자로 자동 등록됩니다.<br>담당자별 매출 확인이 필요한 경우 추가하세요.</p>
           <div class="setup-designer-row owner-auto">
             <input class="form-input" value="${escText(d.owner_name || '이름')}" disabled>
             <input class="form-input" type="tel" value="${escText(d.owner_phone || '휴대폰번호')}" disabled>
