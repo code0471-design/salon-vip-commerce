@@ -1428,8 +1428,8 @@ function renderAdminSetup() {
         <label class="form-label">매장명</label>
         <input class="form-input" value="${escText(d.salon_name)}" placeholder="예: 프로헤어 강남점"
           oninput="updateSetupField('salon_name', this.value)">
-        <label class="form-label">대표자</label>
-        <input class="form-input" value="${escText(d.owner_name)}" placeholder="대표자 이름"
+        <label class="form-label">이름</label>
+        <input class="form-input" value="${escText(d.owner_name)}" placeholder="이름"
           oninput="updateSetupField('owner_name', this.value)">
         <label class="form-label">휴대폰번호</label>
         <input class="form-input" type="tel" value="${escText(d.owner_phone)}" placeholder="010-0000-0000"
@@ -1461,11 +1461,16 @@ function renderAdminSetup() {
         <p class="setup-code-hint">매장코드 6자리를 만들어주세요</p>
         <div class="setup-designer-block">
           <div class="setup-designer-head">
-            <label class="form-label" style="margin:0">담당자 추가</label>
+            <label class="form-label" style="margin:0">담당자</label>
             <button type="button" class="ghost-text-btn" onclick="addSetupDesignerRow()">+ 추가</button>
           </div>
-          <p class="setup-designer-hint">각 담당자 매출 확인이 필요한 경우 추가하세요.<br>1인샵은 추가할 필요 없습니다.</p>
-          <p style="font-size:12px;color:var(--muted);margin:0 0 10px">이름·휴대폰 입력 후 <strong>가입 요청</strong>을 누르세요. 매장 생성 시 초대 문자가 갑니다.</p>
+          <p class="setup-designer-hint">위 이름은 매장 생성 시 담당자로 자동 등록됩니다.<br>추가 담당자만 아래에서 초대하세요.</p>
+          <div class="setup-designer-row owner-auto">
+            <input class="form-input" value="${escText(d.owner_name || '이름')}" disabled>
+            <input class="form-input" type="tel" value="${escText(d.owner_phone || '휴대폰번호')}" disabled>
+            <span class="setup-owner-badge">자동</span>
+          </div>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 10px">추가 담당자는 이름·휴대폰 입력 후 <strong>가입 요청</strong>을 누르세요. 매장 생성 시 초대 문자가 갑니다.</p>
           ${d.designers.map((row, i) => `
             <div class="setup-designer-row ${row.requested ? 'requested' : ''}">
               <input class="form-input" placeholder="담당자 이름" value="${escText(row.designer_name)}"
@@ -1490,7 +1495,7 @@ async function submitSalonSetup() {
   if (!state.user) return;
   const d = state.setupDraft;
   if (!d.salon_name || !d.owner_name || !d.owner_phone) {
-    showToast('매장명, 대표자, 휴대폰번호를 입력하세요', 'error');
+    showToast('매장명, 이름, 휴대폰번호를 입력하세요', 'error');
     return;
   }
   const setupBase = (document.getElementById('setup-address') || {}).value.trim() || String(d.address || '').trim();
@@ -1672,7 +1677,7 @@ function renderScan() {
             </p>
             <div class="solo-designer-card">
               <strong>${escText(((activeDesigners[0] && activeDesigners[0].designer_name) || salon.owner_name || '매장 대표').replace(' 디자이너', ''))}</strong>
-              <span>1인샵·개인 판매 매장은 담당자 선택 없이 입장합니다</span>
+              <span>담당자 1명 · 선택 없이 입장합니다</span>
             </div>
           ` : `
             <p class="designer-section-label">
@@ -3976,7 +3981,7 @@ function renderStoreManage(salon) {
         <label class="form-label">매장명</label>
         <input id="manage-salon-name" class="form-input" value="${escText(draft.salon_name || '')}"
           oninput="updateManageField('salon_name', this.value)">
-        <label class="form-label">대표자</label>
+        <label class="form-label">이름</label>
         <input id="manage-owner-name" class="form-input" value="${escText(draft.owner_name || '')}"
           oninput="updateManageField('owner_name', this.value)">
         <label class="form-label">휴대폰번호</label>
