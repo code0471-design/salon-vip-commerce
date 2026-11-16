@@ -1337,21 +1337,18 @@ function renderEntryGate() {
         </div>
       </div>`;
   }
-  const unaffiliated = !state.user.is_owner && !state.user.is_staff && needsSalonBinding();
+  const guestName = escText((state.user.name || '').trim() || '고객');
   return `
     <div class="scan-page entry-page">
       ${renderStaffInviteCards()}
       <div class="onboard-card entry-card">
         <div class="onboard-icon"><i class="fas fa-door-open"></i></div>
-        <h2>살롱 VIP 입장하기</h2>
-        <p>${unaffiliated
-          ? '가입은 완료됐어요. 매장을 연결하면 VIP 쇼핑·판매를 시작할 수 있습니다.'
-          : '고객은 매장 코드로 입장하고, 원장·디자이너는 매장을 생성할 수 있어요.'}</p>
+        <h2>환영합니다 ${guestName} 고객님</h2>
+        <p>아래 입장하기를 눌러 매장코드를 입력해주세요</p>
         <button class="btn-primary" onclick="navigate('scan')">
-          <i class="fas fa-key"></i> 매장코드로 고객 입장
+          <i class="fas fa-key"></i> VIP고객 입장하기
         </button>
-        <p class="entry-code-hint">매장 코드가 없으면 고객 입장이 되지 않습니다.</p>
-        <button type="button" class="entry-admin-link" onclick="openAdminSetup()">매장 생성하기</button>
+        <button type="button" class="entry-admin-link" onclick="openAdminSetup()">매장만들기(원장)</button>
         <button type="button" class="entry-logout-link" onclick="handleLogout()">로그아웃</button>
       </div>
     </div>
