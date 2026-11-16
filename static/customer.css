@@ -237,6 +237,18 @@ body {
 .setup-designer-head {
   display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
 }
+.setup-designer-solo-note {
+  margin: 0 0 14px; padding: 12px 14px;
+  border-radius: 12px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  font-size: 13px; font-weight: 700; color: #c2410c;
+  line-height: 1.5;
+}
+.setup-code-hint {
+  margin: 6px 0 0;
+  font-size: 12px; font-weight: 700; color: #4b5563;
+}
 .setup-designer-hint {
   font-size: 12px; color: #4b5563; line-height: 1.55;
   margin: 0 0 8px; padding: 10px 12px;
@@ -249,7 +261,7 @@ body {
   border-color: #86efac;
 }
 .setup-request-btn {
-  height: 42px; padding: 0 12px; border-radius: 10px; border: 1.5px solid var(--primary);
+  height: 42px; min-width: 78px; padding: 0 10px; border-radius: 10px; border: 1.5px solid var(--primary);
   background: #fff; color: var(--primary); font-size: 12px; font-weight: 800;
   cursor: pointer; font-family: var(--font); white-space: nowrap;
 }
