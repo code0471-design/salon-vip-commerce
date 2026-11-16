@@ -1468,7 +1468,6 @@ function renderAdminSetup() {
           <div class="setup-designer-row owner-auto">
             <input class="form-input" value="${escText(d.owner_name || '이름')}" disabled>
             <input class="form-input" type="tel" value="${escText(d.owner_phone || '휴대폰번호')}" disabled>
-            <span class="setup-owner-badge">자동</span>
           </div>
           <p style="font-size:12px;color:var(--muted);margin:0 0 10px">추가 담당자는 이름·휴대폰 입력 후 <strong>가입 요청</strong>을 누르세요. 매장 생성 시 초대 문자가 갑니다.</p>
           ${d.designers.map((row, i) => `
