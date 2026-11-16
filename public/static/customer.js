@@ -1338,7 +1338,6 @@ function renderEntryGate() {
       </div>`;
   }
   const unaffiliated = !state.user.is_owner && !state.user.is_staff && needsSalonBinding();
-  const hasInvites = visibleStaffInvites().length > 0;
   return `
     <div class="scan-page entry-page">
       ${renderStaffInviteCards()}
@@ -1348,14 +1347,6 @@ function renderEntryGate() {
         <p>${unaffiliated
           ? '가입은 완료됐어요. 매장을 연결하면 VIP 쇼핑·판매를 시작할 수 있습니다.'
           : '고객은 매장 코드로 입장하고, 원장·디자이너는 매장을 생성할 수 있어요.'}</p>
-        ${unaffiliated ? `
-        <ul class="entry-path-list">
-          <li><strong>1. 담당자 초대 승인</strong> — 초대를 받으면 위에서 승인하고 그 매장 담당자로 등록${hasInvites ? '' : ' (대기 중 초대가 있으면 표시됩니다)'}</li>
-          <li><strong>2. 매장 생성</strong> — 원장·디자이너 개인 판매도 매장을 만들면 가능합니다</li>
-          <li><strong>3. 일반 고객 입장</strong> — 방문·QR로 받은 6자리 매장코드가 있을 때</li>
-        </ul>
-        <p class="entry-solo-note">디자이너 개인이 판매를 원할 경우 매장을 생성하여 판매가 가능합니다</p>
-        ` : ''}
         <button class="btn-primary" onclick="navigate('scan')">
           <i class="fas fa-key"></i> 매장코드로 고객 입장
         </button>
@@ -1626,7 +1617,8 @@ function renderScan() {
 
   const salon = state.selectedSalon;
   const designers = (salon && salon.designers) || [];
-  const activeDesigners = designers.filter((d) => d.status !== 'RESIGNED');
+  const activeDesigners = designers.filter((d) => d.status !== 'RESIGNED' && d.status !== 'INVITED');
+  const soloShop = !!salon && activeDesigners.length <= 1;
   const step = salon ? 'designer' : 'code';
 
   return `
@@ -1635,7 +1627,7 @@ function renderScan() {
         매장 · 담당자 등록
       </h2>
       <p style="font-size:13px;color:var(--muted);margin-bottom:18px">
-        매장 방문·QR로 받은 6자리 코드가 있어야 입장됩니다. 코드 입력 후 담당자를 선택하세요.
+        매장 방문·QR로 받은 6자리 코드가 있어야 입장됩니다.${soloShop ? '' : ' 코드 입력 후 담당자를 선택하세요.'}
       </p>
 
       <div class="onboard-steps">
@@ -1674,26 +1666,34 @@ function renderScan() {
         </div>
 
         <div class="designer-section">
-          <p class="designer-section-label">
-            <i class="fas fa-user-check" style="color:var(--rose);margin-right:6px"></i>담당자 선택
-            <span>필수</span>
-          </p>
-          ${activeDesigners.length === 0
-            ? `<p style="font-size:13px;color:var(--muted);padding:12px 0">등록된 담당자가 없습니다. 매장에 문의해 주세요.</p>`
-            : `<div class="designer-row" style="flex-wrap:wrap">
-                ${activeDesigners.map((d) => `
-                  <div class="designer-chip ${state.selectedDesigner === d.id ? 'selected' : ''}" onclick="selectDesigner(${d.id})">
-                    <div class="d-avatar">
-                      <img src="${d.profile_img || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + d.id}" alt="${d.designer_name}">
-                    </div>
-                    <span class="d-name">${d.designer_name.replace(' 디자이너', '')}</span>
-                    ${state.selectedDesigner === d.id ? '<span class="d-selected">선택됨</span>' : ''}
-                  </div>`).join('')}
-              </div>`}
+          ${soloShop ? `
+            <p class="designer-section-label">
+              <i class="fas fa-user-check" style="color:var(--rose);margin-right:6px"></i>담당자
+            </p>
+            <div class="solo-designer-card">
+              <strong>${escText(((activeDesigners[0] && activeDesigners[0].designer_name) || salon.owner_name || '매장 대표').replace(' 디자이너', ''))}</strong>
+              <span>1인샵·개인 판매 매장은 담당자 선택 없이 입장합니다</span>
+            </div>
+          ` : `
+            <p class="designer-section-label">
+              <i class="fas fa-user-check" style="color:var(--rose);margin-right:6px"></i>담당자 선택
+              <span>필수</span>
+            </p>
+            <div class="designer-row" style="flex-wrap:wrap">
+              ${activeDesigners.map((d) => `
+                <div class="designer-chip ${state.selectedDesigner === d.id ? 'selected' : ''}" onclick="selectDesigner(${d.id})">
+                  <div class="d-avatar">
+                    <img src="${d.profile_img || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + d.id}" alt="${d.designer_name}">
+                  </div>
+                  <span class="d-name">${d.designer_name.replace(' 디자이너', '')}</span>
+                  ${state.selectedDesigner === d.id ? '<span class="d-selected">선택됨</span>' : ''}
+                </div>`).join('')}
+            </div>
+          `}
         </div>
 
         <button class="btn-primary" style="margin-top:8px" onclick="confirmScan()" ${!state.selectedDesigner ? 'disabled' : ''}>
-          <i class="fas fa-check"></i> 담당자 등록 완료
+          <i class="fas fa-check"></i> ${soloShop ? '입장 완료' : '담당자 등록 완료'}
         </button>
       `}
     </div>
@@ -1729,11 +1729,14 @@ async function startDesignerChange() {
     showToast(res.error || '매장 정보를 불러오지 못했습니다', 'error');
     return;
   }
+  const designers = res.data.designers || [];
+  const active = designers.filter((d) => d.status !== 'RESIGNED' && d.status !== 'INVITED');
   state.selectedSalon = {
     ...res.data.salon,
-    designers: res.data.designers || [],
+    designers,
   };
-  state.selectedDesigner = state.user.mapped_designer_id || null;
+  state.selectedDesigner = state.user.mapped_designer_id
+    || (active.length === 1 ? active[0].id : null);
   render();
 }
 
@@ -1757,11 +1760,13 @@ async function lookupSalonCode() {
     showToast(res.error || '매장 코드를 찾을 수 없습니다', 'error');
     return;
   }
+  const designers = (res.data.designers || []).filter((d) => d.status !== 'RESIGNED' && d.status !== 'INVITED');
   state.selectedSalon = {
     ...res.data.salon,
-    designers: res.data.designers || [],
+    designers,
   };
-  state.selectedDesigner = null;
+  // 1인샵·담당자 미등록 매장: 대표 담당을 자동 선택
+  state.selectedDesigner = designers.length === 1 ? designers[0].id : null;
   state.onboardingStep = 'designer';
   render();
   showToast(res.data.salon.salon_name + '에 입장했습니다', 'success');

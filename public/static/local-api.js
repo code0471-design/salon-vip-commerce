@@ -177,6 +177,28 @@
       }));
   }
 
+  // 1인샵·담당자 미등록 매장: 대표(원장)를 ACTIVE 담당으로 보장
+  function ensureOwnerDesigner(salon) {
+    if (!salon) return [];
+    const active = activeDesignersForSalon(salon.id);
+    if (active.length) return active;
+    const ownerName = String(salon.owner_name || '').trim() || '매장 대표';
+    const designer = {
+      id: nextId(db.designers),
+      salon_id: salon.id,
+      designer_name: ownerName,
+      phone: String(salon.owner_phone || '').trim(),
+      profile_img: 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + encodeURIComponent(ownerName),
+      status: 'ACTIVE',
+      is_owner_slot: true,
+      commission_rate: 0,
+      created_at: nowStamp(),
+    };
+    db.designers.push(designer);
+    save();
+    return activeDesignersForSalon(salon.id);
+  }
+
   function uniqueSalonCode(preferred, excludeId) {
     let candidate = normalizeSalonCode(preferred) || defaultSalonCode({ id: excludeId || 0 });
     let n = Number(candidate);
@@ -553,7 +575,7 @@
       return {
         data: {
           salon: publicSalon(salon),
-          designers: activeDesignersForSalon(salon.id),
+          designers: ensureOwnerDesigner(salon),
         },
       };
     }],
@@ -610,6 +632,8 @@
             created_at: nowStamp(),
           });
         });
+        // 1인샵이어도 고객 입장용 대표 담당은 항상 ACTIVE로 둠
+        ensureOwnerDesigner(salon);
         user.name = salon.owner_name;
         user.phone = salon.owner_phone;
         user.current_salon_id = salonId;
@@ -724,6 +748,7 @@
     ['GET', /^\/api\/salons\/(\d+)\/qr$/, (req, id) => {
       const salon = findSalon(id);
       if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
+      ensureOwnerDesigner(salon);
       const designers = db.designers
         .filter((d) => d.salon_id === salon.id)
         .map((d) => ({ id: d.id, designer_name: d.designer_name, profile_img: d.profile_img, status: d.status }));
@@ -734,6 +759,7 @@
             salon_name: salon.salon_name,
             salon_code: salon.salon_code,
             logo_url: salon.logo_url,
+            owner_name: salon.owner_name,
           },
           designers,
           qr_url: `/scan?code=${encodeURIComponent(salon.salon_code || '')}`,

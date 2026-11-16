@@ -342,6 +342,26 @@ function activeDesignersForSalon(salonId) {
     }));
 }
 
+function ensureOwnerDesigner(salon) {
+  if (!salon) return [];
+  const active = activeDesignersForSalon(salon.id);
+  if (active.length) return active;
+  const ownerName = String(salon.owner_name || '').trim() || '매장 대표';
+  db.designers.push({
+    id: nextId(db.designers),
+    salon_id: salon.id,
+    designer_name: ownerName,
+    phone: String(salon.owner_phone || '').trim(),
+    profile_img: 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + encodeURIComponent(ownerName),
+    status: 'ACTIVE',
+    is_owner_slot: true,
+    commission_rate: 0,
+    created_at: nowStamp(),
+  });
+  save();
+  return activeDesignersForSalon(salon.id);
+}
+
 function uniqueSalonCode(preferred, excludeId) {
   let candidate = normalizeSalonCode(preferred) || defaultSalonCode({ id: excludeId || 0 });
   let n = Number(candidate);
@@ -657,7 +677,7 @@ const routes = [
     return {
       data: {
         salon: publicSalon(salon),
-        designers: activeDesignersForSalon(salon.id),
+        designers: ensureOwnerDesigner(salon),
       },
     };
   }],
@@ -714,6 +734,7 @@ const routes = [
         created_at: nowStamp(),
       });
     });
+    ensureOwnerDesigner(salon);
     user.name = salon.owner_name;
     user.phone = salon.owner_phone;
     user.current_salon_id = salonId;
@@ -829,6 +850,7 @@ const routes = [
   ['GET', /^\/api\/salons\/(\d+)\/qr$/, (req, id) => {
     const salon = findSalon(id);
     if (!salon) return { status: 404, error: '살롱을 찾을 수 없습니다' };
+    ensureOwnerDesigner(salon);
     const designers = db.designers
       .filter((d) => d.salon_id === salon.id)
       .map((d) => ({
@@ -842,6 +864,7 @@ const routes = [
         salon: {
           id: salon.id,
           salon_name: salon.salon_name,
+          owner_name: salon.owner_name,
           salon_code: salon.salon_code,
           logo_url: salon.logo_url,
         },
