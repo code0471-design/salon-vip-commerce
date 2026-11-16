@@ -1389,7 +1389,7 @@ function requestSetupDesigner(index) {
   if (!phone) { showToast('담당자 휴대폰번호를 입력하세요', 'error'); return; }
   row.requested = true;
   render();
-  showToast(`${name}님에게 초대 요청이 예약되었습니다. 매장 생성 시 문자가 발송됩니다`, 'success');
+  showToast(`${name}님에게 가입 요청이 예약되었습니다. 매장 생성 시 문자가 발송됩니다`, 'success');
 }
 
 function renderAdminSetup() {
@@ -1411,8 +1411,9 @@ function renderAdminSetup() {
         <button class="store-back" style="margin:0" onclick="navigate('entry')"><i class="fas fa-chevron-left" style="margin-right:6px"></i>입장</button>
         <button type="button" class="entry-logout-link" style="margin:0;width:auto" onclick="handleLogout()">로그아웃</button>
       </div>
-      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">매장 세팅</h2>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">필수 정보를 입력하고 저장하면 매장이 생성됩니다.</p>
+      <h2 style="font-size:20px;font-weight:800;margin-bottom:4px">매장 생성</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:12px">필수 정보를 입력하고 저장하면 매장이 생성됩니다.</p>
+      <div class="setup-designer-solo-note">디자이너 개인이 판매를 원할 경우 매장을 생성하여 판매가 가능합니다</div>
       <div class="code-card setup-form">
         <label class="form-label">매장명</label>
         <input class="form-input" value="${escText(d.salon_name)}" placeholder="예: 프로헤어 강남점"
@@ -1443,13 +1444,14 @@ function renderAdminSetup() {
         <input class="form-input code-input" type="tel" inputmode="numeric" maxlength="6"
           value="${escText(d.salon_code)}" placeholder="예: 100001"
           oninput="updateSetupField('salon_code', this.value.replace(/\\D/g,'').slice(0,6)); this.value=state.setupDraft.salon_code">
+        <p class="setup-code-hint">매장코드 6자리를 만들어주세요</p>
         <div class="setup-designer-block">
           <div class="setup-designer-head">
             <label class="form-label" style="margin:0">담당자 추가</label>
             <button type="button" class="ghost-text-btn" onclick="addSetupDesignerRow()">+ 추가</button>
           </div>
           <p class="setup-designer-hint">각 담당자 매출 확인이 필요한 경우 추가하세요.<br>1인샵은 추가할 필요 없습니다.</p>
-          <p style="font-size:12px;color:var(--muted);margin:0 0 10px">이름·휴대폰 입력 후 <strong>요청</strong>을 누르세요. 매장 생성 시 초대 문자가 갑니다.</p>
+          <p style="font-size:12px;color:var(--muted);margin:0 0 10px">이름·휴대폰 입력 후 <strong>가입 요청</strong>을 누르세요. 매장 생성 시 초대 문자가 갑니다.</p>
           ${d.designers.map((row, i) => `
             <div class="setup-designer-row ${row.requested ? 'requested' : ''}">
               <input class="form-input" placeholder="담당자 이름" value="${escText(row.designer_name)}"
@@ -1457,7 +1459,7 @@ function renderAdminSetup() {
               <input class="form-input" type="tel" placeholder="휴대폰번호" value="${escText(row.phone || '')}"
                 oninput="updateSetupDesigner(${i}, 'phone', this.value); state.setupDraft.designers[${i}].requested=false">
               <button type="button" class="setup-request-btn ${row.requested ? 'on' : ''}" onclick="requestSetupDesigner(${i})">
-                ${row.requested ? '요청됨' : '요청'}
+                ${row.requested ? '요청됨' : '가입 요청'}
               </button>
               <button type="button" class="setup-remove" onclick="removeSetupDesignerRow(${i})" aria-label="삭제"><i class="fas fa-times"></i></button>
             </div>`).join('')}
@@ -1498,7 +1500,7 @@ async function submitSalonSetup() {
   const pendingInvite = (d.designers || []).filter((row) =>
     String(row.designer_name || '').trim() && String(row.phone || '').trim() && !row.requested);
   if (pendingInvite.length) {
-    showToast('담당자 이름·번호를 넣었다면 각 줄의 요청 버튼을 눌러주세요', 'error');
+    showToast('담당자 이름·번호를 넣었다면 각 줄의 가입 요청 버튼을 눌러주세요', 'error');
     return;
   }
   const designers = (d.designers || [])
